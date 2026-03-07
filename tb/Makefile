@@ -10,6 +10,7 @@
 # Override on command line:
 #   make run FRAMES=10 TIMEOUT=200000000
 #   make run YUV_INPUT=/path/to/file.yuv H264_OUTPUT=/path/to/out.h264
+#   make WIDTH=1280 HEIGHT=720 run FRAMES=30
 # ---------------------------------------------------------------------------
 
 VERILATOR       ?= verilator
@@ -18,6 +19,10 @@ TB_CPP          := tb_h264_encoder.cpp
 RTL_DIR         := ../rtl
 OBJ_DIR         := obj_dir
 SIM_BIN         := V$(TOP_MODULE)
+
+# Resolution (override on command line for different sizes)
+WIDTH           ?= 320
+HEIGHT          ?= 176
 
 # Collect all Verilog sources from the RTL directory
 RTL_SRCS        := $(wildcard $(RTL_DIR)/*.v)
@@ -28,7 +33,8 @@ VERILATOR_FLAGS := --cc --exe --build \
     --trace \
     --top-module $(TOP_MODULE) \
     -I$(RTL_DIR) \
-    -CFLAGS "-O2 -std=c++17"
+    -GFRAME_WIDTH=$(WIDTH) -GFRAME_HEIGHT=$(HEIGHT) \
+    -CFLAGS "-O2 -std=c++17 -DFRAME_W=$(WIDTH) -DFRAME_H=$(HEIGHT)"
 
 # Runtime defaults (override on command line)
 FRAMES          ?= 1
