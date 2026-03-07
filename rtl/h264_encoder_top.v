@@ -1,12 +1,17 @@
 // h264_encoder_top.v — Top-Level H.264 Encoder (I + P frame support)
-// Baseline profile, CAVLC, 320x176 (20x11 MBs), QP=26
+// Baseline profile, CAVLC, parameterized resolution, QP=26
 // Frame 0 = IDR (I-frame), Frame 1+ = P-frame with motion estimation
 // Processes one YUV420 frame in raster macroblock order.
 // Pipeline: fetch → [ME for P-frame] → (predict → transform → quant → zigzag → cavlc →
 //            inverse_quant → inverse_transform → reconstruct) per sub-block
 // Then: bitstream output with SPS/PPS/slice header/trailing bits.
 
-module h264_encoder_top (
+module h264_encoder_top #(
+    parameter FRAME_WIDTH  = 320,
+    parameter FRAME_HEIGHT = 176,
+    parameter MB_COLS      = FRAME_WIDTH / 16,
+    parameter MB_ROWS      = FRAME_HEIGHT / 16
+) (
     input  wire        clk,
     input  wire        rst_n,
     input  wire        start,
@@ -22,22 +27,22 @@ module h264_encoder_top (
     input  wire [7:0]  raw_mem_data,
 
     // Reference frame memory (external, luma only)
-    output reg  [16:0] ref_mem_rd_addr,
+    output reg  [19:0] ref_mem_rd_addr,
     input  wire [7:0]  ref_mem_rd_data,
     output reg         ref_mem_wr_en,
-    output reg  [16:0] ref_mem_wr_addr,
+    output reg  [19:0] ref_mem_wr_addr,
     output reg  [7:0]  ref_mem_wr_data,
 
     // Chroma reference frame memory (external, Cb and Cr)
-    output reg  [13:0] chr_cb_ref_rd_addr,
+    output reg  [17:0] chr_cb_ref_rd_addr,
     input  wire [7:0]  chr_cb_ref_rd_data,
     output reg         chr_cb_ref_wr_en,
-    output reg  [13:0] chr_cb_ref_wr_addr,
+    output reg  [17:0] chr_cb_ref_wr_addr,
     output reg  [7:0]  chr_cb_ref_wr_data,
-    output reg  [13:0] chr_cr_ref_rd_addr,
+    output reg  [17:0] chr_cr_ref_rd_addr,
     input  wire [7:0]  chr_cr_ref_rd_data,
     output reg         chr_cr_ref_wr_en,
-    output reg  [13:0] chr_cr_ref_wr_addr,
+    output reg  [17:0] chr_cr_ref_wr_addr,
     output reg  [7:0]  chr_cr_ref_wr_data,
 
     // Bitstream memory write port
@@ -46,14 +51,6 @@ module h264_encoder_top (
     output wire        bs_mem_wr,
     output wire [23:0] bs_bytes_written
 );
-
-    // ====================================================================
-    // Parameters
-    // ====================================================================
-    parameter FRAME_WIDTH  = 320;
-    parameter FRAME_HEIGHT = 176;
-    parameter MB_COLS      = 20;
-    parameter MB_ROWS      = 11;
 
     localparam [19:0] FRAME_Y_BASE  = 20'd0;
     localparam [19:0] FRAME_CB_BASE = FRAME_WIDTH * FRAME_HEIGHT;
@@ -86,10 +83,10 @@ module h264_encoder_top (
     localparam TS_CHR_FETCH    = 5'd18;  // Fetch inter chroma prediction from reference
 
     reg [4:0]  top_state;
-    reg [4:0]  mb_x;
-    reg [3:0]  mb_y;
+    reg [6:0]  mb_x;
+    reg [5:0]  mb_y;
     reg [4:0]  sub_blk;
-    reg [7:0]  mb_count;
+    reg [11:0] mb_count;
 
     // Sub-block processing stages
     localparam BS_PRED     = 3'd0;
@@ -134,11 +131,11 @@ module h264_encoder_top (
     reg [8:0]  ref_wr_idx;
 
     // MV storage for prediction (per-MB row above + left MB)
-    reg signed [7:0] top_mvx [0:19];  // Top row MV x (one per MB column)
-    reg signed [7:0] top_mvy [0:19];  // Top row MV y
+    reg signed [7:0] top_mvx [0:MB_COLS-1];  // Top row MV x (one per MB column)
+    reg signed [7:0] top_mvy [0:MB_COLS-1];  // Top row MV y
     reg signed [7:0] left_mvx;        // Left MB MV x
     reg signed [7:0] left_mvy;        // Left MB MV y
-    reg        top_is_inter [0:19];   // 1 if top MB was inter (ref_idx=0)
+    reg        top_is_inter [0:MB_COLS-1];   // 1 if top MB was inter (ref_idx=0)
     reg        left_is_inter;         // 1 if left MB was inter
     // Diagonal (top-left) saved before top_mvx[mb_x] is overwritten
     reg signed [7:0] diag_mvx, diag_mvy;
@@ -180,7 +177,7 @@ module h264_encoder_top (
     wire signed [7:0]  me_mvy_w;
     wire [17:0]        me_sad_w;
     wire [2047:0]      me_ref_mb_w;
-    wire [16:0]        me_ref_rd_addr;
+    wire [19:0]        me_ref_rd_addr;
     wire [7:0]         me_ref_rd_data_w;
 
     // Transform
@@ -232,8 +229,8 @@ module h264_encoder_top (
 
     // Chroma MB-boundary neighbor storage for 8x8 DC prediction
     // Top neighbors: bottom row (row 7) of above MB's chroma, per MB column
-    reg [63:0] top_chr_cb_nb [0:19];  // 8 pixels × 8 bits per MB col
-    reg [63:0] top_chr_cr_nb [0:19];
+    reg [63:0] top_chr_cb_nb [0:MB_COLS-1];  // 8 pixels × 8 bits per MB col
+    reg [63:0] top_chr_cr_nb [0:MB_COLS-1];
     // Left neighbors: right column (col 7) of left MB's chroma
     reg [63:0] left_chr_cb_nb;  // 8 pixels × 8 bits
     reg [63:0] left_chr_cr_nb;
@@ -249,7 +246,7 @@ module h264_encoder_top (
     reg         mb_has_residual;
 
     // Neighbor storage
-    reg [2559:0] top_ref_flat;
+    reg [MB_COLS*128-1:0] top_ref_flat;
     reg [127:0]  left_ref_flat;
     reg [127:0]  top_pixels_flat, left_pixels_flat;
     reg          mb_top_avail, mb_left_avail;
@@ -381,17 +378,19 @@ pred_buf = 2048'd0;
     wire [3:0] chr_fn_col_w = (chr_f_col + 4'd1 >= chr_fetch_cols) ? 4'd0 : chr_f_col + 4'd1;
     wire [3:0] chr_fn_row_w = (chr_f_col + 4'd1 >= chr_fetch_cols) ? chr_f_row + 4'd1 : chr_f_row;
     // Address computation for current row/col
-    wire signed [9:0] chr_fc_x = $signed({2'b0, mb_x, 3'd0}) + $signed({chr_off_x[7], chr_off_x[7], chr_off_x}) + $signed({6'd0, chr_f_col});
-    wire signed [9:0] chr_fc_y = $signed({3'b0, mb_y, 3'd0}) + $signed({chr_off_y[7], chr_off_y[7], chr_off_y}) + $signed({5'd0, chr_f_row});
-    wire [7:0] chr_fc_cx = (chr_fc_x < 0) ? 8'd0 : (chr_fc_x > 9'sd159) ? 8'd159 : chr_fc_x[7:0];
-    wire [6:0] chr_fc_cy = (chr_fc_y < 0) ? 7'd0 : (chr_fc_y > 9'sd87) ? 7'd87 : chr_fc_y[6:0];
-    wire [13:0] chr_f_addr_cur = {chr_fc_cy, 7'd0} + {2'd0, chr_fc_cy, 5'd0} + {6'd0, chr_fc_cx};
+    localparam CHR_WIDTH  = FRAME_WIDTH / 2;
+    localparam CHR_HEIGHT = FRAME_HEIGHT / 2;
+    wire signed [10:0] chr_fc_x = $signed({1'b0, mb_x, 3'd0}) + $signed({{3{chr_off_x[7]}}, chr_off_x}) + $signed({7'd0, chr_f_col});
+    wire signed [10:0] chr_fc_y = $signed({1'b0, mb_y, 3'd0}) + $signed({{3{chr_off_y[7]}}, chr_off_y}) + $signed({7'd0, chr_f_row});
+    wire [9:0] chr_fc_cx = (chr_fc_x < 0) ? 10'd0 : (chr_fc_x >= CHR_WIDTH)  ? CHR_WIDTH[9:0]  - 10'd1 : chr_fc_x[9:0];
+    wire [9:0] chr_fc_cy = (chr_fc_y < 0) ? 10'd0 : (chr_fc_y >= CHR_HEIGHT) ? CHR_HEIGHT[9:0] - 10'd1 : chr_fc_y[9:0];
+    wire [17:0] chr_f_addr_cur = chr_fc_cy * CHR_WIDTH[9:0] + {8'd0, chr_fc_cx};
     // Address computation for next row/col (pipelined)
-    wire signed [9:0] chr_fn_x = $signed({2'b0, mb_x, 3'd0}) + $signed({chr_off_x[7], chr_off_x[7], chr_off_x}) + $signed({6'd0, chr_fn_col_w});
-    wire signed [9:0] chr_fn_y = $signed({3'b0, mb_y, 3'd0}) + $signed({chr_off_y[7], chr_off_y[7], chr_off_y}) + $signed({5'd0, chr_fn_row_w});
-    wire [7:0] chr_fn_cx = (chr_fn_x < 0) ? 8'd0 : (chr_fn_x > 9'sd159) ? 8'd159 : chr_fn_x[7:0];
-    wire [6:0] chr_fn_cy = (chr_fn_y < 0) ? 7'd0 : (chr_fn_y > 9'sd87) ? 7'd87 : chr_fn_y[6:0];
-    wire [13:0] chr_f_addr_nxt = {chr_fn_cy, 7'd0} + {2'd0, chr_fn_cy, 5'd0} + {6'd0, chr_fn_cx};
+    wire signed [10:0] chr_fn_x = $signed({1'b0, mb_x, 3'd0}) + $signed({{3{chr_off_x[7]}}, chr_off_x}) + $signed({7'd0, chr_fn_col_w});
+    wire signed [10:0] chr_fn_y = $signed({1'b0, mb_y, 3'd0}) + $signed({{3{chr_off_y[7]}}, chr_off_y}) + $signed({7'd0, chr_fn_row_w});
+    wire [9:0] chr_fn_cx = (chr_fn_x < 0) ? 10'd0 : (chr_fn_x >= CHR_WIDTH)  ? CHR_WIDTH[9:0]  - 10'd1 : chr_fn_x[9:0];
+    wire [9:0] chr_fn_cy = (chr_fn_y < 0) ? 10'd0 : (chr_fn_y >= CHR_HEIGHT) ? CHR_HEIGHT[9:0] - 10'd1 : chr_fn_y[9:0];
+    wire [17:0] chr_f_addr_nxt = chr_fn_cy * CHR_WIDTH[9:0] + {8'd0, chr_fn_cx};
 
     // ====================================================================
     // Reference memory mux: ME uses ref_rd port during TS_WAIT_ME
@@ -408,10 +407,10 @@ pred_buf = 2048'd0;
     // Module instantiations
     // ====================================================================
 
-    h264_fetch u_fetch (
+    h264_fetch #(.FRAME_WIDTH(FRAME_WIDTH)) u_fetch (
         .clk(clk), .rst_n(rst_n), .start(fetch_start), .frame_base_y(FRAME_Y_BASE),
         .frame_base_cb(FRAME_CB_BASE), .frame_base_cr(FRAME_CR_BASE), .mb_x(mb_x), .mb_y(mb_y),
-        .frame_width(FRAME_WIDTH[9:0]), .raw_mem_addr(raw_mem_addr), .raw_mem_data(raw_mem_data),
+        .frame_width(FRAME_WIDTH[10:0]), .raw_mem_addr(raw_mem_addr), .raw_mem_data(raw_mem_data),
         .luma_flat(fetched_luma), .cb_flat(fetched_cb), .cr_flat(fetched_cr), .done(fetch_done), .valid()
     );
 
@@ -419,7 +418,7 @@ pred_buf = 2048'd0;
         .clk(clk), .rst_n(rst_n), .start(me_start), .done(me_done),
         .cur_mb(fetched_luma),
         .ref_rd_addr(me_ref_rd_addr), .ref_rd_data(me_ref_rd_data_w),
-        .frame_width(FRAME_WIDTH[9:0]), .frame_height(FRAME_HEIGHT[8:0]),
+        .frame_width(FRAME_WIDTH[10:0]), .frame_height(FRAME_HEIGHT[9:0]),
         .mb_x(mb_x), .mb_y(mb_y),
         .best_mvx(me_mvx_w), .best_mvy(me_mvy_w), .best_sad(me_sad_w),
         .ref_mb_out(me_ref_mb_w)
@@ -482,12 +481,12 @@ pred_buf = 2048'd0;
 
     reg [4:0] nz_coeff [0:23];
     reg [4:0] left_mb_nz [0:3];
-    reg [4:0] top_mb_nz [0:79];
+    reg [4:0] top_mb_nz [0:MB_COLS*4-1];
     // Chroma cross-MB nC neighbors
     reg [4:0] left_mb_nz_cb [0:1];  // left MB's right-col Cb nz (row 0,1)
     reg [4:0] left_mb_nz_cr [0:1];  // left MB's right-col Cr nz (row 0,1)
-    reg [4:0] top_mb_nz_cb [0:39];  // top MB's bottom-row Cb nz (col 0,1 per MB)
-    reg [4:0] top_mb_nz_cr [0:39];  // top MB's bottom-row Cr nz (col 0,1 per MB)
+    reg [4:0] top_mb_nz_cb [0:MB_COLS*2-1];  // top MB's bottom-row Cb nz (col 0,1 per MB)
+    reg [4:0] top_mb_nz_cr [0:MB_COLS*2-1];  // top MB's bottom-row Cr nz (col 0,1 per MB)
 
     reg [4:0] left_blk_idx, top_blk_idx;
     always @(*) begin
@@ -547,7 +546,7 @@ pred_buf = 2048'd0;
         .recon_top_row(recon_top_row_w), .recon_right_col(recon_right_col_w)
     );
 
-    h264_bitstream u_bitstream (
+    h264_bitstream #(.MB_COLS(MB_COLS), .MB_ROWS(MB_ROWS)) u_bitstream (
         .clk(clk), .rst_n(rst_n), .cmd_write_sps(bs_cmd_sps), .cmd_write_pps(bs_cmd_pps), .cmd_write_slice_hdr(bs_cmd_slice),
         .cmd_write_mb_header(bs_cmd_mb_hdr), .cmd_write_trailing(bs_cmd_trailing), .cmd_flush(bs_cmd_flush),
         .cavlc_valid(cavlc_bits_valid), .cavlc_bits(cavlc_bits), .cavlc_count(cavlc_count),
@@ -563,18 +562,18 @@ pred_buf = 2048'd0;
     // ====================================================================
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            top_state <= TS_IDLE; done <= 1'b0; mb_x <= 5'd0; mb_y <= 4'd0; sub_blk <= 5'd0; mb_count <= 8'd0;
+            top_state <= TS_IDLE; done <= 1'b0; mb_x <= 7'd0; mb_y <= 6'd0; sub_blk <= 5'd0; mb_count <= 12'd0;
             fetch_start <= 1'b0; pred_start <= 1'b0; xform_start <= 1'b0; quant_start <= 1'b0; zz_start <= 1'b0;
             cavlc_start <= 1'b0; iq_start <= 1'b0; it_start <= 1'b0; recon_start <= 1'b0; me_start <= 1'b0;
             bs_cmd_sps <= 1'b0; bs_cmd_pps <= 1'b0; bs_cmd_slice <= 1'b0; bs_cmd_mb_hdr <= 1'b0; bs_cmd_trailing <= 1'b0; bs_cmd_flush <= 1'b0;
             mb_top_avail <= 1'b0; mb_left_avail <= 1'b0; mb_has_residual <= 1'b0;
             blk_state <= BS_PRED; blk_started <= 1'b0; iq_done_latched <= 1'b0;
-            recon_buf <= 2048'd0; top_ref_flat <= 2560'd0; left_ref_flat <= 128'd0;
+            recon_buf <= 2048'd0; top_ref_flat <= {(MB_COLS*128){1'b0}}; left_ref_flat <= 128'd0;
             top_pixels_flat <= 128'd0; left_pixels_flat <= 128'd0; flush_pending <= 1'b0; flush_accepted <= 1'b0;
             is_p_frame <= 1'b0; is_inter_mb_reg <= 1'b0; cur_frame_num <= 4'd0;
             me_best_mvx <= 8'sd0; me_best_mvy <= 8'sd0; me_best_sad <= 18'd0;
             inter_pred_buf <= 2048'd0; ref_wr_idx <= 9'd0;
-            ref_mem_wr_en <= 1'b0; ref_mem_wr_addr <= 17'd0; ref_mem_wr_data <= 8'd0;
+            ref_mem_wr_en <= 1'b0; ref_mem_wr_addr <= 20'd0; ref_mem_wr_data <= 8'd0;
             mvp_x <= 8'sd0; mvp_y <= 8'sd0;
             left_mvx <= 8'sd0; left_mvy <= 8'sd0;
             left_is_inter <= 1'b0;
@@ -598,10 +597,10 @@ pred_buf = 2048'd0;
             chr_frac_x <= 3'd0; chr_frac_y <= 3'd0;
             chr_fetch_rows <= 4'd8; chr_fetch_cols <= 4'd8;
             chr_f_row <= 4'd0; chr_f_col <= 4'd0;
-            chr_cb_ref_rd_addr <= 14'd0; chr_cb_ref_wr_en <= 1'b0;
-            chr_cb_ref_wr_addr <= 14'd0; chr_cb_ref_wr_data <= 8'd0;
-            chr_cr_ref_rd_addr <= 14'd0; chr_cr_ref_wr_en <= 1'b0;
-            chr_cr_ref_wr_addr <= 14'd0; chr_cr_ref_wr_data <= 8'd0;
+            chr_cb_ref_rd_addr <= 18'd0; chr_cb_ref_wr_en <= 1'b0;
+            chr_cb_ref_wr_addr <= 18'd0; chr_cb_ref_wr_data <= 8'd0;
+            chr_cr_ref_rd_addr <= 18'd0; chr_cr_ref_wr_en <= 1'b0;
+            chr_cr_ref_wr_addr <= 18'd0; chr_cr_ref_wr_data <= 8'd0;
             use_chr_iq_input <= 1'b0; chr_iq_input <= 256'd0;
             use_chr_it_input <= 1'b0; chr_it_dc_patch <= 16'sd0;
             chr_recon_blk <= 2'd0;
@@ -618,7 +617,7 @@ pred_buf = 2048'd0;
                 TS_IDLE: if (start) begin
                     cur_frame_num <= frame_num_in;
                     is_p_frame <= ~is_idr_in;
-                    mb_x <= 5'd0; mb_y <= 4'd0; mb_count <= 8'd0;
+                    mb_x <= 7'd0; mb_y <= 6'd0; mb_count <= 12'd0;
                     if (is_idr_in)
                         top_state <= TS_WRITE_SPS;  // IDR: write SPS+PPS
                     else
@@ -634,7 +633,7 @@ pred_buf = 2048'd0;
                 TS_WAIT_SLICE: if (bs_cmd_done) top_state <= TS_FETCH_MB;
 
                 TS_FETCH_MB: begin
-                    fetch_start <= 1'b1; mb_top_avail <= (mb_y > 4'd0); mb_left_avail <= (mb_x > 5'd0);
+                    fetch_start <= 1'b1; mb_top_avail <= (mb_y > 6'd0); mb_left_avail <= (mb_x > 7'd0);
                     top_pixels_flat <= top_ref_flat[mb_x * 128 +: 128]; left_pixels_flat <= left_ref_flat;
                     top_state <= TS_WAIT_FETCH;
                 end
@@ -670,10 +669,10 @@ pred_buf = 2048'd0;
                         reg [1:0] match_cnt;
                         reg signed [7:0] med_x, med_y;
 
-                        a_avail = (mb_x > 5'd0);
-                        b_avail = (mb_y > 4'd0);
-                        c_avail = (mb_y > 4'd0) && (mb_x < MB_COLS[4:0] - 5'd1);
-                        d_avail = (mb_y > 4'd0) && (mb_x > 5'd0);
+                        a_avail = (mb_x > 7'd0);
+                        b_avail = (mb_y > 6'd0);
+                        c_avail = (mb_y > 6'd0) && (mb_x < MB_COLS[6:0] - 7'd1);
+                        d_avail = (mb_y > 6'd0) && (mb_x > 7'd0);
 
                         // Get MVs and inter status for each neighbor
                         // Intra/unavailable: MV=0, ref_idx=-1 (doesn't match current ref_idx=0)
@@ -686,9 +685,9 @@ pred_buf = 2048'd0;
                         b_inter = b_avail && top_is_inter[mb_x];
 
                         if (c_avail) begin
-                            cx = top_mvx[mb_x + 5'd1];
-                            cy = top_mvy[mb_x + 5'd1];
-                            c_inter = top_is_inter[mb_x + 5'd1];
+                            cx = top_mvx[mb_x + 7'd1];
+                            cy = top_mvy[mb_x + 7'd1];
+                            c_inter = top_is_inter[mb_x + 7'd1];
                         end else if (d_avail) begin
                             // Use saved diagonal (top-left from previous row)
                             cx = diag_mvx;
@@ -824,7 +823,7 @@ pred_buf = 2048'd0;
                     // Cr right-col = sub_blk 21(r0),23(r1); bottom-row = 22(c0),23(c1)
                     left_mb_nz_cr[0] <= nz_coeff[21]; left_mb_nz_cr[1] <= nz_coeff[23];
                     top_mb_nz_cr[mb_x * 2 + 0] <= nz_coeff[22]; top_mb_nz_cr[mb_x * 2 + 1] <= nz_coeff[23];
-                    top_ref_flat[mb_x * 128 +: 128] <= recon_top_row_w; left_ref_flat <= recon_right_col_w; mb_count <= mb_count + 8'd1;
+                    top_ref_flat[mb_x * 128 +: 128] <= recon_top_row_w; left_ref_flat <= recon_right_col_w; mb_count <= mb_count + 12'd1;
                     // Save top-left diagonal before overwriting (for D neighbor)
                     diag_mvx <= top_mvx[mb_x];
                     diag_mvy <= top_mvy[mb_x];
@@ -890,8 +889,8 @@ pred_buf = 2048'd0;
                     if (ref_wr_idx < 9'd256) begin
                         // Write luma (256 pixels)
                         ref_mem_wr_en <= 1'b1;
-                        ref_mem_wr_addr <= ({4'd0, mb_y, 4'd0} + {9'd0, ref_wr_idx[7:4]}) * FRAME_WIDTH[9:0]
-                                         + {8'd0, mb_x, 4'd0} + {13'd0, ref_wr_idx[3:0]};
+                        ref_mem_wr_addr <= ({mb_y, 4'd0} + {6'd0, ref_wr_idx[7:4]}) * FRAME_WIDTH[10:0]
+                                         + {mb_x, 4'd0} + {7'd0, ref_wr_idx[3:0]};
                         ref_mem_wr_data <= recon_buf[ref_wr_idx[7:0]*8 +: 8];
                         ref_wr_idx <= ref_wr_idx + 9'd1;
                     end else if (ref_wr_idx < 9'd320) begin
@@ -900,11 +899,11 @@ pred_buf = 2048'd0;
                         // row = [5:3], col = [2:0]
                         begin : chr_wr_calc
                             reg [5:0] ci;
-                            reg [13:0] ca;
+                            reg [17:0] ca;
                             ci = ref_wr_idx[5:0]; // 0..63
-                            // Address = (mb_y*8 + row) * 160 + mb_x*8 + col
-                            ca = ({3'd0, mb_y, 3'd0} + {8'd0, ci[5:3]}) * 10'd160
-                               + {6'd0, mb_x, 3'd0} + {8'd0, ci[2:0]};
+                            // Address = (mb_y*8 + row) * CHR_WIDTH + mb_x*8 + col
+                            ca = ({mb_y, 3'd0} + {12'd0, ci[5:3]}) * CHR_WIDTH[10:0]
+                               + {mb_x, 3'd0} + {12'd0, ci[2:0]};
                             chr_cb_ref_wr_en <= 1'b1;
                             chr_cb_ref_wr_addr <= ca;
                             chr_cb_ref_wr_data <= chr_recon_cb[ci*8 +: 8];
@@ -915,16 +914,16 @@ pred_buf = 2048'd0;
                         ref_wr_idx <= ref_wr_idx + 9'd1;
                     end else begin
                         // Done writing this MB to reference, advance to next MB
-                        if (mb_x == MB_COLS[4:0] - 5'd1) begin
-                            mb_x <= 5'd0;
-                            if (mb_y == MB_ROWS[3:0] - 4'd1)
+                        if (mb_x == MB_COLS[6:0] - 7'd1) begin
+                            mb_x <= 7'd0;
+                            if (mb_y == MB_ROWS[5:0] - 6'd1)
                                 top_state <= TS_TRAILING;
                             else begin
-                                mb_y <= mb_y + 4'd1;
+                                mb_y <= mb_y + 6'd1;
                                 top_state <= TS_FETCH_MB;
                             end
                         end else begin
-                            mb_x <= mb_x + 5'd1;
+                            mb_x <= mb_x + 7'd1;
                             top_state <= TS_FETCH_MB;
                         end
                     end
@@ -1464,7 +1463,7 @@ pred_buf = 2048'd0;
 
     /* verilator lint_off UNUSED */
     wire dbg_target_mb = (dbg_frame_cnt == 8'd23);
-    wire dbg_detail_mb = (dbg_frame_cnt == 8'd23) && (mb_count >= 8'd140 && mb_count <= 8'd155);
+    wire dbg_detail_mb = (dbg_frame_cnt == 8'd23) && (mb_count >= 12'd140 && mb_count <= 12'd155);
     /* verilator lint_on UNUSED */
 
     always @(posedge clk) begin

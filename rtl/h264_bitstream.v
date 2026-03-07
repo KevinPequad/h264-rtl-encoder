@@ -7,7 +7,10 @@
 // bit_cnt tracks how many valid bits are in the buffer, starting from bit_buf[95].
 // Byte emission takes bit_buf[95:88] and shifts left by 8.
 
-module h264_bitstream (
+module h264_bitstream #(
+    parameter MB_COLS = 20,
+    parameter MB_ROWS = 11
+) (
     input  wire        clk,
     input  wire        rst_n,
 
@@ -96,6 +99,47 @@ module h264_bitstream (
     // Skip emulation prevention during start code output
     reg        skip_ep;
 
+    // UE(v) encoder — general-purpose unsigned Exp-Golomb
+    // Used by SPS and other parameter sets
+    reg [9:0] ue_input;   // codeNum (unsigned, max ~1023)
+    wire [10:0] ue_code1 = {1'b0, ue_input} + 11'd1;
+
+    reg [3:0] ue_msb;
+    always @(*) begin
+        casez (ue_code1)
+            11'b1??????????: ue_msb = 4'd10;
+            11'b01?????????: ue_msb = 4'd9;
+            11'b001????????: ue_msb = 4'd8;
+            11'b0001???????: ue_msb = 4'd7;
+            11'b00001??????: ue_msb = 4'd6;
+            11'b000001?????: ue_msb = 4'd5;
+            11'b0000001????: ue_msb = 4'd4;
+            11'b00000001???: ue_msb = 4'd3;
+            11'b000000001??: ue_msb = 4'd2;
+            11'b0000000001?: ue_msb = 4'd1;
+            default:         ue_msb = 4'd0;
+        endcase
+    end
+
+    wire [4:0] ue_total_bits = {ue_msb, 1'b0} + 5'd1;
+    reg [20:0] ue_ue_bits;
+    always @(*) begin
+        case (ue_msb)
+            4'd0:  ue_ue_bits = {ue_code1[0], 20'd0};
+            4'd1:  ue_ue_bits = {1'b0, ue_code1[1:0], 18'd0};
+            4'd2:  ue_ue_bits = {2'b0, ue_code1[2:0], 16'd0};
+            4'd3:  ue_ue_bits = {3'b0, ue_code1[3:0], 14'd0};
+            4'd4:  ue_ue_bits = {4'b0, ue_code1[4:0], 12'd0};
+            4'd5:  ue_ue_bits = {5'b0, ue_code1[5:0], 10'd0};
+            4'd6:  ue_ue_bits = {6'b0, ue_code1[6:0], 8'd0};
+            4'd7:  ue_ue_bits = {7'b0, ue_code1[7:0], 6'd0};
+            4'd8:  ue_ue_bits = {8'b0, ue_code1[8:0], 4'd0};
+            4'd9:  ue_ue_bits = {9'b0, ue_code1[9:0], 2'd0};
+            4'd10: ue_ue_bits = {10'b0, ue_code1[10:0]};
+            default: ue_ue_bits = {1'b1, 20'd0};
+        endcase
+    end
+
     // SE(v) encoder for MVD — combinational
     // Maps signed value to Exp-Golomb codeNum, then generates UE bit pattern
     reg signed [8:0] se_input;
@@ -168,6 +212,7 @@ module h264_bitstream (
             cavlc_buf_count  <= 6'd0;
             skip_ep          <= 1'b0;
             se_input         <= 8'sd0;
+            ue_input         <= 10'd0;
         end else begin
             bs_mem_wr <= 1'b0;
             cmd_done  <= 1'b0;
@@ -237,20 +282,90 @@ module h264_bitstream (
                     end
 
                     S_SPS: begin
+                        // Dynamic SPS generation using UE encoder
+                        // Field order per openh264 WelsWriteSpsSyntax (au_set.cpp:264-332)
                         case (sub)
+                            // Start code 00 00 00 01
                             6'd0:  begin bs_mem_data<=8'h00; bs_mem_wr<=1'b1; bs_mem_addr<=bs_bytes_written; bs_bytes_written<=bs_bytes_written+24'd1; sub<=sub+6'd1; end
                             6'd1:  begin bs_mem_data<=8'h00; bs_mem_wr<=1'b1; bs_mem_addr<=bs_bytes_written; bs_bytes_written<=bs_bytes_written+24'd1; sub<=sub+6'd1; end
                             6'd2:  begin bs_mem_data<=8'h00; bs_mem_wr<=1'b1; bs_mem_addr<=bs_bytes_written; bs_bytes_written<=bs_bytes_written+24'd1; sub<=sub+6'd1; end
                             6'd3:  begin bs_mem_data<=8'h01; bs_mem_wr<=1'b1; bs_mem_addr<=bs_bytes_written; bs_bytes_written<=bs_bytes_written+24'd1; sub<=sub+6'd1; zero_cnt<=2'd0; end
+                            // NAL header: forbidden=0, nal_ref_idc=3, nal_unit_type=7 (SPS) = 0_11_00111 = 0x67
                             6'd4:  begin write_byte<=8'h67; do_write<=1'b1; sub<=sub+6'd1; end
+                            // profile_idc=66 (Baseline): 01000010
+                            // constraint_set0=1,set1=1,set2=0,set3=0: 1100
+                            // reserved_zero_4bits: 0000
                             6'd5:  begin write_byte<=8'h42; do_write<=1'b1; sub<=sub+6'd1; end
                             6'd6:  begin write_byte<=8'hC0; do_write<=1'b1; sub<=sub+6'd1; end
-                            6'd7:  begin write_byte<=8'h1E; do_write<=1'b1; sub<=sub+6'd1; end
-                            6'd8:  begin write_byte<=8'hDA; do_write<=1'b1; sub<=sub+6'd1; end
-                            6'd9:  begin write_byte<=8'h05; do_write<=1'b1; sub<=sub+6'd1; end
-                            6'd10: begin write_byte<=8'h05; do_write<=1'b1; sub<=sub+6'd1; end
-                            6'd11: begin write_byte<=8'hC4; do_write<=1'b1; sub<=sub+6'd1; end
-                            6'd12: begin cmd_done<=1'b1; busy<=1'b0; state<=S_IDLE; zero_cnt<=2'd0; end
+                            // level_idc: compute from resolution
+                            // Level 31 (0x1F) for up to 720p, Level 30 (0x1E) for <= QVGA
+                            6'd7:  begin
+                                if (MB_COLS * MB_ROWS > 396)
+                                    write_byte <= 8'h1F;  // level 3.1: up to 3600 MBs (1280x720)
+                                else
+                                    write_byte <= 8'h1E;  // level 3.0: up to 396 MBs
+                                do_write <= 1'b1;
+                                sub <= sub + 6'd1;
+                            end
+                            // sps_id=UE(0)='1' + log2_max_frame_num_minus4=UE(0)='1'
+                            // + poc_type=UE(2)='011' + max_num_ref_frames=UE(1)='010'
+                            // + gaps_in_frame_num=0
+                            // Total: 1+1+3+3+1 = 9 bits: 110110100
+                            6'd8: begin
+                                bit_buf <= {9'b110110100, 87'd0};
+                                bit_cnt <= 7'd9;
+                                // Set up UE encoder for pic_width_in_mbs_minus1
+                                ue_input <= MB_COLS - 1;
+                                sub <= sub + 6'd1;
+                            end
+                            // Load UE(pic_width_in_mbs_minus1) into bit buffer
+                            6'd9: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                // Set up UE encoder for pic_height_in_map_units_minus1
+                                ue_input <= MB_ROWS - 1;
+                                sub <= sub + 6'd1;
+                            end
+                            // Emit bytes to make room in bit buffer
+                            6'd10: begin
+                                state <= S_EMIT;
+                                return_state <= S_SPS;
+                                sub <= sub + 6'd1;
+                            end
+                            // Load UE(pic_height_in_map_units_minus1) into bit buffer
+                            6'd11: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                sub <= sub + 6'd1;
+                            end
+                            // frame_mbs_only=1, direct_8x8_inference (1 if level>=30),
+                            // frame_cropping=0, vui_present=0
+                            // = 1,1,0,0 = 4 bits: 1100
+                            6'd12: begin
+                                bit_buf <= bit_buf | ({4'b1100, 92'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd4;
+                                sub <= sub + 6'd1;
+                            end
+                            // RBSP trailing bits: stop bit '1' + alignment zeros
+                            6'd13: begin
+                                bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd1;
+                                // Pad to byte boundary
+                                sub <= sub + 6'd1;
+                            end
+                            6'd14: begin
+                                if (bit_cnt[2:0] != 3'd0)
+                                    bit_cnt <= bit_cnt + 7'd1;
+                                else
+                                    sub <= sub + 6'd1;
+                            end
+                            // Emit remaining bytes
+                            6'd15: begin
+                                state <= S_EMIT;
+                                return_state <= S_SPS;
+                                sub <= sub + 6'd1;
+                            end
+                            6'd16: begin cmd_done<=1'b1; busy<=1'b0; state<=S_IDLE; zero_cnt<=2'd0; end
                             default: state <= S_IDLE;
                         endcase
                     end

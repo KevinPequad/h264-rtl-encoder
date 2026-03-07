@@ -2,7 +2,9 @@
 // Reads 16x16 luma + 2x 8x8 chroma blocks from flat byte-addressed memory
 // One byte per clock cycle via memory read port
 
-module h264_fetch (
+module h264_fetch #(
+    parameter FRAME_WIDTH = 320
+) (
     input  wire        clk,
     input  wire        rst_n,
 
@@ -11,9 +13,9 @@ module h264_fetch (
     input  wire [19:0] frame_base_y,
     input  wire [19:0] frame_base_cb,
     input  wire [19:0] frame_base_cr,
-    input  wire [4:0]  mb_x,
-    input  wire [3:0]  mb_y,
-    input  wire [9:0]  frame_width,
+    input  wire [6:0]  mb_x,
+    input  wire [5:0]  mb_y,
+    input  wire [10:0] frame_width,
 
     // Memory read port
     output reg  [19:0] raw_mem_addr,
@@ -38,13 +40,13 @@ module h264_fetch (
     reg [3:0]  row;
     reg [3:0]  col;
     reg [19:0] row_base;
-    reg [9:0]  plane_width; // current plane width
+    reg [10:0] plane_width; // current plane width
     reg [3:0]  max_rc;      // max row/col (15 for luma, 7 for chroma)
 
-    wire [19:0] y_origin  = frame_base_y  + (({16'd0, mb_y} * 20'd16) * {10'd0, frame_width}) + ({15'd0, mb_x} * 20'd16);
-    wire [9:0]  ch_width  = frame_width >> 1;
-    wire [19:0] cb_origin = frame_base_cb + (({16'd0, mb_y} * 20'd8)  * {10'd0, ch_width})    + ({15'd0, mb_x} * 20'd8);
-    wire [19:0] cr_origin = frame_base_cr + (({16'd0, mb_y} * 20'd8)  * {10'd0, ch_width})    + ({15'd0, mb_x} * 20'd8);
+    wire [19:0] y_origin  = frame_base_y  + ({14'd0, mb_y} * 20'd16) * {9'd0, frame_width} + ({13'd0, mb_x} * 20'd16);
+    wire [10:0] ch_width  = frame_width >> 1;
+    wire [19:0] cb_origin = frame_base_cb + ({14'd0, mb_y} * 20'd8) * {9'd0, ch_width} + ({13'd0, mb_x} * 20'd8);
+    wire [19:0] cr_origin = frame_base_cr + ({14'd0, mb_y} * 20'd8) * {9'd0, ch_width} + ({13'd0, mb_x} * 20'd8);
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -59,7 +61,7 @@ module h264_fetch (
             row         <= 4'd0;
             col         <= 4'd0;
             row_base    <= 20'd0;
-            plane_width <= 10'd0;
+            plane_width <= 11'd0;
             max_rc      <= 4'd0;
         end else begin
             done <= 1'b0;
@@ -113,7 +115,7 @@ module h264_fetch (
                             end
                         end else begin
                             row      <= row + 4'd1;
-                            row_base <= row_base + {10'd0, plane_width};
+                            row_base <= row_base + {9'd0, plane_width};
                             state    <= S_ADDR;
                         end
                     end else begin

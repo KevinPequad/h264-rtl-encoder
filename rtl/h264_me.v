@@ -12,16 +12,16 @@ module h264_me (
     input  wire [2047:0] cur_mb,
 
     // Reference frame read port (active during search)
-    output reg  [16:0] ref_rd_addr,
+    output reg  [19:0] ref_rd_addr,
     input  wire [7:0]  ref_rd_data,
 
     // Frame dimensions
-    input  wire [9:0]  frame_width,   // 320
-    input  wire [8:0]  frame_height,  // 176
+    input  wire [10:0] frame_width,
+    input  wire [9:0]  frame_height,
 
     // Current MB position
-    input  wire [4:0]  mb_x,
-    input  wire [3:0]  mb_y,
+    input  wire [6:0]  mb_x,
+    input  wire [5:0]  mb_y,
 
     // Outputs
     output reg  signed [7:0]  best_mvx,
@@ -49,26 +49,26 @@ module h264_me (
     reg [3:0] state;
 
     // Current search center
-    reg signed [8:0] center_x, center_y;
+    reg signed [11:0] center_x, center_y;
 
     // Current candidate offset from center
     reg signed [8:0] cand_ox, cand_oy;
     // Absolute candidate position
-    wire signed [9:0] abs_cx = {center_x[8], center_x} + {cand_ox[8], cand_ox};
-    wire signed [9:0] abs_cy = {center_y[8], center_y} + {cand_oy[8], cand_oy};
+    wire signed [11:0] abs_cx = center_x + {{3{cand_ox[8]}}, cand_ox};
+    wire signed [11:0] abs_cy = center_y + {{3{cand_oy[8]}}, cand_oy};
 
     // MB origin (pixel coordinates)
-    wire signed [9:0] mb_origin_x = {5'b0, mb_x} << 4;
-    wire signed [9:0] mb_origin_y = {6'b0, mb_y} << 4;
-    wire signed [9:0] sr_min_x = mb_origin_x - 10'sd16;
-    wire signed [9:0] sr_max_x = mb_origin_x + 10'sd16;
-    wire signed [9:0] sr_min_y = mb_origin_y - 10'sd16;
-    wire signed [9:0] sr_max_y = mb_origin_y + 10'sd16;
+    wire signed [11:0] mb_origin_x = {5'b0, mb_x} << 4;
+    wire signed [11:0] mb_origin_y = {6'b0, mb_y} << 4;
+    wire signed [11:0] sr_min_x = mb_origin_x - 12'sd16;
+    wire signed [11:0] sr_max_x = mb_origin_x + 12'sd16;
+    wire signed [11:0] sr_min_y = mb_origin_y - 12'sd16;
+    wire signed [11:0] sr_max_y = mb_origin_y + 12'sd16;
 
     // Validity check: within frame AND within search range
-    wire cand_in_range = (abs_cx >= 10'sd0) && (abs_cy >= 10'sd0) &&
-                         (abs_cx + 10'sd16 <= $signed({1'b0, frame_width[8:0]})) &&
-                         (abs_cy + 10'sd16 <= $signed({1'b0, frame_height})) &&
+    wire cand_in_range = (abs_cx >= 12'sd0) && (abs_cy >= 12'sd0) &&
+                         (abs_cx + 12'sd16 <= $signed({1'b0, frame_width})) &&
+                         (abs_cy + 12'sd16 <= $signed({1'b0, frame_height})) &&
                          (abs_cx >= sr_min_x) &&
                          (abs_cx <= sr_max_x) &&
                          (abs_cy >= sr_min_y) &&
@@ -87,7 +87,7 @@ module h264_me (
     reg       use_small_diamond;
 
     // Best in current diamond iteration
-    reg signed [8:0] iter_best_x, iter_best_y;
+    reg signed [11:0] iter_best_x, iter_best_y;
     reg [17:0] iter_best_sad;
     reg        iter_improved;
 
@@ -138,9 +138,9 @@ module h264_me (
             best_mvy <= 8'sd0;
             best_sad <= 18'h3FFFF;
             ref_mb_out <= 2048'd0;
-            ref_rd_addr <= 17'd0;
-            center_x <= 9'sd0;
-            center_y <= 9'sd0;
+            ref_rd_addr <= 20'd0;
+            center_x <= 12'sd0;
+            center_y <= 12'sd0;
             cand_ox <= 9'sd0;
             cand_oy <= 9'sd0;
             fetch_idx <= 9'd0;
@@ -149,8 +149,8 @@ module h264_me (
             sad_idx <= 9'd0;
             diamond_idx <= 4'd0;
             use_small_diamond <= 1'b0;
-            iter_best_x <= 9'sd0;
-            iter_best_y <= 9'sd0;
+            iter_best_x <= 12'sd0;
+            iter_best_y <= 12'sd0;
             iter_best_sad <= 18'h3FFFF;
             iter_improved <= 1'b0;
             iter_count <= 5'd0;
@@ -161,8 +161,8 @@ module h264_me (
                 S_IDLE: begin
                     if (start) begin
                         // Initialize: search center = (0,0) relative to MB
-                        center_x <= {4'b0, mb_x} << 4;
-                        center_y <= {5'b0, mb_y} << 4;
+                        center_x <= {5'b0, mb_x} << 4;
+                        center_y <= {6'b0, mb_y} << 4;
                         best_sad <= 18'h3FFFF;
                         use_small_diamond <= 1'b0;
                         iter_count <= 5'd0;
@@ -177,7 +177,7 @@ module h264_me (
                     if (cand_in_range) begin
                         fetch_idx <= 9'd0;
                         // Set up first read address
-                        ref_rd_addr <= abs_cy[8:0] * frame_width[9:0] + abs_cx[8:0];
+                        ref_rd_addr <= abs_cy[10:0] * frame_width + abs_cx[10:0];
                         state <= S_FETCH;
                     end else begin
                         state <= S_NEXT_CAND;
@@ -197,9 +197,9 @@ module h264_me (
                         // Next address: row = (fetch_idx+1)/16, col = (fetch_idx+1)%16
                         if (fetch_idx[3:0] == 4'd15) begin
                             // End of row, jump to start of next row
-                            ref_rd_addr <= (abs_cy[8:0] + {5'd0, fetch_idx[7:4]} + 9'd1) * frame_width[9:0] + abs_cx[8:0];
+                            ref_rd_addr <= (abs_cy[10:0] + {7'd0, fetch_idx[7:4]} + 11'd1) * frame_width + abs_cx[10:0];
                         end else begin
-                            ref_rd_addr <= ref_rd_addr + 17'd1;
+                            ref_rd_addr <= ref_rd_addr + 20'd1;
                         end
                     end
                 end
@@ -216,14 +216,14 @@ module h264_me (
                 S_UPDATE: begin
                     if (sad_acc < iter_best_sad) begin
                         iter_best_sad <= sad_acc;
-                        iter_best_x <= abs_cx[8:0];
-                        iter_best_y <= abs_cy[8:0];
+                        iter_best_x <= abs_cx;
+                        iter_best_y <= abs_cy;
                         iter_improved <= 1'b1;
                         // Save this block as current best ref
                         if (sad_acc < best_sad) begin
                             best_sad <= sad_acc;
-                            best_mvx <= abs_cx[8:0] - ({4'b0, mb_x} << 4);
-                            best_mvy <= abs_cy[8:0] - ({5'b0, mb_y} << 4);
+                            best_mvx <= abs_cx - ({5'b0, mb_x} << 4);
+                            best_mvy <= abs_cy - ({6'b0, mb_y} << 4);
                             ref_mb_out <= cand_buf;
                         end
                     end

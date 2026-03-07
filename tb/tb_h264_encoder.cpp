@@ -9,11 +9,18 @@
 #include <string>
 #include <vector>
 
-static constexpr int FRAME_WIDTH  = 320;
-static constexpr int FRAME_HEIGHT = 176;
+// Resolution set at compile time via -DFRAME_W=... -DFRAME_H=...
+#ifndef FRAME_W
+#define FRAME_W 320
+#endif
+#ifndef FRAME_H
+#define FRAME_H 176
+#endif
+static constexpr int FRAME_WIDTH  = FRAME_W;
+static constexpr int FRAME_HEIGHT = FRAME_H;
 static constexpr int FRAME_SIZE   = FRAME_WIDTH * FRAME_HEIGHT * 3 / 2;
 static constexpr int LUMA_SIZE    = FRAME_WIDTH * FRAME_HEIGHT;
-static constexpr int CHROMA_SIZE  = (FRAME_WIDTH / 2) * (FRAME_HEIGHT / 2); // 14080
+static constexpr int CHROMA_SIZE  = (FRAME_WIDTH / 2) * (FRAME_HEIGHT / 2);
 static constexpr size_t DEFAULT_MAX_BITSTREAM = 64 * 1024 * 1024;
 
 static std::vector<uint8_t> raw_pixel_mem;
