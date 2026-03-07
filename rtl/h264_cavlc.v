@@ -16,6 +16,8 @@ module h264_cavlc (
     input  wire [1:0]   trailing_ones,
     input  wire [3:0]   last_nonzero_idx,
     input  wire [4:0]   nC,
+    input  wire        is_chroma_dc,   // 1 = chroma DC block (nC=-1, maxCoeff=4)
+    input  wire        is_chroma_ac,   // 1 = chroma AC block (maxCoeff=15)
 
     // Output bitstream fragment
     output reg  [31:0] bits_out,
@@ -62,9 +64,41 @@ module h264_cavlc (
     reg [15:0] ct_code;
     wire [1:0] nc_idx = (nC >= 5'd8) ? 2'd3 : (nC >= 5'd4) ? 2'd2 : (nC >= 5'd2) ? 2'd1 : 2'd0;
 
+    // Chroma DC coeff_token table (nC=-1, 4:2:0, maxNumCoeff=4)
+    // H.264 Table 9-5, column nC=-1
+    reg [5:0]  chr_dc_ct_len;
+    reg [15:0] chr_dc_ct_code;
+    always @(*) begin
+        chr_dc_ct_len  = 6'd2;
+        chr_dc_ct_code = 16'h4000;
+        case ({total_coeffs[2:0], trailing_ones})
+            // openh264 g_kuiVlcCoeffToken[4] (nC=-1, chroma DC 4:2:0)
+            // Codes are MSB-justified in 16 bits
+            {3'd0, 2'd0}: begin chr_dc_ct_len= 6'd2; chr_dc_ct_code=16'h4000; end // 01
+            {3'd1, 2'd0}: begin chr_dc_ct_len= 6'd6; chr_dc_ct_code=16'h1C00; end // 000111
+            {3'd1, 2'd1}: begin chr_dc_ct_len= 6'd1; chr_dc_ct_code=16'h8000; end // 1
+            {3'd2, 2'd0}: begin chr_dc_ct_len= 6'd6; chr_dc_ct_code=16'h1000; end // 000100
+            {3'd2, 2'd1}: begin chr_dc_ct_len= 6'd6; chr_dc_ct_code=16'h1800; end // 000110
+            {3'd2, 2'd2}: begin chr_dc_ct_len= 6'd3; chr_dc_ct_code=16'h2000; end // 001
+            {3'd3, 2'd0}: begin chr_dc_ct_len= 6'd6; chr_dc_ct_code=16'h0C00; end // 000011
+            {3'd3, 2'd1}: begin chr_dc_ct_len= 6'd7; chr_dc_ct_code=16'h0600; end // 0000011
+            {3'd3, 2'd2}: begin chr_dc_ct_len= 6'd7; chr_dc_ct_code=16'h0400; end // 0000010
+            {3'd3, 2'd3}: begin chr_dc_ct_len= 6'd6; chr_dc_ct_code=16'h1400; end // 000101
+            {3'd4, 2'd0}: begin chr_dc_ct_len= 6'd6; chr_dc_ct_code=16'h0800; end // 000010
+            {3'd4, 2'd1}: begin chr_dc_ct_len= 6'd8; chr_dc_ct_code=16'h0300; end // 00000011
+            {3'd4, 2'd2}: begin chr_dc_ct_len= 6'd8; chr_dc_ct_code=16'h0200; end // 00000010
+            {3'd4, 2'd3}: begin chr_dc_ct_len= 6'd7; chr_dc_ct_code=16'h0000; end // 0000000
+            default: begin chr_dc_ct_len= 6'd2; chr_dc_ct_code=16'h4000; end
+        endcase
+    end
+
     always @(*) begin
         ct_len  = 6'd1;
         ct_code = 16'h8000;
+        if (is_chroma_dc) begin
+            ct_len  = chr_dc_ct_len;
+            ct_code = chr_dc_ct_code;
+        end else
         case (nc_idx)
             2'd0: case ({total_coeffs, trailing_ones})
                 {5'd0, 2'd0}: begin ct_len= 6'd1; ct_code=16'h8000; end
@@ -465,6 +499,31 @@ module h264_cavlc (
             endcase
             default: begin tz_len=6'd1; tz_code=9'h100; end
         endcase
+
+        // Override with chroma DC total_zeros table (Table 9-9(a))
+        if (is_chroma_dc) begin
+            case (tz_tc_r[1:0])
+                2'd1: case (tz_val_r[1:0])
+                    2'd0: begin tz_len=6'd1; tz_code=9'h100; end // 1
+                    2'd1: begin tz_len=6'd2; tz_code=9'h080; end // 01
+                    2'd2: begin tz_len=6'd3; tz_code=9'h040; end // 001
+                    2'd3: begin tz_len=6'd3; tz_code=9'h000; end // 000
+                    default: begin tz_len=6'd1; tz_code=9'h100; end
+                endcase
+                2'd2: case (tz_val_r[1:0])
+                    2'd0: begin tz_len=6'd1; tz_code=9'h100; end // 1
+                    2'd1: begin tz_len=6'd2; tz_code=9'h080; end // 01
+                    2'd2: begin tz_len=6'd2; tz_code=9'h000; end // 00
+                    default: begin tz_len=6'd1; tz_code=9'h100; end
+                endcase
+                2'd3: case (tz_val_r[1:0])
+                    2'd0: begin tz_len=6'd1; tz_code=9'h100; end // 1
+                    2'd1: begin tz_len=6'd1; tz_code=9'h000; end // 0
+                    default: begin tz_len=6'd1; tz_code=9'h100; end
+                endcase
+                default: begin tz_len=6'd1; tz_code=9'h100; end
+            endcase
+        end
     end
 
     // =====================================================================
@@ -648,7 +707,7 @@ module h264_cavlc (
                     bits_out   <= {ct_code, 16'd0};
                     bits_count <= ct_len;
                     bits_valid <= 1'b1;
-                    $display("CAVLC_CT: tc=%0d t1=%0d nci=%0d len=%0d code=%04x", total_coeffs, trailing_ones, nc_idx, ct_len, ct_code);
+
 
                     if (total_coeffs == 5'd0) begin
                         state <= S_DONE;
@@ -734,7 +793,7 @@ module h264_cavlc (
                     bits_out   <= lev_out_data;
                     bits_count <= lev_out_bits;
                     bits_valid <= 1'b1;
-                    $display("CAVLC_LEV: idx=%0d val=%0d lcode=%0d slen=%0d bits=%0d data=%08x", idx, $signed(nz_val[idx[3:0]]), lev_lcode_r, lev_suflen_r, lev_out_bits, lev_out_data);
+
 
                     cur_val  = nz_val[idx[3:0]];
                     cur_sign = cur_val[15];
@@ -757,7 +816,10 @@ module h264_cavlc (
                 end
 
                 S_TZ_SETUP: begin
-                    if (total_coeffs < 5'd16) begin
+                    // maxNumCoeff: 4 for chroma DC, 15 for chroma AC, 16 for luma
+                    if ((is_chroma_dc && total_coeffs < 5'd4) ||
+                        (is_chroma_ac && total_coeffs < 5'd15) ||
+                        (!is_chroma_dc && !is_chroma_ac && total_coeffs < 5'd16)) begin
                         tz_tc_r  <= total_coeffs[3:0];
                         tz_val_r <= total_zeros_r;
                         state    <= S_TZ_EMIT;
@@ -772,7 +834,7 @@ module h264_cavlc (
                     bits_out   <= {tz_code, 23'd0};
                     bits_count <= tz_len;
                     bits_valid <= 1'b1;
-                    $display("CAVLC_TZ: tc=%0d tz=%0d len=%0d code=%03x", total_coeffs, total_zeros_r, tz_len, tz_code);
+
 
                     idx        <= 5'd0;
                     zeros_left <= total_zeros_r;
@@ -797,7 +859,7 @@ module h264_cavlc (
                     bits_out   <= rb_code;
                     bits_count <= rb_len;
                     bits_valid <= 1'b1;
-                    $display("CAVLC_RB: idx=%0d zl=%0d run=%0d len=%0d code=%08x", idx, zeros_left, rb_run_r, rb_len, rb_code);
+
                     zeros_left <= zeros_left - rb_run_r;
                     idx        <= idx + 5'd1;
 

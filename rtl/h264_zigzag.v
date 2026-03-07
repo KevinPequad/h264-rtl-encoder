@@ -12,6 +12,11 @@ module h264_zigzag (
     // Input: 4x4 quantized levels in raster order (256 bits = 16 * 16-bit signed)
     input  wire [255:0] in_flat,
 
+    // Mode: 0=luma (16 coeffs), 1=chroma AC (15 coeffs, skip DC)
+    input  wire        chroma_ac_mode,
+    // Chroma DC mode: 4 coefficients, no zigzag reorder
+    input  wire        chroma_dc_mode,
+
     // Output: coefficients in scan order (256 bits)
     output reg  [255:0] scan_flat,
 
@@ -84,34 +89,82 @@ module h264_zigzag (
 
                 // verilator lint_off BLKSEQ
                 S_SCAN: begin
-                    val = $signed(in_flat[zz(idx[3:0])*16 +: 16]);
-                    scan_flat[idx[3:0]*16 +: 16] <= val;
+                    if (chroma_dc_mode) begin
+                        // Chroma DC: 4 coefficients, no reordering
+                        val = $signed(in_flat[idx[3:0]*16 +: 16]);
+                        scan_flat[idx[3:0]*16 +: 16] <= val;
 
-                    if (val != 16'sd0) begin
-                        tc      <= tc + 5'd1;
-                        last_nz <= idx[3:0];
-                    end
+                        if (val != 16'sd0) begin
+                            tc      <= tc + 5'd1;
+                            last_nz <= idx[3:0];
+                        end
 
-                    if (idx == 5'd15) begin
-                        if (tc == 5'd0 && val == 16'sd0) begin
-                            // No non-zero coefficients at all; skip stats
-                            total_coeffs     <= 5'd0;
-                            trailing_ones    <= 2'd0;
-                            last_nonzero_idx <= 4'd0;
-                            state            <= S_DONE;
+                        if (idx == 5'd3) begin
+                            if (tc == 5'd0 && val == 16'sd0) begin
+                                total_coeffs     <= 5'd0;
+                                trailing_ones    <= 2'd0;
+                                last_nonzero_idx <= 4'd0;
+                                state            <= S_DONE;
+                            end else begin
+                                state   <= S_STATS;
+                                idx     <= (val != 16'sd0) ? 5'd3 : {1'b0, last_nz};
+                                t1      <= 2'd0;
+                                t1_stop <= 1'b0;
+                            end
                         end else begin
-                            state   <= S_STATS;
-                            // Use the effective last non-zero position.
-                            // If current val (idx=15) is non-zero, last_nz is
-                            // being updated to 15 this cycle (non-blocking), so
-                            // we must use 15 directly. Otherwise, use last_nz
-                            // which holds the position from a prior cycle.
-                            idx     <= (val != 16'sd0) ? 5'd15 : {1'b0, last_nz};
-                            t1      <= 2'd0;
-                            t1_stop <= 1'b0;
+                            idx <= idx + 5'd1;
+                        end
+                    end else if (chroma_ac_mode) begin
+                        // idx goes 0..14 for chroma AC (15 positions)
+                        // Read from zigzag position idx+1
+                        val = $signed(in_flat[zz(idx[3:0] + 4'd1)*16 +: 16]);
+                        scan_flat[idx[3:0]*16 +: 16] <= val;
+
+                        if (val != 16'sd0) begin
+                            tc      <= tc + 5'd1;
+                            last_nz <= idx[3:0];
+                        end
+
+                        if (idx == 5'd14) begin
+                            if (tc == 5'd0 && val == 16'sd0) begin
+                                total_coeffs     <= 5'd0;
+                                trailing_ones    <= 2'd0;
+                                last_nonzero_idx <= 4'd0;
+                                state            <= S_DONE;
+                            end else begin
+                                state   <= S_STATS;
+                                idx     <= (val != 16'sd0) ? 5'd14 : {1'b0, last_nz};
+                                t1      <= 2'd0;
+                                t1_stop <= 1'b0;
+                            end
+                        end else begin
+                            idx <= idx + 5'd1;
                         end
                     end else begin
-                        idx <= idx + 5'd1;
+                        // Normal luma mode: 16 coefficients
+                        val = $signed(in_flat[zz(idx[3:0])*16 +: 16]);
+                        scan_flat[idx[3:0]*16 +: 16] <= val;
+
+                        if (val != 16'sd0) begin
+                            tc      <= tc + 5'd1;
+                            last_nz <= idx[3:0];
+                        end
+
+                        if (idx == 5'd15) begin
+                            if (tc == 5'd0 && val == 16'sd0) begin
+                                total_coeffs     <= 5'd0;
+                                trailing_ones    <= 2'd0;
+                                last_nonzero_idx <= 4'd0;
+                                state            <= S_DONE;
+                            end else begin
+                                state   <= S_STATS;
+                                idx     <= (val != 16'sd0) ? 5'd15 : {1'b0, last_nz};
+                                t1      <= 2'd0;
+                                t1_stop <= 1'b0;
+                            end
+                        end else begin
+                            idx <= idx + 5'd1;
+                        end
                     end
                 end
                 // verilator lint_on BLKSEQ
@@ -130,7 +183,12 @@ module h264_zigzag (
 
                     if (idx == 5'd0) begin
                         total_coeffs     <= tc;
-                        trailing_ones    <= t1;
+                        // Use updated t1 if this cycle also increments it
+                        if (!t1_stop && val != 16'sd0 &&
+                            (val == 16'sd1 || val == -16'sd1) && t1 < 2'd3)
+                            trailing_ones <= t1 + 2'd1;
+                        else
+                            trailing_ones <= t1;
                         last_nonzero_idx <= last_nz;
                         state            <= S_DONE;
                     end else begin

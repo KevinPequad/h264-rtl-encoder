@@ -26,11 +26,11 @@ module h264_inverse_transform (
     localparam S_ROW  = 3'd2;
     localparam S_DONE = 3'd3;
 
-    reg signed [15:0] tmp [0:15];
+    reg signed [17:0] tmp [0:15];
     reg [1:0] step;
 
-    reg signed [15:0] a, b, c, d;
-    reg signed [15:0] e0, e1, e2, e3;
+    reg signed [17:0] a, b, c, d;
+    reg signed [17:0] e0, e1, e2, e3;
 
     // Unpack inputs
     wire signed [15:0] inp [0:15];
@@ -60,10 +60,10 @@ module h264_inverse_transform (
                 // Column-wise inverse transform
                 // verilator lint_off BLKSEQ
                 S_COL: begin
-                    a = inp[{2'd0, step}];
-                    b = inp[{2'd1, step}];
-                    c = inp[{2'd2, step}];
-                    d = inp[{2'd3, step}];
+                    a = $signed({{2{inp[{2'd0, step}][15]}}, inp[{2'd0, step}]});
+                    b = $signed({{2{inp[{2'd1, step}][15]}}, inp[{2'd1, step}]});
+                    c = $signed({{2{inp[{2'd2, step}][15]}}, inp[{2'd2, step}]});
+                    d = $signed({{2{inp[{2'd3, step}][15]}}, inp[{2'd3, step}]});
 
                     e0 = a + c;
                     e1 = a - c;
@@ -98,10 +98,10 @@ module h264_inverse_transform (
                     e3 = b + (d >>> 1);
                 // verilator lint_on BLKSEQ
 
-                    out_flat[{step, 2'd0}*16 +: 16] <= (e0 + e3 + 16'sd32) >>> 6;
-                    out_flat[{step, 2'd1}*16 +: 16] <= (e1 + e2 + 16'sd32) >>> 6;
-                    out_flat[{step, 2'd2}*16 +: 16] <= (e1 - e2 + 16'sd32) >>> 6;
-                    out_flat[{step, 2'd3}*16 +: 16] <= (e0 - e3 + 16'sd32) >>> 6;
+                    out_flat[{step, 2'd0}*16 +: 16] <= (e0 + e3 + 18'sd32) >>> 6;
+                    out_flat[{step, 2'd1}*16 +: 16] <= (e1 + e2 + 18'sd32) >>> 6;
+                    out_flat[{step, 2'd2}*16 +: 16] <= (e1 - e2 + 18'sd32) >>> 6;
+                    out_flat[{step, 2'd3}*16 +: 16] <= (e0 - e3 + 18'sd32) >>> 6;
 
                     if (step == 2'd3)
                         state <= S_DONE;

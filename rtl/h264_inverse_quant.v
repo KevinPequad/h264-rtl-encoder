@@ -62,7 +62,7 @@ module h264_inverse_quant (
                     scale   = get_scale(idx);
                     product = level * scale;
                 // verilator lint_on BLKSEQ
-                    dequant_flat[idx*16 +: 16] <= (product[15:0] << 4);
+                    dequant_flat[idx*16 +: 16] <= product <<< 4;
 
                     if (idx == 4'd15)
                         state <= S_DONE;
