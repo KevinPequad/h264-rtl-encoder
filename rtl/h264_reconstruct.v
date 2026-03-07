@@ -70,7 +70,7 @@ module h264_reconstruct (
                 S_RECON: begin
                     pix_r = {sb_row, idx[3:2]};
                     pix_c = {sb_col, idx[1:0]};
-                    mb_flat_idx = {pix_r, pix_c};
+                    mb_flat_idx = {pix_r, pix_c}; // raster: row*16+col
 
                     resid_val = $signed(recon_resid_flat[idx*16 +: 16]);
                     pred_val  = pred_flat[mb_flat_idx*8 +: 8];

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head><title>H.264 RTL Encoder Output - 48 frames</title>
+<style>
+body { background: #1a1a2e; color: #eee; font-family: monospace; margin: 20px; }
+h1 { color: #e94560; }
+.grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.grid img { border: 1px solid #333; }
+video { border: 2px solid #e94560; margin: 10px 0; }
+.info { background: #16213e; padding: 12px; border-radius: 6px; margin: 10px 0; }
+</style>
+</head>
+<body>
+<h1>H.264 RTL Encoder Output</h1>
+<div class="info">
+  <b>Specs:</b> 320x176, 48 frames, 24fps, QP=26, Baseline Profile, YUV420<br>
+  <b>GOP:</b> SPS+PPS+IDR + 11 P-frames (x4 GOPs)<br>
+  <b>Source:</b> Big Buck Bunny (first 48 frames)
+</div>
+
+<h2>Video Playback</h2>
+<video controls loop width="640" height="352">
+  <source src="playable.mp4" type="video/mp4">
+</video>
+
+<h2>Contact Sheet (all 48 frames)</h2>
+<img src="contact_sheet.png" style="width:100%; max-width:1920px;">
+
+<h2>Key Frames</h2>
+<div class="grid">
+  <div><b>Frame 0 (IDR)</b><br><img src="frame_01.png" width="320"></div>
+  <div><b>Frame 12</b><br><img src="frame_02.png" width="320"></div>
+  <div><b>Frame 24 (IDR)</b><br><img src="frame_03.png" width="320"></div>
+  <div><b>Frame 47</b><br><img src="frame_04.png" width="320"></div>
+</div>
+</body>
+</html>

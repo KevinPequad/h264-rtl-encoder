@@ -1,0 +1,9 @@
+#ifndef FRAME_INFO_H
+#define FRAME_INFO_H
+#define FRAME_WIDTH 320
+#define FRAME_HEIGHT 176
+#define FRAME_SIZE 84480
+#define NUM_FRAMES 480
+#define LUMA_SIZE 56320
+#define CHROMA_SIZE 14080
+#endif
