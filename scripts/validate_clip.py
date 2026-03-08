@@ -1,0 +1,325 @@
+#!/usr/bin/env python3
+"""Run a repeatable multi-frame validation flow for the RTL encoder."""
+
+from __future__ import annotations
+
+from dataclasses import asdict
+from pathlib import Path
+import argparse
+import json
+import math
+import re
+import sys
+
+from rtl_runner import BuildConfig, build_sim, repo_root, require_tool, run_cmd, run_sim, stage_workspace
+
+
+PSNR_RE = re.compile(r"PSNR y:(?P<y>[0-9.inf-]+).*average:(?P<avg>[0-9.inf-]+)")
+SSIM_RE = re.compile(r"SSIM Y:(?P<y>[0-9.]+).*All:(?P<all>[0-9.]+)")
+SIM_SUMMARY_RE = re.compile(r"\[TB\]\s+(?P<frames>\d+)\s+frames encoded,\s+(?P<cycles>\d+)\s+cycles,\s+(?P<bytes>\d+)\s+bytes")
+
+
+def pix_fmt_for_config(bit_depth: int, chroma_format_idc: int) -> str:
+    if bit_depth == 8 and chroma_format_idc == 1:
+        return "yuv420p"
+    if bit_depth == 8 and chroma_format_idc == 2:
+        return "yuv422p"
+    if bit_depth == 10 and chroma_format_idc == 1:
+        return "yuv420p10le"
+    if bit_depth == 10 and chroma_format_idc == 2:
+        return "yuv422p10le"
+    raise ValueError(f"Unsupported pixel format for bit_depth={bit_depth} chroma_format_idc={chroma_format_idc}")
+
+
+def parse_sim_summary(sim_log: str) -> dict[str, int]:
+    match = SIM_SUMMARY_RE.search(sim_log)
+    if not match:
+        return {}
+    return {
+        "frames_encoded": int(match.group("frames")),
+        "cycles": int(match.group("cycles")),
+        "bytes": int(match.group("bytes")),
+    }
+
+
+def sanitize_for_json(value):
+    if isinstance(value, float):
+        if math.isnan(value):
+            return "nan"
+        if math.isinf(value):
+            return "inf" if value > 0 else "-inf"
+        return value
+    if isinstance(value, dict):
+        return {key: sanitize_for_json(subvalue) for key, subvalue in value.items()}
+    if isinstance(value, list):
+        return [sanitize_for_json(item) for item in value]
+    return value
+
+
+def ffmpeg_metric(
+    input_raw: Path,
+    compare_input: Path,
+    width: int,
+    height: int,
+    fps: int,
+    frames: int,
+    pix_fmt: str,
+    metric: str,
+) -> dict[str, float]:
+    filter_graph = (
+        f"[0:v]trim=end_frame={frames},setpts=PTS-STARTPTS[a];"
+        f"[1:v]trim=end_frame={frames},setpts=PTS-STARTPTS[b];"
+        f"[a][b]{metric}"
+    )
+    proc = run_cmd(
+        [
+            "ffmpeg",
+            "-hide_banner",
+            "-nostats",
+            "-v",
+            "info",
+            "-s",
+            f"{width}x{height}",
+            "-pix_fmt",
+            pix_fmt,
+            "-r",
+            str(fps),
+            "-i",
+            str(input_raw),
+            "-i",
+            str(compare_input),
+            "-filter_complex",
+            filter_graph,
+            "-f",
+            "null",
+            "-",
+        ],
+        capture=True,
+    )
+
+    line = ""
+    for candidate in proc.stderr.splitlines():
+        if f"Parsed_{metric}" in candidate:
+            line = candidate
+    if not line:
+        raise RuntimeError(f"Could not parse {metric} output")
+
+    if metric == "psnr":
+        match = PSNR_RE.search(line)
+        if not match:
+            raise RuntimeError(f"Unexpected PSNR output: {line}")
+        return {"y": float(match.group("y")), "average": float(match.group("avg"))}
+
+    match = SSIM_RE.search(line)
+    if not match:
+        raise RuntimeError(f"Unexpected SSIM output: {line}")
+    return {"y": float(match.group("y")), "all": float(match.group("all"))}
+
+
+def build_side_by_side(
+    source_raw: Path,
+    rtl_h264: Path,
+    output_png: Path,
+    width: int,
+    height: int,
+    fps: int,
+    pix_fmt: str,
+    frame_idx: int,
+) -> None:
+    filter_graph = (
+        f"[0:v]trim=start_frame={frame_idx}:end_frame={frame_idx + 1},setpts=PTS-STARTPTS[src];"
+        f"[1:v]trim=start_frame={frame_idx}:end_frame={frame_idx + 1},setpts=PTS-STARTPTS[dec];"
+        "[src][dec]hstack=inputs=2"
+    )
+    output_png.parent.mkdir(parents=True, exist_ok=True)
+    run_cmd(
+        [
+            "ffmpeg",
+            "-y",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-s",
+            f"{width}x{height}",
+            "-pix_fmt",
+            pix_fmt,
+            "-r",
+            str(fps),
+            "-i",
+            str(source_raw),
+            "-i",
+            str(rtl_h264),
+            "-filter_complex",
+            filter_graph,
+            "-frames:v",
+            "1",
+            "-update",
+            "1",
+            str(output_png),
+        ]
+    )
+
+
+def package_mp4(h264_path: Path, mp4_path: Path, width: int, height: int, fps: int) -> None:
+    root = repo_root()
+    run_cmd(
+        [
+            sys.executable,
+            str(root / "scripts" / "package_mp4.py"),
+            str(h264_path),
+            str(mp4_path),
+            "--fps",
+            str(fps),
+            "--width",
+            str(width),
+            "--height",
+            str(height),
+        ]
+    )
+
+
+def encode_x264_reference(
+    source_raw: Path,
+    output_mp4: Path,
+    width: int,
+    height: int,
+    fps: int,
+    frames: int,
+    pix_fmt: str,
+    chroma_format_idc: int,
+) -> None:
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-s",
+        f"{width}x{height}",
+        "-pix_fmt",
+        pix_fmt,
+        "-r",
+        str(fps),
+        "-i",
+        str(source_raw),
+        "-frames:v",
+        str(frames),
+        "-c:v",
+        "libx264",
+        "-bf",
+        "0",
+        "-coder",
+        "0",
+        "-preset",
+        "veryfast",
+    ]
+    if chroma_format_idc == 1:
+        cmd.extend(["-profile:v", "baseline"])
+    elif chroma_format_idc == 2:
+        cmd.extend(["-profile:v", "high422"])
+    run_cmd(cmd + [str(output_mp4)])
+
+
+def parse_args() -> argparse.Namespace:
+    root = repo_root()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--width", type=int, default=320)
+    parser.add_argument("--height", type=int, default=176)
+    parser.add_argument("--fps", type=int, default=24)
+    parser.add_argument("--frames", type=int, default=24)
+    parser.add_argument("--bit-depth", type=int, default=8)
+    parser.add_argument("--chroma-format-idc", type=int, default=1)
+    parser.add_argument("--jobs", type=int, default=24)
+    parser.add_argument("--timeout", type=int, default=500_000_000)
+    parser.add_argument("--input", type=Path, default=root / "data" / "raw_frames.yuv")
+    parser.add_argument("--label", default="320x176_24f")
+    return parser.parse_args()
+
+
+def main() -> int:
+    args = parse_args()
+    require_tool("ffmpeg")
+    require_tool("make")
+
+    root = repo_root()
+    output_dir = root / "output"
+    rtl_h264 = output_dir / f"validation_{args.label}.h264"
+    rtl_mp4 = output_dir / f"validation_{args.label}.mp4"
+    compare_png = output_dir / f"validation_{args.label}_compare.png"
+    x264_mp4 = output_dir / f"validation_{args.label}_x264.mp4"
+    summary_json = output_dir / f"validation_{args.label}.json"
+    sim_log_path = output_dir / f"validation_{args.label}.sim.log"
+    pix_fmt = pix_fmt_for_config(args.bit_depth, args.chroma_format_idc)
+
+    workspace = stage_workspace(f"h264_validate_{args.label}_")
+    config = BuildConfig(
+        width=args.width,
+        height=args.height,
+        bit_depth=args.bit_depth,
+        chroma_format_idc=args.chroma_format_idc,
+        jobs=args.jobs,
+    )
+    sim_bin = build_sim(workspace, config)
+    sim_proc = run_sim(sim_bin, args.frames, args.timeout, args.input, rtl_h264, capture=True)
+    sim_log = (sim_proc.stdout or "") + (sim_proc.stderr or "")
+    sim_log_path.write_text(sim_log, encoding="utf-8")
+    sim_summary = parse_sim_summary(sim_log)
+    run_cmd(["ffmpeg", "-v", "error", "-i", str(rtl_h264), "-f", "null", "-"])
+
+    rtl_psnr = ffmpeg_metric(args.input, rtl_h264, args.width, args.height, args.fps, args.frames, pix_fmt, "psnr")
+    rtl_ssim = ffmpeg_metric(args.input, rtl_h264, args.width, args.height, args.fps, args.frames, pix_fmt, "ssim")
+
+    ref_psnr = None
+    ref_ssim = None
+    if args.bit_depth == 8:
+        encode_x264_reference(
+            args.input,
+            x264_mp4,
+            args.width,
+            args.height,
+            args.fps,
+            args.frames,
+            pix_fmt,
+            args.chroma_format_idc,
+        )
+        ref_psnr = ffmpeg_metric(args.input, x264_mp4, args.width, args.height, args.fps, args.frames, pix_fmt, "psnr")
+        ref_ssim = ffmpeg_metric(args.input, x264_mp4, args.width, args.height, args.fps, args.frames, pix_fmt, "ssim")
+
+    build_side_by_side(
+        args.input,
+        rtl_h264,
+        compare_png,
+        args.width,
+        args.height,
+        args.fps,
+        pix_fmt,
+        args.frames // 2,
+    )
+    package_mp4(rtl_h264, rtl_mp4, args.width, args.height, args.fps)
+
+    summary = {
+        "config": asdict(config),
+        "frames": args.frames,
+        "timeout": args.timeout,
+        "input": str(args.input),
+        "pix_fmt": pix_fmt,
+        "rtl_h264": str(rtl_h264),
+        "rtl_mp4": str(rtl_mp4),
+        "compare_png": str(compare_png),
+        "sim_log": str(sim_log_path),
+        "sim_summary": sim_summary,
+        "x264_reference_mp4": str(x264_mp4) if ref_psnr is not None else None,
+        "rtl_metrics": {"psnr": rtl_psnr, "ssim": rtl_ssim},
+        "x264_metrics": {"psnr": ref_psnr, "ssim": ref_ssim} if ref_psnr is not None else None,
+    }
+    summary_json.write_text(json.dumps(sanitize_for_json(summary), indent=2), encoding="utf-8")
+
+    print(f"[PASS] RTL PSNR avg={rtl_psnr['average']:.4f} SSIM all={rtl_ssim['all']:.6f}")
+    if ref_psnr is not None and ref_ssim is not None:
+        print(f"[PASS] x264 PSNR avg={ref_psnr['average']:.4f} SSIM all={ref_ssim['all']:.6f}")
+    print(f"[PASS] Wrote summary to {summary_json}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

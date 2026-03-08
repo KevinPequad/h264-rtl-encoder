@@ -14,15 +14,15 @@ module h264_fetch #(
 
     // Control
     input  wire        start,
-    input  wire [19:0] frame_base_y,
-    input  wire [19:0] frame_base_cb,
-    input  wire [19:0] frame_base_cr,
+    input  wire [20:0] frame_base_y,
+    input  wire [20:0] frame_base_cb,
+    input  wire [20:0] frame_base_cr,
     input  wire [6:0]  mb_x,
     input  wire [5:0]  mb_y,
     input  wire [10:0] frame_width,
 
     // Memory read port
-    output reg  [19:0] raw_mem_addr,
+    output reg  [20:0] raw_mem_addr,
     input  wire [BIT_DEPTH-1:0]  raw_mem_data,
 
     // Output: flattened pixel arrays (active after done)
@@ -43,20 +43,22 @@ module h264_fetch #(
     reg [1:0]  plane;       // 0=luma, 1=Cb, 2=Cr
     reg [3:0]  row;
     reg [3:0]  col;
-    reg [19:0] row_base;
+    localparam RAW_ADDR_W = 21;
+
+    reg [RAW_ADDR_W-1:0] row_base;
     reg [10:0] plane_width; // current plane width
     reg [3:0]  max_row;
     reg [3:0]  max_col;
 
-    wire [19:0] y_origin  = frame_base_y  + ({14'd0, mb_y} * 20'd16) * {9'd0, frame_width} + ({13'd0, mb_x} * 20'd16);
+    wire [RAW_ADDR_W-1:0] y_origin  = frame_base_y  + ({15'd0, mb_y} * 21'd16) * {10'd0, frame_width} + ({14'd0, mb_x} * 21'd16);
     wire [10:0] ch_width  = frame_width >> 1;
-    wire [19:0] cb_origin = frame_base_cb + ({14'd0, mb_y} * CHROMA_MB_HEIGHT) * {9'd0, ch_width} + ({13'd0, mb_x} * 20'd8);
-    wire [19:0] cr_origin = frame_base_cr + ({14'd0, mb_y} * CHROMA_MB_HEIGHT) * {9'd0, ch_width} + ({13'd0, mb_x} * 20'd8);
+    wire [RAW_ADDR_W-1:0] cb_origin = frame_base_cb + ({15'd0, mb_y} * CHROMA_MB_HEIGHT) * {10'd0, ch_width} + ({14'd0, mb_x} * 21'd8);
+    wire [RAW_ADDR_W-1:0] cr_origin = frame_base_cr + ({15'd0, mb_y} * CHROMA_MB_HEIGHT) * {10'd0, ch_width} + ({14'd0, mb_x} * 21'd8);
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state       <= S_IDLE;
-            raw_mem_addr<= 20'd0;
+            raw_mem_addr<= {RAW_ADDR_W{1'b0}};
             done        <= 1'b0;
             valid       <= 1'b0;
             luma_flat   <= {(256*BIT_DEPTH){1'b0}};
@@ -65,7 +67,7 @@ module h264_fetch #(
             plane       <= 2'd0;
             row         <= 4'd0;
             col         <= 4'd0;
-            row_base    <= 20'd0;
+            row_base    <= {RAW_ADDR_W{1'b0}};
             plane_width <= 11'd0;
             max_row     <= 4'd0;
             max_col     <= 4'd0;
@@ -87,7 +89,7 @@ module h264_fetch #(
                 end
 
                 S_ADDR: begin
-                    raw_mem_addr <= row_base + {16'd0, col};
+                    raw_mem_addr <= row_base + {{(RAW_ADDR_W-4){1'b0}}, col};
                     state        <= S_READ;
                 end
 

@@ -1,0 +1,12 @@
+* text=auto
+*.sh text eol=lf
+*.bat text eol=crlf
+*.v text eol=lf
+*.cpp text eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.png binary
+*.mp4 binary
+*.h264 binary
+*.yuv binary
+*.pdf binary

@@ -25,14 +25,27 @@ WIDTH           ?= 320
 HEIGHT          ?= 176
 BIT_DEPTH       ?= 8
 CHROMA_FORMAT_IDC ?= 1
+TRACE           ?= 0
+TRACE_FILE      ?= output/trace.vcd
+
+ifneq ($(filter wave,$(MAKECMDGOALS)),)
+TRACE := 1
+endif
 
 # Collect all Verilog sources from the RTL directory
 RTL_SRCS        := $(wildcard $(RTL_DIR)/*.v)
 
+# Trace support is optional because Verilator's traced build is fragile for the
+# heaviest 10-bit 4:2:2 configuration.
+VERILATOR_TRACE_FLAGS :=
+ifeq ($(TRACE),1)
+VERILATOR_TRACE_FLAGS += --trace
+endif
+
 # Verilator flags
 VERILATOR_FLAGS := --cc --exe --build \
     -Wall -Wno-fatal \
-    --trace \
+    $(VERILATOR_TRACE_FLAGS) \
     --top-module $(TOP_MODULE) \
     -I$(RTL_DIR) \
     -GFRAME_WIDTH=$(WIDTH) -GFRAME_HEIGHT=$(HEIGHT) -GBIT_DEPTH=$(BIT_DEPTH) -GCHROMA_FORMAT_IDC=$(CHROMA_FORMAT_IDC) \
@@ -72,6 +85,7 @@ run: $(SIM_BIN)
 		$(EXTRA_PLUSARGS)
 
 wave: $(SIM_BIN)
+	@mkdir -p $(dir $(TRACE_FILE))
 	@mkdir -p $(dir $(H264_OUTPUT))
 	./$(SIM_BIN) \
 		+frames=$(FRAMES) \
@@ -79,6 +93,7 @@ wave: $(SIM_BIN)
 		+input=$(YUV_INPUT) \
 		+output=$(H264_OUTPUT) \
 		+trace \
+		+trace_file=$(TRACE_FILE) \
 		$(EXTRA_PLUSARGS)
 
 clean:
@@ -96,9 +111,11 @@ help:
 	@echo "  TIMEOUT      Max simulation cycles        (default: 100000000)"
 	@echo "  YUV_INPUT    Raw YUV420 input file         (default: /workspace/data/raw_frames.yuv)"
 	@echo "  H264_OUTPUT  Encoded H.264 output file     (default: /workspace/output/encoded.h264)"
+	@echo "  TRACE        Enable Verilator VCD tracing  (default: 0)"
+	@echo "  TRACE_FILE   Output VCD path               (default: output/trace.vcd)"
 	@echo "  EXTRA_PLUSARGS  Additional +args for sim"
 	@echo ""
 	@echo "Examples:"
 	@echo "  make run FRAMES=10"
 	@echo "  make wave FRAMES=1 TIMEOUT=5000000"
-	@echo "  make run EXTRA_PLUSARGS='+trace'"
+	@echo "  make run WIDTH=32 HEIGHT=16 BIT_DEPTH=10 CHROMA_FORMAT_IDC=2"
