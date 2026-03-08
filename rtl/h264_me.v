@@ -2,18 +2,20 @@
 // Diamond search within ±SEARCH_RANGE using SAD
 // Outputs best motion vector and the 16x16 reference block
 
-module h264_me (
+module h264_me #(
+    parameter BIT_DEPTH = 8
+) (
     input  wire        clk,
     input  wire        rst_n,
     input  wire        start,
     output reg         done,
 
-    // Current MB luma (16x16 = 256 bytes = 2048 bits)
-    input  wire [2047:0] cur_mb,
+    // Current MB luma (16x16 pixels)
+    input  wire [256*BIT_DEPTH-1:0] cur_mb,
 
     // Reference frame read port (active during search)
     output reg  [19:0] ref_rd_addr,
-    input  wire [7:0]  ref_rd_data,
+    input  wire [BIT_DEPTH-1:0]  ref_rd_data,
 
     // Frame dimensions
     input  wire [10:0] frame_width,
@@ -27,7 +29,7 @@ module h264_me (
     output reg  signed [7:0]  best_mvx,
     output reg  signed [7:0]  best_mvy,
     output reg  [17:0]        best_sad,
-    output reg  [2047:0]      ref_mb_out    // reference block at best MV
+    output reg  [256*BIT_DEPTH-1:0] ref_mb_out    // reference block at best MV
 );
 
     // Diamond search pattern: check center, then 4 diamond points, iterate
@@ -76,7 +78,7 @@ module h264_me (
 
     // Fetch state
     reg [8:0] fetch_idx;   // 0..255: pixel index in 16x16 block
-    reg [2047:0] cand_buf;
+    reg [256*BIT_DEPTH-1:0] cand_buf;
 
     // SAD computation
     reg [17:0] sad_acc;
@@ -124,9 +126,9 @@ module h264_me (
     end
 
     // Pixel extraction for SAD
-    wire [7:0] cur_pix = cur_mb[sad_idx[7:0]*8 +: 8];
-    wire [7:0] ref_pix = cand_buf[sad_idx[7:0]*8 +: 8];
-    wire [8:0] adiff   = (cur_pix >= ref_pix) ?
+    wire [BIT_DEPTH-1:0] cur_pix = cur_mb[sad_idx[7:0]*BIT_DEPTH +: BIT_DEPTH];
+    wire [BIT_DEPTH-1:0] ref_pix = cand_buf[sad_idx[7:0]*BIT_DEPTH +: BIT_DEPTH];
+    wire [BIT_DEPTH:0] adiff = (cur_pix >= ref_pix) ?
                          {1'b0, cur_pix} - {1'b0, ref_pix} :
                          {1'b0, ref_pix} - {1'b0, cur_pix};
 
@@ -137,14 +139,14 @@ module h264_me (
             best_mvx <= 8'sd0;
             best_mvy <= 8'sd0;
             best_sad <= 18'h3FFFF;
-            ref_mb_out <= 2048'd0;
+            ref_mb_out <= {(256*BIT_DEPTH){1'b0}};
             ref_rd_addr <= 20'd0;
             center_x <= 12'sd0;
             center_y <= 12'sd0;
             cand_ox <= 9'sd0;
             cand_oy <= 9'sd0;
             fetch_idx <= 9'd0;
-            cand_buf <= 2048'd0;
+            cand_buf <= {(256*BIT_DEPTH){1'b0}};
             sad_acc <= 18'd0;
             sad_idx <= 9'd0;
             diamond_idx <= 4'd0;
@@ -186,7 +188,7 @@ module h264_me (
 
                 S_FETCH: begin
                     // Store pixel
-                    cand_buf[fetch_idx[7:0]*8 +: 8] <= ref_rd_data;
+                    cand_buf[fetch_idx[7:0]*BIT_DEPTH +: BIT_DEPTH] <= ref_rd_data;
                     fetch_idx <= fetch_idx + 9'd1;
 
                     if (fetch_idx == 9'd255) begin
@@ -205,7 +207,7 @@ module h264_me (
                 end
 
                 S_SAD: begin
-                    sad_acc <= sad_acc + {9'd0, adiff};
+                    sad_acc <= sad_acc + {{(17-BIT_DEPTH){1'b0}}, adiff};
                     if (sad_idx == 9'd255) begin
                         state <= S_UPDATE;
                     end else begin

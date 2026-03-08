@@ -6,19 +6,24 @@
 //   e2 = (b>>1) - d;  e3 = b + (d>>1)
 //   out = [e0+e3, e1+e2, e1-e2, e0-e3]
 
-module h264_inverse_transform (
+module h264_inverse_transform #(
+    parameter BIT_DEPTH = 8
+) (
     input  wire        clk,
     input  wire        rst_n,
 
     input  wire        start,
     output reg         done,
 
-    // Input: 4x4 dequantized coefficients (256 bits = 16 * 16-bit signed)
-    input  wire [255:0] in_flat,
+    // Input: 4x4 dequantized coefficients (16 * CW-bit signed)
+    input  wire [16*CW-1:0] in_flat,
 
-    // Output: 4x4 reconstructed residual (256 bits)
+    // Output: 4x4 reconstructed residual (16 * 16-bit signed)
     output reg  [255:0] out_flat
 );
+
+    localparam CW  = BIT_DEPTH + 8;
+    localparam IW  = CW + 2; // intermediate width: adds headroom for butterfly sums
 
     reg [2:0] state;
     localparam S_IDLE = 3'd0;
@@ -26,18 +31,18 @@ module h264_inverse_transform (
     localparam S_ROW  = 3'd2;
     localparam S_DONE = 3'd3;
 
-    reg signed [17:0] tmp [0:15];
+    reg signed [IW-1:0] tmp [0:15];
     reg [1:0] step;
 
-    reg signed [17:0] a, b, c, d;
-    reg signed [17:0] e0, e1, e2, e3;
+    reg signed [IW-1:0] a, b, c, d;
+    reg signed [IW-1:0] e0, e1, e2, e3;
 
-    // Unpack inputs
-    wire signed [15:0] inp [0:15];
+    // Unpack inputs: sign-extend CW-bit to IW-bit
+    wire signed [CW-1:0] inp [0:15];
     genvar gi;
     generate
         for (gi = 0; gi < 16; gi = gi + 1) begin : unpack
-            assign inp[gi] = $signed(in_flat[gi*16 +: 16]);
+            assign inp[gi] = $signed(in_flat[gi*CW +: CW]);
         end
     endgenerate
 
@@ -60,10 +65,10 @@ module h264_inverse_transform (
                 // Column-wise inverse transform
                 // verilator lint_off BLKSEQ
                 S_COL: begin
-                    a = $signed({{2{inp[{2'd0, step}][15]}}, inp[{2'd0, step}]});
-                    b = $signed({{2{inp[{2'd1, step}][15]}}, inp[{2'd1, step}]});
-                    c = $signed({{2{inp[{2'd2, step}][15]}}, inp[{2'd2, step}]});
-                    d = $signed({{2{inp[{2'd3, step}][15]}}, inp[{2'd3, step}]});
+                    a = {{(IW-CW){inp[{2'd0, step}][CW-1]}}, inp[{2'd0, step}]};
+                    b = {{(IW-CW){inp[{2'd1, step}][CW-1]}}, inp[{2'd1, step}]};
+                    c = {{(IW-CW){inp[{2'd2, step}][CW-1]}}, inp[{2'd2, step}]};
+                    d = {{(IW-CW){inp[{2'd3, step}][CW-1]}}, inp[{2'd3, step}]};
 
                     e0 = a + c;
                     e1 = a - c;
@@ -98,10 +103,10 @@ module h264_inverse_transform (
                     e3 = b + (d >>> 1);
                 // verilator lint_on BLKSEQ
 
-                    out_flat[{step, 2'd0}*16 +: 16] <= (e0 + e3 + 18'sd32) >>> 6;
-                    out_flat[{step, 2'd1}*16 +: 16] <= (e1 + e2 + 18'sd32) >>> 6;
-                    out_flat[{step, 2'd2}*16 +: 16] <= (e1 - e2 + 18'sd32) >>> 6;
-                    out_flat[{step, 2'd3}*16 +: 16] <= (e0 - e3 + 18'sd32) >>> 6;
+                    out_flat[{step, 2'd0}*16 +: 16] <= (e0 + e3 + $signed({{(IW-6){1'b0}}, 6'd32})) >>> 6;
+                    out_flat[{step, 2'd1}*16 +: 16] <= (e1 + e2 + $signed({{(IW-6){1'b0}}, 6'd32})) >>> 6;
+                    out_flat[{step, 2'd2}*16 +: 16] <= (e1 - e2 + $signed({{(IW-6){1'b0}}, 6'd32})) >>> 6;
+                    out_flat[{step, 2'd3}*16 +: 16] <= (e0 - e3 + $signed({{(IW-6){1'b0}}, 6'd32})) >>> 6;
 
                     if (step == 2'd3)
                         state <= S_DONE;

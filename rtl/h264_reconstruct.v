@@ -3,7 +3,9 @@
 // Processes one 4x4 sub-block at a time (call 16 times per MB)
 // Stores reconstructed pixels and extracts top row / right column for neighbors
 
-module h264_reconstruct (
+module h264_reconstruct #(
+    parameter BIT_DEPTH = 8
+) (
     input  wire        clk,
     input  wire        rst_n,
 
@@ -13,20 +15,20 @@ module h264_reconstruct (
     // Which 4x4 sub-block (0..15) in raster order within 16x16 MB
     input  wire [3:0]  sub_block_idx,
 
-    // Predicted block (full 16x16, 2048 bits)
-    input  wire [2047:0] pred_flat,
+    // Predicted block (full 16x16, 256*BIT_DEPTH bits)
+    input  wire [256*BIT_DEPTH-1:0] pred_flat,
 
     // Reconstructed residual (one 4x4 = 16 * 16-bit signed = 256 bits)
     input  wire [255:0] recon_resid_flat,
 
-    // Reconstructed pixels (full 16x16, 2048 bits) — read-modify-write
-    input  wire [2047:0] recon_in,
-    output reg  [2047:0] recon_out,
+    // Reconstructed pixels (full 16x16, 256*BIT_DEPTH bits) — read-modify-write
+    input  wire [256*BIT_DEPTH-1:0] recon_in,
+    output reg  [256*BIT_DEPTH-1:0] recon_out,
 
     // Bottom row (16 pixels) for top-neighbor of row below
-    output reg  [127:0]  recon_top_row,
+    output reg  [16*BIT_DEPTH-1:0]  recon_top_row,
     // Rightmost column (16 pixels) for left-neighbor of next MB
-    output reg  [127:0]  recon_right_col
+    output reg  [16*BIT_DEPTH-1:0]  recon_right_col
 );
 
     reg [2:0] state;
@@ -40,21 +42,24 @@ module h264_reconstruct (
     wire [1:0] sb_row = {sub_block_idx[3], sub_block_idx[1]};
     wire [1:0] sb_col = {sub_block_idx[2], sub_block_idx[0]};
 
+    localparam BD = BIT_DEPTH;
+    localparam [BD-1:0] MAX_PIX = {BD{1'b1}}; // (1<<BIT_DEPTH)-1
+
     reg [3:0] pix_r, pix_c;
     reg [7:0] mb_flat_idx;
     reg signed [15:0] resid_val;
-    reg [7:0]  pred_val;
+    reg [BD-1:0] pred_val;
     reg signed [15:0] sum;
-    reg [7:0]  clipped;
+    reg [BD-1:0] clipped;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state         <= S_IDLE;
             done          <= 1'b0;
             idx           <= 4'd0;
-            recon_out     <= 2048'd0;
-            recon_top_row <= 128'd0;
-            recon_right_col <= 128'd0;
+            recon_out     <= {(256*BD){1'b0}};
+            recon_top_row <= {(16*BD){1'b0}};
+            recon_right_col <= {(16*BD){1'b0}};
         end else begin
             done <= 1'b0;
             case (state)
@@ -73,27 +78,27 @@ module h264_reconstruct (
                     mb_flat_idx = {pix_r, pix_c}; // raster: row*16+col
 
                     resid_val = $signed(recon_resid_flat[idx*16 +: 16]);
-                    pred_val  = pred_flat[mb_flat_idx*8 +: 8];
-                    sum       = $signed({1'b0, 7'd0, pred_val}) + resid_val;
+                    pred_val  = pred_flat[mb_flat_idx*BD +: BD];
+                    sum       = $signed({{(16-BD){1'b0}}, pred_val}) + resid_val;
 
                     if (sum < 16'sd0)
-                        clipped = 8'd0;
-                    else if (sum > 16'sd255)
-                        clipped = 8'd255;
+                        clipped = {BD{1'b0}};
+                    else if (sum > $signed({1'b0, MAX_PIX}))
+                        clipped = MAX_PIX;
                     else
-                        clipped = sum[7:0];
+                        clipped = sum[BD-1:0];
 
                 // verilator lint_on BLKSEQ
 
-                    recon_out[mb_flat_idx*8 +: 8] <= clipped;
+                    recon_out[mb_flat_idx*BD +: BD] <= clipped;
 
                     // Track bottom row (row 15) for top-neighbor
                     if (pix_r == 4'd15)
-                        recon_top_row[pix_c*8 +: 8] <= clipped;
+                        recon_top_row[pix_c*BD +: BD] <= clipped;
 
                     // Track right column (col 15) for left-neighbor
                     if (pix_c == 4'd15)
-                        recon_right_col[pix_r*8 +: 8] <= clipped;
+                        recon_right_col[pix_r*BD +: BD] <= clipped;
 
                     if (idx == 4'd15)
                         state <= S_DONE;

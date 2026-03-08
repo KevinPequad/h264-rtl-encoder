@@ -3,19 +3,24 @@
 // Processes one 4x4 block at a time.
 // Input/output are flattened 16-element arrays.
 
-module h264_transform (
+module h264_transform #(
+    parameter BIT_DEPTH = 8
+) (
     input  wire        clk,
     input  wire        rst_n,
 
     input  wire        start,
     output reg         done,
 
-    // Input: 4x4 signed residual block (row-major, 9 bits each, 144 bits total)
-    input  wire [143:0] in_flat,
+    // Input: 4x4 signed residual block (row-major, (BIT_DEPTH+1) bits each)
+    input  wire [16*(BIT_DEPTH+1)-1:0] in_flat,
 
-    // Output: 4x4 signed transform coefficients (16 bits each, 256 bits total)
-    output reg  [255:0] out_flat
+    // Output: 4x4 signed transform coefficients (CW bits each)
+    output reg  [16*CW-1:0] out_flat
 );
+
+    localparam BD1 = BIT_DEPTH + 1;
+    localparam CW  = BIT_DEPTH + 8; // coefficient width: handles 2-pass butterfly range
 
     reg [2:0] state;
     localparam S_IDLE  = 3'd0;
@@ -23,28 +28,28 @@ module h264_transform (
     localparam S_COL   = 3'd2;
     localparam S_DONE  = 3'd3;
 
-    reg signed [15:0] tmp [0:15]; // intermediate row-transform results
+    reg signed [CW-1:0] tmp [0:15]; // intermediate row-transform results
     reg [1:0] step;
 
-    // Extract signed 9-bit input, sign-extend to 16 bits
-    wire signed [15:0] inp [0:15];
+    // Extract signed (BIT_DEPTH+1)-bit input, sign-extend to CW bits
+    wire signed [CW-1:0] inp [0:15];
     genvar gi;
     generate
         for (gi = 0; gi < 16; gi = gi + 1) begin : unpack_in
-            assign inp[gi] = {{7{in_flat[gi*9+8]}}, in_flat[gi*9 +: 9]};
+            assign inp[gi] = {{(CW-BD1){in_flat[gi*BD1+BIT_DEPTH]}}, in_flat[gi*BD1 +: BD1]};
         end
     endgenerate
 
     // Row transform wires
-    reg signed [15:0] ra, rb, rc, rd;
-    reg signed [15:0] rp, rq, rr, rs;
+    reg signed [CW-1:0] ra, rb, rc, rd;
+    reg signed [CW-1:0] rp, rq, rr, rs;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             state <= S_IDLE;
             done  <= 1'b0;
             step  <= 2'd0;
-            out_flat <= 256'd0;
+            out_flat <= {(16*CW){1'b0}};
         end else begin
             done <= 1'b0;
             case (state)
@@ -94,10 +99,10 @@ module h264_transform (
                     rs = ra - (rb <<< 1) + (rc <<< 1) - rd;
                 // verilator lint_on BLKSEQ
 
-                    out_flat[{2'd0, step}*16 +: 16] <= rp;
-                    out_flat[{2'd1, step}*16 +: 16] <= rq;
-                    out_flat[{2'd2, step}*16 +: 16] <= rr;
-                    out_flat[{2'd3, step}*16 +: 16] <= rs;
+                    out_flat[{2'd0, step}*CW +: CW] <= rp;
+                    out_flat[{2'd1, step}*CW +: CW] <= rq;
+                    out_flat[{2'd2, step}*CW +: CW] <= rr;
+                    out_flat[{2'd3, step}*CW +: CW] <= rs;
 
                     if (step == 2'd3) begin
                         state <= S_DONE;

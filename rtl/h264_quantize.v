@@ -3,20 +3,23 @@
 // QP=26: QBITS=19, F_INTRA=174763
 // MF values for QP%6=2: Index 0=10082, Index 1=4194, Index 2=6554
 
-module h264_quantize (
+module h264_quantize #(
+    parameter BIT_DEPTH = 8
+) (
     input  wire        clk,
     input  wire        rst_n,
 
     input  wire        start,
     output reg         done,
 
-    // Input: 4x4 transform coefficients (256 bits = 16 * 16-bit signed)
-    input  wire [255:0] in_flat,
+    // Input: 4x4 transform coefficients (16 * CW-bit signed)
+    input  wire [16*CW-1:0] in_flat,
 
     // Output: 4x4 quantized levels (16 * 16 bits = 256 bits)
     output reg  [255:0] quant_flat
 );
 
+    localparam CW = BIT_DEPTH + 8;
     localparam QBITS = 19;
     localparam [31:0] F_INTRA = 32'd174763;
 
@@ -39,18 +42,18 @@ module h264_quantize (
         end
     endfunction
 
-    reg signed [15:0] coeff;
-    reg [15:0] coeff_abs;
-    reg        coeff_sign;
-    reg [39:0] product;
+    reg signed [CW-1:0] coeff;
+    reg [CW-1:0] coeff_abs;
+    reg          coeff_sign;
+    reg [CW+15:0] product;  // coeff_abs * MF (CW + 16 bits)
     reg [15:0] level;
 
     // Unpack inputs
-    wire signed [15:0] inp [0:15];
+    wire signed [CW-1:0] inp [0:15];
     genvar gi;
     generate
         for (gi = 0; gi < 16; gi = gi + 1) begin : unpack
-            assign inp[gi] = $signed(in_flat[gi*16 +: 16]);
+            assign inp[gi] = $signed(in_flat[gi*CW +: CW]);
         end
     endgenerate
 
@@ -73,9 +76,9 @@ module h264_quantize (
                 // verilator lint_off BLKSEQ
                 S_QUANT: begin
                     coeff      = inp[idx];
-                    coeff_sign = coeff[15];
-                    coeff_abs  = coeff_sign ? (~coeff + 16'd1) : coeff;
-                    product    = ({{24{1'b0}}, coeff_abs} * {24'd0, get_mf(idx)}) + F_INTRA;
+                    coeff_sign = coeff[CW-1];
+                    coeff_abs  = coeff_sign ? (~coeff + {{(CW-1){1'b0}}, 1'b1}) : coeff;
+                    product    = ({{16{1'b0}}, coeff_abs} * {{CW{1'b0}}, get_mf(idx)}) + {{(CW-16){1'b0}}, F_INTRA};
                     level      = product[QBITS +: 16];
                 // verilator lint_on BLKSEQ
 

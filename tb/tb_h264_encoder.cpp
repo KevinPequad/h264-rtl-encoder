@@ -16,19 +16,35 @@
 #ifndef FRAME_H
 #define FRAME_H 176
 #endif
+#ifndef BIT_DEPTH
+#define BIT_DEPTH 8
+#endif
+#ifndef CHROMA_FORMAT_IDC
+#define CHROMA_FORMAT_IDC 1
+#endif
 static constexpr int FRAME_WIDTH  = FRAME_W;
 static constexpr int FRAME_HEIGHT = FRAME_H;
-static constexpr int FRAME_SIZE   = FRAME_WIDTH * FRAME_HEIGHT * 3 / 2;
+static constexpr int BD           = BIT_DEPTH;
+static constexpr int CHROMA_IDC   = CHROMA_FORMAT_IDC;
+static constexpr int BYTES_PER_PEL = (BD > 8) ? 2 : 1;
 static constexpr int LUMA_SIZE    = FRAME_WIDTH * FRAME_HEIGHT;
-static constexpr int CHROMA_SIZE  = (FRAME_WIDTH / 2) * (FRAME_HEIGHT / 2);
+static constexpr int CHROMA_WIDTH = FRAME_WIDTH / 2;
+static constexpr int CHROMA_HEIGHT = (CHROMA_IDC == 2) ? FRAME_HEIGHT : (FRAME_HEIGHT / 2);
+static constexpr int CHROMA_SIZE  = CHROMA_WIDTH * CHROMA_HEIGHT;
+static constexpr int FRAME_SIZE   = (LUMA_SIZE + 2 * CHROMA_SIZE) * BYTES_PER_PEL;
+static constexpr int CHROMA_MID   = 1 << (BD - 1);  // 128 for 8-bit, 512 for 10-bit
 static constexpr size_t DEFAULT_MAX_BITSTREAM = 64 * 1024 * 1024;
 
-static std::vector<uint8_t> raw_pixel_mem;
+// Pixel type: uint16_t for >8-bit, uint8_t for 8-bit
+using pixel_t = typename std::conditional<(BD > 8), uint16_t, uint8_t>::type;
+
+static std::vector<uint8_t> raw_file_buf;  // Raw file bytes
+static std::vector<pixel_t> raw_pixel_mem; // Unpacked pixels
 static std::vector<uint8_t> bitstream_mem;
-static std::vector<uint8_t> ref_frame_rd;   // Read buffer (previous frame)
-static std::vector<uint8_t> ref_frame_wr;   // Write buffer (current frame reconstruction)
-static std::vector<uint8_t> ref_cb_rd, ref_cb_wr;  // Chroma Cb reference
-static std::vector<uint8_t> ref_cr_rd, ref_cr_wr;  // Chroma Cr reference
+static std::vector<pixel_t> ref_frame_rd;   // Read buffer (previous frame)
+static std::vector<pixel_t> ref_frame_wr;   // Write buffer (current frame reconstruction)
+static std::vector<pixel_t> ref_cb_rd, ref_cb_wr;  // Chroma Cb reference
+static std::vector<pixel_t> ref_cr_rd, ref_cr_wr;  // Chroma Cr reference
 static volatile bool got_sigint = false;
 static void sigint_handler(int) { got_sigint = true; }
 
@@ -54,30 +70,48 @@ int main(int argc, char** argv) {
     f.seekg(0, std::ios::end);
     size_t file_size = f.tellg();
     f.seekg(0, std::ios::beg);
+
+    // For >8-bit, input YUV uses 16-bit LE samples; for 8-bit, 8-bit samples
     int avail_frames = file_size / FRAME_SIZE;
     if (num_frames > avail_frames) num_frames = avail_frames;
 
-    raw_pixel_mem.resize(num_frames * FRAME_SIZE);
-    f.read(reinterpret_cast<char*>(raw_pixel_mem.data()), num_frames * FRAME_SIZE);
+    int total_pixels = num_frames * (LUMA_SIZE + 2 * CHROMA_SIZE);
+    raw_pixel_mem.resize(total_pixels);
+
+    if constexpr (BD > 8) {
+        // Read 16-bit LE samples
+        raw_file_buf.resize(num_frames * FRAME_SIZE);
+        f.read(reinterpret_cast<char*>(raw_file_buf.data()), num_frames * FRAME_SIZE);
+        for (int i = 0; i < total_pixels; i++) {
+            raw_pixel_mem[i] = raw_file_buf[i*2] | (raw_file_buf[i*2+1] << 8);
+        }
+    } else {
+        raw_file_buf.resize(num_frames * FRAME_SIZE);
+        f.read(reinterpret_cast<char*>(raw_file_buf.data()), num_frames * FRAME_SIZE);
+        for (int i = 0; i < total_pixels; i++) {
+            raw_pixel_mem[i] = raw_file_buf[i];
+        }
+    }
     f.close();
 
     bitstream_mem.assign(DEFAULT_MAX_BITSTREAM, 0);
     ref_frame_rd.assign(LUMA_SIZE, 0);
     ref_frame_wr.assign(LUMA_SIZE, 0);
-    ref_cb_rd.assign(CHROMA_SIZE, 128);
-    ref_cb_wr.assign(CHROMA_SIZE, 128);
-    ref_cr_rd.assign(CHROMA_SIZE, 128);
-    ref_cr_wr.assign(CHROMA_SIZE, 128);
+    ref_cb_rd.assign(CHROMA_SIZE, CHROMA_MID);
+    ref_cb_wr.assign(CHROMA_SIZE, CHROMA_MID);
+    ref_cr_rd.assign(CHROMA_SIZE, CHROMA_MID);
+    ref_cr_wr.assign(CHROMA_SIZE, CHROMA_MID);
 
     fprintf(stderr, "==========================================================\n");
-    fprintf(stderr, "  H.264 RTL Encoder Testbench\n");
-    fprintf(stderr, "  Frames: %d  Resolution: %dx%d\n", num_frames, FRAME_WIDTH, FRAME_HEIGHT);
+    fprintf(stderr, "  H.264 RTL Encoder Testbench (%d-bit)\n", BD);
+    fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d\n",
+            num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC);
     fprintf(stderr, "==========================================================\n");
 
     Vh264_encoder_top* dut = new Vh264_encoder_top;
     dut->clk = 0; dut->rst_n = 0; dut->start = 0;
     dut->frame_num_in = 0; dut->is_idr_in = 0; dut->ref_mem_rd_data = 0;
-    dut->chr_cb_ref_rd_data = 128; dut->chr_cr_ref_rd_data = 128;
+    dut->chr_cb_ref_rd_data = CHROMA_MID; dut->chr_cr_ref_rd_data = CHROMA_MID;
 
     uint64_t cycle = 0;
     int frame_idx = 0;
@@ -105,7 +139,8 @@ int main(int argc, char** argv) {
         dut->clk = 1;
 
         { // Raw pixel memory read
-            size_t base = (size_t)frame_idx * FRAME_SIZE;
+            int pixels_per_frame = LUMA_SIZE + 2 * CHROMA_SIZE;
+            size_t base = (size_t)frame_idx * pixels_per_frame;
             uint32_t addr = dut->raw_mem_addr;
             if (base + addr < raw_pixel_mem.size())
                 dut->raw_mem_data = raw_pixel_mem[base + addr];
@@ -123,11 +158,11 @@ int main(int argc, char** argv) {
 
         { // Chroma Cb reference read
             uint32_t addr = dut->chr_cb_ref_rd_addr;
-            dut->chr_cb_ref_rd_data = (addr < ref_cb_rd.size()) ? ref_cb_rd[addr] : 128;
+            dut->chr_cb_ref_rd_data = (addr < ref_cb_rd.size()) ? ref_cb_rd[addr] : CHROMA_MID;
         }
         { // Chroma Cr reference read
             uint32_t addr = dut->chr_cr_ref_rd_addr;
-            dut->chr_cr_ref_rd_data = (addr < ref_cr_rd.size()) ? ref_cr_rd[addr] : 128;
+            dut->chr_cr_ref_rd_data = (addr < ref_cr_rd.size()) ? ref_cr_rd[addr] : CHROMA_MID;
         }
 
         dut->eval();
@@ -163,14 +198,14 @@ int main(int argc, char** argv) {
 
             // Swap: write buffer becomes read buffer for next frame
             {
-                uint64_t sum = 0; uint8_t mn = 255, mx = 0;
+                uint64_t sum = 0; pixel_t mn = (pixel_t)((1<<BD)-1), mx = 0;
                 for (int i = 0; i < LUMA_SIZE; i++) {
                     sum += ref_frame_wr[i];
                     if (ref_frame_wr[i] < mn) mn = ref_frame_wr[i];
                     if (ref_frame_wr[i] > mx) mx = ref_frame_wr[i];
                 }
                 fprintf(stderr, "[TB] Ref frame luma: avg=%llu min=%u max=%u\n",
-                        (unsigned long long)(sum / LUMA_SIZE), mn, mx);
+                        (unsigned long long)(sum / LUMA_SIZE), (unsigned)mn, (unsigned)mx);
                 // Dump encoder reconstruction as YUV for comparison with decoder
                 {
                     static std::ofstream recon_yuv;
@@ -178,9 +213,9 @@ int main(int argc, char** argv) {
                         recon_yuv.open("output/recon.yuv", std::ios::binary);
                     }
                     if (recon_yuv.is_open()) {
-                        recon_yuv.write(reinterpret_cast<char*>(ref_frame_wr.data()), LUMA_SIZE);
-                        recon_yuv.write(reinterpret_cast<char*>(ref_cb_wr.data()), CHROMA_SIZE);
-                        recon_yuv.write(reinterpret_cast<char*>(ref_cr_wr.data()), CHROMA_SIZE);
+                        recon_yuv.write(reinterpret_cast<char*>(ref_frame_wr.data()), LUMA_SIZE * BYTES_PER_PEL);
+                        recon_yuv.write(reinterpret_cast<char*>(ref_cb_wr.data()), CHROMA_SIZE * BYTES_PER_PEL);
+                        recon_yuv.write(reinterpret_cast<char*>(ref_cr_wr.data()), CHROMA_SIZE * BYTES_PER_PEL);
                     }
                 }
                 // Swap: current reconstruction becomes next frame's reference
