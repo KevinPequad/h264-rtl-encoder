@@ -23,6 +23,8 @@ SIM_BIN         := V$(TOP_MODULE)
 # Resolution (override on command line for different sizes)
 WIDTH           ?= 320
 HEIGHT          ?= 176
+BIT_DEPTH       ?= 8
+CHROMA_FORMAT_IDC ?= 1
 
 # Collect all Verilog sources from the RTL directory
 RTL_SRCS        := $(wildcard $(RTL_DIR)/*.v)
@@ -33,8 +35,8 @@ VERILATOR_FLAGS := --cc --exe --build \
     --trace \
     --top-module $(TOP_MODULE) \
     -I$(RTL_DIR) \
-    -GFRAME_WIDTH=$(WIDTH) -GFRAME_HEIGHT=$(HEIGHT) \
-    -CFLAGS "-O2 -std=c++17 -DFRAME_W=$(WIDTH) -DFRAME_H=$(HEIGHT)"
+    -GFRAME_WIDTH=$(WIDTH) -GFRAME_HEIGHT=$(HEIGHT) -GBIT_DEPTH=$(BIT_DEPTH) -GCHROMA_FORMAT_IDC=$(CHROMA_FORMAT_IDC) \
+    -CFLAGS "-O2 -std=c++17 -DFRAME_W=$(WIDTH) -DFRAME_H=$(HEIGHT) -DBIT_DEPTH=$(BIT_DEPTH) -DCHROMA_FORMAT_IDC=$(CHROMA_FORMAT_IDC)"
 
 # Runtime defaults (override on command line)
 FRAMES          ?= 1

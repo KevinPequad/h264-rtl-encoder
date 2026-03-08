@@ -3,7 +3,9 @@
 // H.264 spec 8.5.8: d_ij = (level_ij * LevelScale(QP%6, i, j)) << (QP/6)
 // For QP=26, QP/6=4, so shift is << 4.
 
-module h264_inverse_quant (
+module h264_inverse_quant #(
+    parameter BIT_DEPTH = 8
+) (
     input  wire        clk,
     input  wire        rst_n,
 
@@ -13,9 +15,11 @@ module h264_inverse_quant (
     // Input: 4x4 quantized levels (256 bits = 16 * 16-bit signed)
     input  wire [255:0] quant_flat,
 
-    // Output: 4x4 dequantized transform coefficients (256 bits)
-    output reg  [255:0] dequant_flat
+    // Output: 4x4 dequantized transform coefficients (16 * CW-bit signed)
+    output reg  [16*CW-1:0] dequant_flat
 );
+
+    localparam CW = BIT_DEPTH + 8;
 
     reg [2:0] state;
     localparam S_IDLE    = 3'd0;
@@ -42,10 +46,10 @@ module h264_inverse_quant (
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            state       <= S_IDLE;
-            done        <= 1'b0;
-            idx         <= 4'd0;
-            dequant_flat <= 256'd0;
+            state        <= S_IDLE;
+            done         <= 1'b0;
+            idx          <= 4'd0;
+            dequant_flat <= {(16*CW){1'b0}};
         end else begin
             done <= 1'b0;
             case (state)
@@ -62,7 +66,7 @@ module h264_inverse_quant (
                     scale   = get_scale(idx);
                     product = level * scale;
                 // verilator lint_on BLKSEQ
-                    dequant_flat[idx*16 +: 16] <= product <<< 4;
+                    dequant_flat[idx*CW +: CW] <= (product <<< 4);
 
                     if (idx == 4'd15)
                         state <= S_DONE;

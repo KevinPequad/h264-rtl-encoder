@@ -3,7 +3,11 @@
 // One byte per clock cycle via memory read port
 
 module h264_fetch #(
-    parameter FRAME_WIDTH = 320
+    parameter FRAME_WIDTH = 320,
+    parameter BIT_DEPTH   = 8,
+    parameter CHROMA_FORMAT_IDC = 1,
+    parameter CHROMA_MB_HEIGHT = (CHROMA_FORMAT_IDC == 2) ? 16 : 8,
+    parameter CHROMA_MB_PIXELS = 8 * CHROMA_MB_HEIGHT
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -19,12 +23,12 @@ module h264_fetch #(
 
     // Memory read port
     output reg  [19:0] raw_mem_addr,
-    input  wire [7:0]  raw_mem_data,
+    input  wire [BIT_DEPTH-1:0]  raw_mem_data,
 
     // Output: flattened pixel arrays (active after done)
-    output reg  [2047:0] luma_flat,   // 256 bytes = 2048 bits (16x16)
-    output reg  [511:0]  cb_flat,     // 64 bytes = 512 bits (8x8)
-    output reg  [511:0]  cr_flat,     // 64 bytes = 512 bits (8x8)
+    output reg  [256*BIT_DEPTH-1:0] luma_flat,   // 16x16 pixels
+    output reg  [CHROMA_MB_PIXELS*BIT_DEPTH-1:0]  cb_flat,
+    output reg  [CHROMA_MB_PIXELS*BIT_DEPTH-1:0]  cr_flat,
 
     output reg         done,
     output reg         valid
@@ -41,12 +45,13 @@ module h264_fetch #(
     reg [3:0]  col;
     reg [19:0] row_base;
     reg [10:0] plane_width; // current plane width
-    reg [3:0]  max_rc;      // max row/col (15 for luma, 7 for chroma)
+    reg [3:0]  max_row;
+    reg [3:0]  max_col;
 
     wire [19:0] y_origin  = frame_base_y  + ({14'd0, mb_y} * 20'd16) * {9'd0, frame_width} + ({13'd0, mb_x} * 20'd16);
     wire [10:0] ch_width  = frame_width >> 1;
-    wire [19:0] cb_origin = frame_base_cb + ({14'd0, mb_y} * 20'd8) * {9'd0, ch_width} + ({13'd0, mb_x} * 20'd8);
-    wire [19:0] cr_origin = frame_base_cr + ({14'd0, mb_y} * 20'd8) * {9'd0, ch_width} + ({13'd0, mb_x} * 20'd8);
+    wire [19:0] cb_origin = frame_base_cb + ({14'd0, mb_y} * CHROMA_MB_HEIGHT) * {9'd0, ch_width} + ({13'd0, mb_x} * 20'd8);
+    wire [19:0] cr_origin = frame_base_cr + ({14'd0, mb_y} * CHROMA_MB_HEIGHT) * {9'd0, ch_width} + ({13'd0, mb_x} * 20'd8);
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -54,15 +59,16 @@ module h264_fetch #(
             raw_mem_addr<= 20'd0;
             done        <= 1'b0;
             valid       <= 1'b0;
-            luma_flat   <= 2048'd0;
-            cb_flat     <= 512'd0;
-            cr_flat     <= 512'd0;
+            luma_flat   <= {(256*BIT_DEPTH){1'b0}};
+            cb_flat     <= {(CHROMA_MB_PIXELS*BIT_DEPTH){1'b0}};
+            cr_flat     <= {(CHROMA_MB_PIXELS*BIT_DEPTH){1'b0}};
             plane       <= 2'd0;
             row         <= 4'd0;
             col         <= 4'd0;
             row_base    <= 20'd0;
             plane_width <= 11'd0;
-            max_rc      <= 4'd0;
+            max_row     <= 4'd0;
+            max_col     <= 4'd0;
         end else begin
             done <= 1'b0;
             case (state)
@@ -74,7 +80,8 @@ module h264_fetch #(
                         col         <= 4'd0;
                         row_base    <= y_origin;
                         plane_width <= frame_width;
-                        max_rc      <= 4'd15;
+                        max_row     <= 4'd15;
+                        max_col     <= 4'd15;
                         state       <= S_ADDR;
                     end
                 end
@@ -85,25 +92,26 @@ module h264_fetch #(
                 end
 
                 S_READ: begin
-                    // Store the read byte into the appropriate flattened array
+                    // Store the read pixel into the appropriate flattened array
                     if (plane == 2'd0) begin
-                        luma_flat[({row, col} * 8) +: 8] <= raw_mem_data;
+                        luma_flat[({row, col} * BIT_DEPTH) +: BIT_DEPTH] <= raw_mem_data;
                     end else if (plane == 2'd1) begin
-                        cb_flat[({row[2:0], col[2:0]} * 8) +: 8] <= raw_mem_data;
+                        cb_flat[((row * 4'd8 + col[2:0]) * BIT_DEPTH) +: BIT_DEPTH] <= raw_mem_data;
                     end else begin
-                        cr_flat[({row[2:0], col[2:0]} * 8) +: 8] <= raw_mem_data;
+                        cr_flat[((row * 4'd8 + col[2:0]) * BIT_DEPTH) +: BIT_DEPTH] <= raw_mem_data;
                     end
 
-                    if (col == max_rc) begin
+                    if (col == max_col) begin
                         col <= 4'd0;
-                        if (row == max_rc) begin
+                        if (row == max_row) begin
                             // Plane done, move to next plane or finish
                             if (plane == 2'd0) begin
                                 plane       <= 2'd1;
                                 row         <= 4'd0;
                                 row_base    <= cb_origin;
                                 plane_width <= ch_width;
-                                max_rc      <= 4'd7;
+                                max_row     <= CHROMA_MB_HEIGHT - 1;
+                                max_col     <= 4'd7;
                                 state       <= S_ADDR;
                             end else if (plane == 2'd1) begin
                                 plane       <= 2'd2;

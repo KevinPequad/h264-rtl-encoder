@@ -16,7 +16,8 @@ module h264_cavlc (
     input  wire [1:0]   trailing_ones,
     input  wire [3:0]   last_nonzero_idx,
     input  wire [4:0]   nC,
-    input  wire        is_chroma_dc,   // 1 = chroma DC block (nC=-1, maxCoeff=4)
+    input  wire        is_chroma_dc,   // 1 = chroma DC block (nC=-1)
+    input  wire        chroma_dc_422,  // 1 = 4:2:2 chroma DC (maxCoeff=8), 0 = 4:2:0 (maxCoeff=4)
     input  wire        is_chroma_ac,   // 1 = chroma AC block (maxCoeff=15)
 
     // Output bitstream fragment
@@ -64,32 +65,98 @@ module h264_cavlc (
     reg [15:0] ct_code;
     wire [1:0] nc_idx = (nC >= 5'd8) ? 2'd3 : (nC >= 5'd4) ? 2'd2 : (nC >= 5'd2) ? 2'd1 : 2'd0;
 
-    // Chroma DC coeff_token table (nC=-1, 4:2:0, maxNumCoeff=4)
-    // H.264 Table 9-5, column nC=-1
+    // Chroma DC coeff_token tables
+    // 4:2:0: nC=-1, maxNumCoeff=4, Table 9-5
+    // 4:2:2: nC=-2, maxNumCoeff=8, from FFmpeg chroma422_dc_coeff_token
     reg [5:0]  chr_dc_ct_len;
     reg [15:0] chr_dc_ct_code;
+
+    // 4:2:0 chroma DC coeff_token (nC=-1)
+    reg [5:0]  chr420_ct_len;
+    reg [15:0] chr420_ct_code;
     always @(*) begin
-        chr_dc_ct_len  = 6'd2;
-        chr_dc_ct_code = 16'h4000;
+        chr420_ct_len  = 6'd2;
+        chr420_ct_code = 16'h4000;
         case ({total_coeffs[2:0], trailing_ones})
-            // openh264 g_kuiVlcCoeffToken[4] (nC=-1, chroma DC 4:2:0)
-            // Codes are MSB-justified in 16 bits
-            {3'd0, 2'd0}: begin chr_dc_ct_len= 6'd2; chr_dc_ct_code=16'h4000; end // 01
-            {3'd1, 2'd0}: begin chr_dc_ct_len= 6'd6; chr_dc_ct_code=16'h1C00; end // 000111
-            {3'd1, 2'd1}: begin chr_dc_ct_len= 6'd1; chr_dc_ct_code=16'h8000; end // 1
-            {3'd2, 2'd0}: begin chr_dc_ct_len= 6'd6; chr_dc_ct_code=16'h1000; end // 000100
-            {3'd2, 2'd1}: begin chr_dc_ct_len= 6'd6; chr_dc_ct_code=16'h1800; end // 000110
-            {3'd2, 2'd2}: begin chr_dc_ct_len= 6'd3; chr_dc_ct_code=16'h2000; end // 001
-            {3'd3, 2'd0}: begin chr_dc_ct_len= 6'd6; chr_dc_ct_code=16'h0C00; end // 000011
-            {3'd3, 2'd1}: begin chr_dc_ct_len= 6'd7; chr_dc_ct_code=16'h0600; end // 0000011
-            {3'd3, 2'd2}: begin chr_dc_ct_len= 6'd7; chr_dc_ct_code=16'h0400; end // 0000010
-            {3'd3, 2'd3}: begin chr_dc_ct_len= 6'd6; chr_dc_ct_code=16'h1400; end // 000101
-            {3'd4, 2'd0}: begin chr_dc_ct_len= 6'd6; chr_dc_ct_code=16'h0800; end // 000010
-            {3'd4, 2'd1}: begin chr_dc_ct_len= 6'd8; chr_dc_ct_code=16'h0300; end // 00000011
-            {3'd4, 2'd2}: begin chr_dc_ct_len= 6'd8; chr_dc_ct_code=16'h0200; end // 00000010
-            {3'd4, 2'd3}: begin chr_dc_ct_len= 6'd7; chr_dc_ct_code=16'h0000; end // 0000000
-            default: begin chr_dc_ct_len= 6'd2; chr_dc_ct_code=16'h4000; end
+            {3'd0, 2'd0}: begin chr420_ct_len= 6'd2; chr420_ct_code=16'h4000; end // 01
+            {3'd1, 2'd0}: begin chr420_ct_len= 6'd6; chr420_ct_code=16'h1C00; end // 000111
+            {3'd1, 2'd1}: begin chr420_ct_len= 6'd1; chr420_ct_code=16'h8000; end // 1
+            {3'd2, 2'd0}: begin chr420_ct_len= 6'd6; chr420_ct_code=16'h1000; end // 000100
+            {3'd2, 2'd1}: begin chr420_ct_len= 6'd6; chr420_ct_code=16'h1800; end // 000110
+            {3'd2, 2'd2}: begin chr420_ct_len= 6'd3; chr420_ct_code=16'h2000; end // 001
+            {3'd3, 2'd0}: begin chr420_ct_len= 6'd6; chr420_ct_code=16'h0C00; end // 000011
+            {3'd3, 2'd1}: begin chr420_ct_len= 6'd7; chr420_ct_code=16'h0600; end // 0000011
+            {3'd3, 2'd2}: begin chr420_ct_len= 6'd7; chr420_ct_code=16'h0400; end // 0000010
+            {3'd3, 2'd3}: begin chr420_ct_len= 6'd6; chr420_ct_code=16'h1400; end // 000101
+            {3'd4, 2'd0}: begin chr420_ct_len= 6'd6; chr420_ct_code=16'h0800; end // 000010
+            {3'd4, 2'd1}: begin chr420_ct_len= 6'd8; chr420_ct_code=16'h0300; end // 00000011
+            {3'd4, 2'd2}: begin chr420_ct_len= 6'd8; chr420_ct_code=16'h0200; end // 00000010
+            {3'd4, 2'd3}: begin chr420_ct_len= 6'd7; chr420_ct_code=16'h0000; end // 0000000
+            default: begin chr420_ct_len= 6'd2; chr420_ct_code=16'h4000; end
         endcase
+    end
+
+    // 4:2:2 chroma DC coeff_token (nC=-2, maxNumCoeff=8)
+    // From FFmpeg chroma422_dc_coeff_token_{bits,len} tables
+    // Codeword bits are MSB-justified in 16 bits
+    reg [5:0]  chr422_ct_len;
+    reg [15:0] chr422_ct_code;
+    always @(*) begin
+        chr422_ct_len  = 6'd1;
+        chr422_ct_code = 16'h8000;
+        case ({total_coeffs[3:0], trailing_ones})
+            // TC=0: len=1, bits=1 -> 1
+            {4'd0, 2'd0}: begin chr422_ct_len= 6'd1;  chr422_ct_code=16'h8000; end
+            // TC=1: T1=0: len=7 bits=15(0001111), T1=1: len=2 bits=1(01)
+            {4'd1, 2'd0}: begin chr422_ct_len= 6'd7;  chr422_ct_code=16'h1E00; end
+            {4'd1, 2'd1}: begin chr422_ct_len= 6'd2;  chr422_ct_code=16'h4000; end
+            // TC=2: T1=0: len=7 bits=14(0001110), T1=1: len=7 bits=13(0001101), T1=2: len=3 bits=1(001)
+            {4'd2, 2'd0}: begin chr422_ct_len= 6'd7;  chr422_ct_code=16'h1C00; end
+            {4'd2, 2'd1}: begin chr422_ct_len= 6'd7;  chr422_ct_code=16'h1A00; end
+            {4'd2, 2'd2}: begin chr422_ct_len= 6'd3;  chr422_ct_code=16'h2000; end
+            // TC=3: T1=0: len=9 bits=7(000000111), T1=1: len=7 bits=12(0001100), T1=2: len=7 bits=11(0001011), T1=3: len=5 bits=1(00001)
+            {4'd3, 2'd0}: begin chr422_ct_len= 6'd9;  chr422_ct_code=16'h0380; end
+            {4'd3, 2'd1}: begin chr422_ct_len= 6'd7;  chr422_ct_code=16'h1800; end
+            {4'd3, 2'd2}: begin chr422_ct_len= 6'd7;  chr422_ct_code=16'h1600; end
+            {4'd3, 2'd3}: begin chr422_ct_len= 6'd5;  chr422_ct_code=16'h0800; end
+            // TC=4: T1=0: len=9 bits=6(000000110), T1=1: len=9 bits=5(000000101), T1=2: len=7 bits=10(0001010), T1=3: len=6 bits=1(000001)
+            {4'd4, 2'd0}: begin chr422_ct_len= 6'd9;  chr422_ct_code=16'h0300; end
+            {4'd4, 2'd1}: begin chr422_ct_len= 6'd9;  chr422_ct_code=16'h0280; end
+            {4'd4, 2'd2}: begin chr422_ct_len= 6'd7;  chr422_ct_code=16'h1400; end
+            {4'd4, 2'd3}: begin chr422_ct_len= 6'd6;  chr422_ct_code=16'h0400; end
+            // TC=5: T1=0: len=10 bits=7(0000000111), T1=1: len=10 bits=6(0000000110), T1=2: len=9 bits=4(000000100), T1=3: len=7 bits=9(0001001)
+            {4'd5, 2'd0}: begin chr422_ct_len= 6'd10; chr422_ct_code=16'h01C0; end
+            {4'd5, 2'd1}: begin chr422_ct_len= 6'd10; chr422_ct_code=16'h0180; end
+            {4'd5, 2'd2}: begin chr422_ct_len= 6'd9;  chr422_ct_code=16'h0200; end
+            {4'd5, 2'd3}: begin chr422_ct_len= 6'd7;  chr422_ct_code=16'h1200; end
+            // TC=6: T1=0: len=11 bits=7(00000000111), T1=1: len=11 bits=6(00000000110), T1=2: len=10 bits=5(0000000101), T1=3: len=7 bits=8(0001000)
+            {4'd6, 2'd0}: begin chr422_ct_len= 6'd11; chr422_ct_code=16'h00E0; end
+            {4'd6, 2'd1}: begin chr422_ct_len= 6'd11; chr422_ct_code=16'h00C0; end
+            {4'd6, 2'd2}: begin chr422_ct_len= 6'd10; chr422_ct_code=16'h0140; end
+            {4'd6, 2'd3}: begin chr422_ct_len= 6'd7;  chr422_ct_code=16'h1000; end
+            // TC=7: T1=0: len=12 bits=7(000000000111), T1=1: len=12 bits=6(000000000110), T1=2: len=11 bits=5(00000000101), T1=3: len=10 bits=4(0000000100)
+            {4'd7, 2'd0}: begin chr422_ct_len= 6'd12; chr422_ct_code=16'h0070; end
+            {4'd7, 2'd1}: begin chr422_ct_len= 6'd12; chr422_ct_code=16'h0060; end
+            {4'd7, 2'd2}: begin chr422_ct_len= 6'd11; chr422_ct_code=16'h00A0; end
+            {4'd7, 2'd3}: begin chr422_ct_len= 6'd10; chr422_ct_code=16'h0100; end
+            // TC=8: T1=0: len=13 bits=7(0000000000111), T1=1: len=12 bits=5(000000000101), T1=2: len=12 bits=4(000000000100), T1=3: len=11 bits=4(00000000100)
+            {4'd8, 2'd0}: begin chr422_ct_len= 6'd13; chr422_ct_code=16'h0038; end
+            {4'd8, 2'd1}: begin chr422_ct_len= 6'd12; chr422_ct_code=16'h0050; end
+            {4'd8, 2'd2}: begin chr422_ct_len= 6'd12; chr422_ct_code=16'h0040; end
+            {4'd8, 2'd3}: begin chr422_ct_len= 6'd11; chr422_ct_code=16'h0080; end
+            default: begin chr422_ct_len= 6'd1; chr422_ct_code=16'h8000; end
+        endcase
+    end
+
+    // Select between 4:2:0 and 4:2:2 chroma DC coeff_token
+    always @(*) begin
+        if (chroma_dc_422) begin
+            chr_dc_ct_len  = chr422_ct_len;
+            chr_dc_ct_code = chr422_ct_code;
+        end else begin
+            chr_dc_ct_len  = chr420_ct_len;
+            chr_dc_ct_code = chr420_ct_code;
+        end
     end
 
     always @(*) begin
@@ -500,29 +567,96 @@ module h264_cavlc (
             default: begin tz_len=6'd1; tz_code=9'h100; end
         endcase
 
-        // Override with chroma DC total_zeros table (Table 9-9(a))
+        // Override with chroma DC total_zeros tables
         if (is_chroma_dc) begin
-            case (tz_tc_r[1:0])
-                2'd1: case (tz_val_r[1:0])
-                    2'd0: begin tz_len=6'd1; tz_code=9'h100; end // 1
-                    2'd1: begin tz_len=6'd2; tz_code=9'h080; end // 01
-                    2'd2: begin tz_len=6'd3; tz_code=9'h040; end // 001
-                    2'd3: begin tz_len=6'd3; tz_code=9'h000; end // 000
+            if (chroma_dc_422) begin
+                // Table 9-9(b): 4:2:2 chroma DC total_zeros (maxNumCoeff=8)
+                // From FFmpeg chroma422_dc_total_zeros_{bits,len}[7][8]
+                // tz_tc_r = TotalCoeff (1-7), tz_val_r = total_zeros (0..7-tc)
+                // Codes MSB-justified in 9 bits: code = bits << (9 - len)
+                case (tz_tc_r[2:0])
+                    3'd1: case (tz_val_r[2:0])
+                        3'd0: begin tz_len=6'd1; tz_code=9'h100; end // 1
+                        3'd1: begin tz_len=6'd3; tz_code=9'h080; end // 010
+                        3'd2: begin tz_len=6'd3; tz_code=9'h0C0; end // 011
+                        3'd3: begin tz_len=6'd4; tz_code=9'h040; end // 0010
+                        3'd4: begin tz_len=6'd4; tz_code=9'h060; end // 0011
+                        3'd5: begin tz_len=6'd4; tz_code=9'h020; end // 0001
+                        3'd6: begin tz_len=6'd5; tz_code=9'h010; end // 00001
+                        3'd7: begin tz_len=6'd5; tz_code=9'h000; end // 00000
+                        default: begin tz_len=6'd1; tz_code=9'h100; end
+                    endcase
+                    3'd2: case (tz_val_r[2:0])
+                        3'd0: begin tz_len=6'd3; tz_code=9'h000; end // 000
+                        3'd1: begin tz_len=6'd2; tz_code=9'h080; end // 01
+                        3'd2: begin tz_len=6'd3; tz_code=9'h040; end // 001
+                        3'd3: begin tz_len=6'd3; tz_code=9'h100; end // 100
+                        3'd4: begin tz_len=6'd3; tz_code=9'h140; end // 101
+                        3'd5: begin tz_len=6'd3; tz_code=9'h180; end // 110
+                        3'd6: begin tz_len=6'd3; tz_code=9'h1C0; end // 111
+                        default: begin tz_len=6'd3; tz_code=9'h000; end
+                    endcase
+                    3'd3: case (tz_val_r[2:0])
+                        3'd0: begin tz_len=6'd3; tz_code=9'h000; end // 000
+                        3'd1: begin tz_len=6'd3; tz_code=9'h040; end // 001
+                        3'd2: begin tz_len=6'd2; tz_code=9'h080; end // 01
+                        3'd3: begin tz_len=6'd2; tz_code=9'h100; end // 10
+                        3'd4: begin tz_len=6'd3; tz_code=9'h180; end // 110
+                        3'd5: begin tz_len=6'd3; tz_code=9'h1C0; end // 111
+                        default: begin tz_len=6'd3; tz_code=9'h000; end
+                    endcase
+                    3'd4: case (tz_val_r[2:0])
+                        3'd0: begin tz_len=6'd3; tz_code=9'h180; end // 110
+                        3'd1: begin tz_len=6'd2; tz_code=9'h000; end // 00
+                        3'd2: begin tz_len=6'd2; tz_code=9'h080; end // 01
+                        3'd3: begin tz_len=6'd2; tz_code=9'h100; end // 10
+                        3'd4: begin tz_len=6'd3; tz_code=9'h1C0; end // 111
+                        default: begin tz_len=6'd3; tz_code=9'h180; end
+                    endcase
+                    3'd5: case (tz_val_r[1:0])
+                        2'd0: begin tz_len=6'd2; tz_code=9'h000; end // 00
+                        2'd1: begin tz_len=6'd2; tz_code=9'h080; end // 01
+                        2'd2: begin tz_len=6'd2; tz_code=9'h100; end // 10
+                        2'd3: begin tz_len=6'd2; tz_code=9'h180; end // 11
+                        default: begin tz_len=6'd2; tz_code=9'h000; end
+                    endcase
+                    3'd6: case (tz_val_r[1:0])
+                        2'd0: begin tz_len=6'd2; tz_code=9'h000; end // 00
+                        2'd1: begin tz_len=6'd2; tz_code=9'h080; end // 01
+                        2'd2: begin tz_len=6'd1; tz_code=9'h100; end // 1
+                        default: begin tz_len=6'd2; tz_code=9'h000; end
+                    endcase
+                    3'd7: case (tz_val_r[0])
+                        1'd0: begin tz_len=6'd1; tz_code=9'h000; end // 0
+                        1'd1: begin tz_len=6'd1; tz_code=9'h100; end // 1
+                        default: begin tz_len=6'd1; tz_code=9'h000; end
+                    endcase
                     default: begin tz_len=6'd1; tz_code=9'h100; end
                 endcase
-                2'd2: case (tz_val_r[1:0])
-                    2'd0: begin tz_len=6'd1; tz_code=9'h100; end // 1
-                    2'd1: begin tz_len=6'd2; tz_code=9'h080; end // 01
-                    2'd2: begin tz_len=6'd2; tz_code=9'h000; end // 00
+            end else begin
+                // Table 9-9(a): 4:2:0 chroma DC total_zeros (maxNumCoeff=4)
+                case (tz_tc_r[1:0])
+                    2'd1: case (tz_val_r[1:0])
+                        2'd0: begin tz_len=6'd1; tz_code=9'h100; end // 1
+                        2'd1: begin tz_len=6'd2; tz_code=9'h080; end // 01
+                        2'd2: begin tz_len=6'd3; tz_code=9'h040; end // 001
+                        2'd3: begin tz_len=6'd3; tz_code=9'h000; end // 000
+                        default: begin tz_len=6'd1; tz_code=9'h100; end
+                    endcase
+                    2'd2: case (tz_val_r[1:0])
+                        2'd0: begin tz_len=6'd1; tz_code=9'h100; end // 1
+                        2'd1: begin tz_len=6'd2; tz_code=9'h080; end // 01
+                        2'd2: begin tz_len=6'd2; tz_code=9'h000; end // 00
+                        default: begin tz_len=6'd1; tz_code=9'h100; end
+                    endcase
+                    2'd3: case (tz_val_r[1:0])
+                        2'd0: begin tz_len=6'd1; tz_code=9'h100; end // 1
+                        2'd1: begin tz_len=6'd1; tz_code=9'h000; end // 0
+                        default: begin tz_len=6'd1; tz_code=9'h100; end
+                    endcase
                     default: begin tz_len=6'd1; tz_code=9'h100; end
                 endcase
-                2'd3: case (tz_val_r[1:0])
-                    2'd0: begin tz_len=6'd1; tz_code=9'h100; end // 1
-                    2'd1: begin tz_len=6'd1; tz_code=9'h000; end // 0
-                    default: begin tz_len=6'd1; tz_code=9'h100; end
-                endcase
-                default: begin tz_len=6'd1; tz_code=9'h100; end
-            endcase
+            end
         end
     end
 
@@ -816,8 +950,8 @@ module h264_cavlc (
                 end
 
                 S_TZ_SETUP: begin
-                    // maxNumCoeff: 4 for chroma DC, 15 for chroma AC, 16 for luma
-                    if ((is_chroma_dc && total_coeffs < 5'd4) ||
+                    // maxNumCoeff: 4 for chroma DC 4:2:0, 8 for chroma DC 4:2:2, 15 for chroma AC, 16 for luma
+                    if ((is_chroma_dc && total_coeffs < (chroma_dc_422 ? 5'd8 : 5'd4)) ||
                         (is_chroma_ac && total_coeffs < 5'd15) ||
                         (!is_chroma_dc && !is_chroma_ac && total_coeffs < 5'd16)) begin
                         tz_tc_r  <= total_coeffs[3:0];

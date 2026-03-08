@@ -14,8 +14,10 @@ module h264_zigzag (
 
     // Mode: 0=luma (16 coeffs), 1=chroma AC (15 coeffs, skip DC)
     input  wire        chroma_ac_mode,
-    // Chroma DC mode: 4 coefficients, no zigzag reorder
+    // Chroma DC mode: 4 coefficients (4:2:0) or 8 coefficients (4:2:2), no zigzag reorder
     input  wire        chroma_dc_mode,
+    // 4:2:2 chroma DC: 8 coefficients instead of 4
+    input  wire        chroma_dc_422,
 
     // Output: coefficients in scan order (256 bits)
     output reg  [255:0] scan_flat,
@@ -90,7 +92,7 @@ module h264_zigzag (
                 // verilator lint_off BLKSEQ
                 S_SCAN: begin
                     if (chroma_dc_mode) begin
-                        // Chroma DC: 4 coefficients, no reordering
+                        // Chroma DC: 4 coefficients (4:2:0) or 8 (4:2:2), no reordering
                         val = $signed(in_flat[idx[3:0]*16 +: 16]);
                         scan_flat[idx[3:0]*16 +: 16] <= val;
 
@@ -99,7 +101,7 @@ module h264_zigzag (
                             last_nz <= idx[3:0];
                         end
 
-                        if (idx == 5'd3) begin
+                        if (idx == (chroma_dc_422 ? 5'd7 : 5'd3)) begin
                             if (tc == 5'd0 && val == 16'sd0) begin
                                 total_coeffs     <= 5'd0;
                                 trailing_ones    <= 2'd0;
@@ -107,7 +109,7 @@ module h264_zigzag (
                                 state            <= S_DONE;
                             end else begin
                                 state   <= S_STATS;
-                                idx     <= (val != 16'sd0) ? 5'd3 : {1'b0, last_nz};
+                                idx     <= (val != 16'sd0) ? (chroma_dc_422 ? 5'd7 : 5'd3) : {1'b0, last_nz};
                                 t1      <= 2'd0;
                                 t1_stop <= 1'b0;
                             end
