@@ -1,13 +1,15 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+IMAGE_NAME="${IMAGE_NAME:-h264-encoder}"
+DOCKER_SCRIPT="${DOCKER_SCRIPT:-/workspace/docker/run_one_frame.sh}"
 
 echo "Building Docker container..."
-docker build -t h264-encoder "$SCRIPT_DIR/docker"
+docker build -t "$IMAGE_NAME" "$SCRIPT_DIR/docker"
 
 echo "Running encoder pipeline in Docker..."
 docker run --rm -it \
     -v "$SCRIPT_DIR:/workspace" \
-    h264-encoder \
-    bash /workspace/run.sh
+    "$IMAGE_NAME" \
+    bash "$DOCKER_SCRIPT"

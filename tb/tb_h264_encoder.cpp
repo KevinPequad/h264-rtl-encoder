@@ -6,8 +6,12 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <memory>
 #include <string>
 #include <vector>
+#if VM_TRACE
+#include <verilated_vcd_c.h>
+#endif
 
 // Resolution set at compile time via -DFRAME_W=... -DFRAME_H=...
 #ifndef FRAME_W
@@ -55,7 +59,9 @@ int main(int argc, char** argv) {
     int num_frames = 1;
     std::string input_file = "data/raw_frames.yuv";
     std::string output_file = "output/encoded.h264";
+    std::string trace_file = "output/trace.vcd";
     uint64_t timeout_cycles = 50000000;
+    bool enable_trace = false;
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -63,6 +69,8 @@ int main(int argc, char** argv) {
         else if (arg.rfind("+input=", 0) == 0) input_file = arg.substr(7);
         else if (arg.rfind("+output=", 0) == 0) output_file = arg.substr(8);
         else if (arg.rfind("+timeout=", 0) == 0) timeout_cycles = std::strtoull(arg.c_str() + 9, nullptr, 10);
+        else if (arg == "+trace") enable_trace = true;
+        else if (arg.rfind("+trace_file=", 0) == 0) trace_file = arg.substr(12);
     }
 
     std::ifstream f(input_file, std::ios::binary);
@@ -113,13 +121,36 @@ int main(int argc, char** argv) {
     dut->frame_num_in = 0; dut->is_idr_in = 0; dut->ref_mem_rd_data = 0;
     dut->chr_cb_ref_rd_data = CHROMA_MID; dut->chr_cr_ref_rd_data = CHROMA_MID;
 
+#if VM_TRACE
+    std::unique_ptr<VerilatedVcdC> trace;
+    if (enable_trace) {
+        Verilated::traceEverOn(true);
+        trace = std::make_unique<VerilatedVcdC>();
+        dut->trace(trace.get(), 99);
+        trace->open(trace_file.c_str());
+        fprintf(stderr, "[TB] Trace enabled: %s\n", trace_file.c_str());
+    }
+#else
+    if (enable_trace) {
+        fprintf(stderr, "[TB] WARNING: +trace requested, but this binary was built without TRACE=1\n");
+    }
+#endif
+
     uint64_t cycle = 0;
+    uint64_t trace_time = 0;
     int frame_idx = 0;
     uint32_t total_bs_bytes = 0;
     bool frame_active = false;
+    auto dump_trace = [&]() {
+#if VM_TRACE
+        if (trace) trace->dump(trace_time);
+#endif
+        trace_time++;
+    };
 
     for (int i = 0; i < 20; i++) {
-        dut->clk = 1; dut->eval(); dut->clk = 0; dut->eval();
+        dut->clk = 1; dut->eval(); dump_trace();
+        dut->clk = 0; dut->eval(); dump_trace();
         cycle++;
         if (cycle == 10) dut->rst_n = 1;
     }
@@ -166,6 +197,7 @@ int main(int argc, char** argv) {
         }
 
         dut->eval();
+        dump_trace();
         if (dut->start) dut->start = 0;
 
         if (dut->bs_mem_wr) {
@@ -228,7 +260,7 @@ int main(int argc, char** argv) {
             frame_active = false;
         }
 
-        dut->clk = 0; dut->eval(); cycle++;
+        dut->clk = 0; dut->eval(); dump_trace(); cycle++;
     }
 
     fprintf(stderr, "==========================================================\n");
@@ -242,6 +274,10 @@ int main(int argc, char** argv) {
         out.close();
         fprintf(stderr, "[TB] Wrote %u bytes to %s\n", total_bs_bytes, output_file.c_str());
     }
+
+#if VM_TRACE
+    if (trace) trace->close();
+#endif
 
     delete dut;
     return 0;

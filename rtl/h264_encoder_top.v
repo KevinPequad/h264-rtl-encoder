@@ -25,7 +25,7 @@ module h264_encoder_top #(
     input  wire        is_idr_in,
 
     // Raw frame memory read port (YUV420 planar)
-    output wire [19:0] raw_mem_addr,
+    output wire [20:0] raw_mem_addr,
     input  wire [BIT_DEPTH-1:0]  raw_mem_data,
 
     // Reference frame memory (external, luma only)
@@ -54,11 +54,12 @@ module h264_encoder_top #(
     output wire [23:0] bs_bytes_written
 );
 
-    localparam [19:0] FRAME_Y_BASE  = 20'd0;
-    localparam [19:0] FRAME_CB_BASE = FRAME_WIDTH * FRAME_HEIGHT;
-    localparam [19:0] FRAME_CR_BASE = FRAME_CB_BASE
-                                    + ((CHROMA_FORMAT_IDC == 2) ? (FRAME_WIDTH * FRAME_HEIGHT / 2)
-                                                                : (FRAME_WIDTH * FRAME_HEIGHT / 4));
+    localparam RAW_ADDR_W = 21;
+    localparam [RAW_ADDR_W-1:0] FRAME_Y_BASE  = {RAW_ADDR_W{1'b0}};
+    localparam [RAW_ADDR_W-1:0] FRAME_CB_BASE = FRAME_WIDTH * FRAME_HEIGHT;
+    localparam [RAW_ADDR_W-1:0] FRAME_CR_BASE = FRAME_CB_BASE
+                                              + ((CHROMA_FORMAT_IDC == 2) ? (FRAME_WIDTH * FRAME_HEIGHT / 2)
+                                                                          : (FRAME_WIDTH * FRAME_HEIGHT / 4));
     localparam CHR_WIDTH            = FRAME_WIDTH / 2;
     localparam CHR_HEIGHT           = (CHROMA_FORMAT_IDC == 2) ? FRAME_HEIGHT : (FRAME_HEIGHT / 2);
     localparam CHR_MB_HEIGHT        = (CHROMA_FORMAT_IDC == 2) ? 16 : 8;
@@ -1584,95 +1585,92 @@ pred_buf = {(256*BD){1'b0}};
     /* verilator lint_on UNUSED */
 
     always @(posedge clk) begin
-        if (!rst_n) begin
-            dbg_frame_cnt <= 8'd0;
-        end else begin
-            // Log CAVLC for frame 0, MBs near the error point
-            if (dbg_frame_cnt == 8'd0 && cavlc_start && mb_count >= 9'd40 && mb_count <= 9'd44) begin
-                $display("[CAV] F%0d MB%0d sb=%0d nC=%0d tc=%0d t1=%0d chDC=%0d ch422=%0d chAC=%0d nA=%0d nB=%0d sbr=%0d sbc=%0d topidx=%0d leftidx=%0d",
-                    dbg_frame_cnt, mb_count, sub_blk, nC_val, total_coeffs, trailing_ones,
-                    cavlc_is_chroma_dc, chroma_dc_422_flag, cavlc_is_chroma_ac,
-                    nA_val, nB_val, sb_r, sb_c, top_blk_idx, left_blk_idx);
-            end
-            if (dbg_frame_cnt == 8'd0 && cavlc_bits_valid && mb_count >= 9'd40 && mb_count <= 9'd44) begin
-                $display("[CVO] F%0d MB%0d sb=%0d bits=%08x count=%0d chDC=%0d",
-                    dbg_frame_cnt, mb_count, sub_blk, cavlc_bits, cavlc_count, cavlc_is_chroma_dc);
-            end
-            // Log MB header for ALL MBs in frame 23
-            if (dbg_frame_cnt == 8'd23 && bs_cmd_mb_hdr) begin
-                $display("[MBH] F%0d MB%0d x=%0d y=%0d inter=%0d mvx=%0d mvy=%0d mvpx=%0d mvpy=%0d mvdx=%0d mvdy=%0d bytes=%0d",
-                    dbg_frame_cnt, mb_count, mb_x, mb_y, is_inter_mb_reg,
-                    $signed(me_best_mvx), $signed(me_best_mvy),
-                    $signed(mvp_x), $signed(mvp_y),
-                    $signed(mvd_x_w), $signed(mvd_y_w),
-                    bs_bytes_written);
-            end
-            // Log left_mb_nz at MB start (sub_blk=0, first cavlc_start)
-            if (dbg_detail_mb && cavlc_start && sub_blk == 5'd0) begin
-                $display("[DBG] F%0d MB%0d LEFT_NZ[0]=%0d [1]=%0d [2]=%0d [3]=%0d  TOP_NZ[%0d]=%0d [%0d]=%0d [%0d]=%0d [%0d]=%0d  mb_left=%0d mb_top=%0d",
-                    dbg_frame_cnt, mb_count,
-                    left_mb_nz[0], left_mb_nz[1], left_mb_nz[2], left_mb_nz[3],
-                    mb_x*4+0, top_mb_nz[mb_x*4+0], mb_x*4+1, top_mb_nz[mb_x*4+1],
-                    mb_x*4+2, top_mb_nz[mb_x*4+2], mb_x*4+3, top_mb_nz[mb_x*4+3],
-                    mb_left_avail, mb_top_avail);
-            end
-            // Log quantized levels for target MB sub-blocks
-            if (dbg_detail_mb && top_state == TS_ENCODE_SBLK && blk_state == BS_QUANT && quant_done && sub_blk <= 5'd3) begin
-                $display("[DBG] F%0d MB%0d sub%0d QUANT: %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d",
-                    dbg_frame_cnt, mb_count, sub_blk,
-                    $signed(quant_out_flat[15:0]), $signed(quant_out_flat[31:16]), $signed(quant_out_flat[47:32]), $signed(quant_out_flat[63:48]),
-                    $signed(quant_out_flat[79:64]), $signed(quant_out_flat[95:80]), $signed(quant_out_flat[111:96]), $signed(quant_out_flat[127:112]),
-                    $signed(quant_out_flat[143:128]), $signed(quant_out_flat[159:144]), $signed(quant_out_flat[175:160]), $signed(quant_out_flat[191:176]),
-                    $signed(quant_out_flat[207:192]), $signed(quant_out_flat[223:208]), $signed(quant_out_flat[239:224]), $signed(quant_out_flat[255:240]));
-            end
+        // dbg_frame_cnt is reset and advanced in the main FSM block; keep this
+        // debug trace block read-only to avoid multi-driver/reset lint noise.
+        if (dbg_frame_cnt == 8'd0 && cavlc_start && mb_count >= 9'd40 && mb_count <= 9'd44) begin
+            $display("[CAV] F%0d MB%0d sb=%0d nC=%0d tc=%0d t1=%0d chDC=%0d ch422=%0d chAC=%0d nA=%0d nB=%0d sbr=%0d sbc=%0d topidx=%0d leftidx=%0d",
+                dbg_frame_cnt, mb_count, sub_blk, nC_val, total_coeffs, trailing_ones,
+                cavlc_is_chroma_dc, chroma_dc_422_flag, cavlc_is_chroma_ac,
+                nA_val, nB_val, sb_r, sb_c, top_blk_idx, left_blk_idx);
+        end
+        if (dbg_frame_cnt == 8'd0 && cavlc_bits_valid && mb_count >= 9'd40 && mb_count <= 9'd44) begin
+            $display("[CVO] F%0d MB%0d sb=%0d bits=%08x count=%0d chDC=%0d",
+                dbg_frame_cnt, mb_count, sub_blk, cavlc_bits, cavlc_count, cavlc_is_chroma_dc);
+        end
+        // Log MB header for ALL MBs in frame 23
+        if (dbg_frame_cnt == 8'd23 && bs_cmd_mb_hdr) begin
+            $display("[MBH] F%0d MB%0d x=%0d y=%0d inter=%0d mvx=%0d mvy=%0d mvpx=%0d mvpy=%0d mvdx=%0d mvdy=%0d bytes=%0d",
+                dbg_frame_cnt, mb_count, mb_x, mb_y, is_inter_mb_reg,
+                $signed(me_best_mvx), $signed(me_best_mvy),
+                $signed(mvp_x), $signed(mvp_y),
+                $signed(mvd_x_w), $signed(mvd_y_w),
+                bs_bytes_written);
+        end
+        // Log left_mb_nz at MB start (sub_blk=0, first cavlc_start)
+        if (dbg_detail_mb && cavlc_start && sub_blk == 5'd0) begin
+            $display("[DBG] F%0d MB%0d LEFT_NZ[0]=%0d [1]=%0d [2]=%0d [3]=%0d  TOP_NZ[%0d]=%0d [%0d]=%0d [%0d]=%0d [%0d]=%0d  mb_left=%0d mb_top=%0d",
+                dbg_frame_cnt, mb_count,
+                left_mb_nz[0], left_mb_nz[1], left_mb_nz[2], left_mb_nz[3],
+                mb_x*4+0, top_mb_nz[mb_x*4+0], mb_x*4+1, top_mb_nz[mb_x*4+1],
+                mb_x*4+2, top_mb_nz[mb_x*4+2], mb_x*4+3, top_mb_nz[mb_x*4+3],
+                mb_left_avail, mb_top_avail);
+        end
+        // Log quantized levels for target MB sub-blocks
+        if (dbg_detail_mb && top_state == TS_ENCODE_SBLK && blk_state == BS_QUANT && quant_done && sub_blk <= 5'd3) begin
+            $display("[DBG] F%0d MB%0d sub%0d QUANT: %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d %0d",
+                dbg_frame_cnt, mb_count, sub_blk,
+                $signed(quant_out_flat[15:0]), $signed(quant_out_flat[31:16]), $signed(quant_out_flat[47:32]), $signed(quant_out_flat[63:48]),
+                $signed(quant_out_flat[79:64]), $signed(quant_out_flat[95:80]), $signed(quant_out_flat[111:96]), $signed(quant_out_flat[127:112]),
+                $signed(quant_out_flat[143:128]), $signed(quant_out_flat[159:144]), $signed(quant_out_flat[175:160]), $signed(quant_out_flat[191:176]),
+                $signed(quant_out_flat[207:192]), $signed(quant_out_flat[223:208]), $signed(quant_out_flat[239:224]), $signed(quant_out_flat[255:240]));
+        end
 
-            // Chroma DC debug for specific MBs
-            if (top_state == TS_CHROMA && dbg_detail_mb) begin
-                // Phase 1: forward Hadamard DC inputs
-                if (chr_phase == 3'd1 && chr_dc_start) begin
-                    $display("[CHR] F%0d MB%0d %s FWD_HAD in: %0d %0d %0d %0d",
-                        dbg_frame_cnt, mb_count, chr_is_cr ? "Cr" : "Cb",
-                        $signed(chr_dc_buf[0]), $signed(chr_dc_buf[1]),
-                        $signed(chr_dc_buf[2]), $signed(chr_dc_buf[3]));
-                end
-                // Phase 1: forward Hadamard done (quantized output)
-                if (chr_phase == 3'd1 && chr_dc_done) begin
-                    $display("[CHR] F%0d MB%0d %s FWD_OUT: %0d %0d %0d %0d",
-                        dbg_frame_cnt, mb_count, chr_is_cr ? "Cr" : "Cb",
-                        $signed(chr_dc_out0), $signed(chr_dc_out1),
-                        $signed(chr_dc_out2), $signed(chr_dc_out3));
-                end
-                // Phase 2: inverse Hadamard done
-                if (chr_phase == 3'd2 && chr_dc_done) begin
-                    $display("[CHR] F%0d MB%0d %s INV_OUT: %0d %0d %0d %0d",
-                        dbg_frame_cnt, mb_count, chr_is_cr ? "Cr" : "Cb",
-                        $signed(chr_dc_out0), $signed(chr_dc_out1),
-                        $signed(chr_dc_out2), $signed(chr_dc_out3));
-                end
-                // Phase 6: reconstruction DC value per block
-                if (chr_phase == 3'd6 && blk_state == BS_IT && it_done) begin
-                    $display("[CHR] F%0d MB%0d %s RECON blk=%0d inv_dc=%0d pred=%0d it0=%0d it1=%0d it2=%0d it3=%0d",
-                        dbg_frame_cnt, mb_count, chr_is_cr ? "Cr" : "Cb",
-                        chr_recon_blk,
-                        $signed(chr_is_cr ? cr_inv_dc[chr_recon_blk] : cb_inv_dc[chr_recon_blk]),
-                        chr_is_cr ? chr_dc_pred[chr_recon_blk] : cb_dc_pred_saved[chr_recon_blk],
-                        $signed(it_out_flat[15:0]), $signed(it_out_flat[31:16]),
-                        $signed(it_out_flat[47:32]), $signed(it_out_flat[63:48]));
-                end
-                // Phase 3: Cb DC CAVLC input
-                if (chr_phase == 3'd3 && blk_state == BS_PRED) begin
-                    $display("[CHR] F%0d MB%0d CbDC CAVLC in: %0d %0d %0d %0d",
-                        dbg_frame_cnt, mb_count,
-                        $signed(cb_dc_q[0]), $signed(cb_dc_q[1]),
-                        $signed(cb_dc_q[2]), $signed(cb_dc_q[3]));
-                end
-                // Phase 4: Cr DC CAVLC input
-                if (chr_phase == 3'd4 && blk_state == BS_PRED) begin
-                    $display("[CHR] F%0d MB%0d CrDC CAVLC in: %0d %0d %0d %0d",
-                        dbg_frame_cnt, mb_count,
-                        $signed(cr_dc_q[0]), $signed(cr_dc_q[1]),
-                        $signed(cr_dc_q[2]), $signed(cr_dc_q[3]));
-                end
+        // Chroma DC debug for specific MBs
+        if (top_state == TS_CHROMA && dbg_detail_mb) begin
+            // Phase 1: forward Hadamard DC inputs
+            if (chr_phase == 3'd1 && chr_dc_start) begin
+                $display("[CHR] F%0d MB%0d %s FWD_HAD in: %0d %0d %0d %0d",
+                    dbg_frame_cnt, mb_count, chr_is_cr ? "Cr" : "Cb",
+                    $signed(chr_dc_buf[0]), $signed(chr_dc_buf[1]),
+                    $signed(chr_dc_buf[2]), $signed(chr_dc_buf[3]));
+            end
+            // Phase 1: forward Hadamard done (quantized output)
+            if (chr_phase == 3'd1 && chr_dc_done) begin
+                $display("[CHR] F%0d MB%0d %s FWD_OUT: %0d %0d %0d %0d",
+                    dbg_frame_cnt, mb_count, chr_is_cr ? "Cr" : "Cb",
+                    $signed(chr_dc_out0), $signed(chr_dc_out1),
+                    $signed(chr_dc_out2), $signed(chr_dc_out3));
+            end
+            // Phase 2: inverse Hadamard done
+            if (chr_phase == 3'd2 && chr_dc_done) begin
+                $display("[CHR] F%0d MB%0d %s INV_OUT: %0d %0d %0d %0d",
+                    dbg_frame_cnt, mb_count, chr_is_cr ? "Cr" : "Cb",
+                    $signed(chr_dc_out0), $signed(chr_dc_out1),
+                    $signed(chr_dc_out2), $signed(chr_dc_out3));
+            end
+            // Phase 6: reconstruction DC value per block
+            if (chr_phase == 3'd6 && blk_state == BS_IT && it_done) begin
+                $display("[CHR] F%0d MB%0d %s RECON blk=%0d inv_dc=%0d pred=%0d it0=%0d it1=%0d it2=%0d it3=%0d",
+                    dbg_frame_cnt, mb_count, chr_is_cr ? "Cr" : "Cb",
+                    chr_recon_blk,
+                    $signed(chr_is_cr ? cr_inv_dc[chr_recon_blk] : cb_inv_dc[chr_recon_blk]),
+                    chr_is_cr ? chr_dc_pred[chr_recon_blk] : cb_dc_pred_saved[chr_recon_blk],
+                    $signed(it_out_flat[15:0]), $signed(it_out_flat[31:16]),
+                    $signed(it_out_flat[47:32]), $signed(it_out_flat[63:48]));
+            end
+            // Phase 3: Cb DC CAVLC input
+            if (chr_phase == 3'd3 && blk_state == BS_PRED) begin
+                $display("[CHR] F%0d MB%0d CbDC CAVLC in: %0d %0d %0d %0d",
+                    dbg_frame_cnt, mb_count,
+                    $signed(cb_dc_q[0]), $signed(cb_dc_q[1]),
+                    $signed(cb_dc_q[2]), $signed(cb_dc_q[3]));
+            end
+            // Phase 4: Cr DC CAVLC input
+            if (chr_phase == 3'd4 && blk_state == BS_PRED) begin
+                $display("[CHR] F%0d MB%0d CrDC CAVLC in: %0d %0d %0d %0d",
+                    dbg_frame_cnt, mb_count,
+                    $signed(cr_dc_q[0]), $signed(cr_dc_q[1]),
+                    $signed(cr_dc_q[2]), $signed(cr_dc_q[3]));
             end
         end
     end

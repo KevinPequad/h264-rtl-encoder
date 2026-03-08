@@ -4,10 +4,9 @@
 Takes the output of the Verilator H.264 encoder simulation (raw Annex B byte
 stream) and wraps it in a standards-compliant MP4/ISO-BMFF container.
 
-The encoder produces:
-    - SPS (NAL type 7): Baseline profile 66, level 3.0, 320x176
-    - PPS (NAL type 8)
-    - IDR slice NAL units (type 5), one per frame (all I-frames)
+The encoder may produce:
+    - SPS/PPS for Constrained Baseline, High 10, or High 4:2:2 profiles
+    - IDR (type 5) and non-IDR (type 1) slice NAL units
     - Annex B start codes: 0x00 0x00 0x00 0x01
 
 Usage:

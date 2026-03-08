@@ -1,30 +1,33 @@
 #!/bin/bash
-set -e
+set -euo pipefail
 
 echo "=== H.264 Verilog Encoder Pipeline ==="
 
-mkdir -p $PWD/data
-mkdir -p $PWD/output
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+
+mkdir -p "$SCRIPT_DIR/data"
+mkdir -p "$SCRIPT_DIR/output"
 
 WIDTH="${WIDTH:-320}"
 HEIGHT="${HEIGHT:-176}"
 FPS="${FPS:-24}"
 CLIP_SECONDS="${CLIP_SECONDS:-20}"
+JOBS="${JOBS:-$(nproc)}"
 FRAME_BYTES=$((WIDTH * HEIGHT * 3 / 2))
-RAW_YUV="${RAW_YUV:-$PWD/data/raw_frames.yuv}"
-RAW_HEX_DIR="${RAW_HEX_DIR:-$PWD/data}"
-ENCODED_H264="${ENCODED_H264:-$PWD/output/encoded.h264}"
-OUTPUT_MP4="${OUTPUT_MP4:-$PWD/output/output.mp4}"
+RAW_YUV="${RAW_YUV:-$SCRIPT_DIR/data/raw_frames.yuv}"
+RAW_HEX_DIR="${RAW_HEX_DIR:-$SCRIPT_DIR/data}"
+ENCODED_H264="${ENCODED_H264:-$SCRIPT_DIR/output/encoded.h264}"
+OUTPUT_MP4="${OUTPUT_MP4:-$SCRIPT_DIR/output/output.mp4}"
 
-OUTPUT_DIR="$PWD/data"
+OUTPUT_DIR="$SCRIPT_DIR/data"
 export WIDTH HEIGHT FPS CLIP_SECONDS OUTPUT_DIR
 
 echo "Step 1: Download and decode Big Buck Bunny (first 20 seconds)..."
-bash "$PWD/scripts/download_and_decode.sh"
+bash "$SCRIPT_DIR/scripts/download_and_decode.sh"
 
 echo ""
 echo "Step 2: Convert raw YUV to memory format..."
-python3 "$PWD/scripts/yuv_to_mem.py" "$RAW_YUV" "$RAW_HEX_DIR"
+python3 "$SCRIPT_DIR/scripts/yuv_to_mem.py" "$RAW_YUV" "$RAW_HEX_DIR"
 
 if [ ! -s "$RAW_YUV" ]; then
     echo "ERROR: Missing raw YUV input: $RAW_YUV" >&2
@@ -44,36 +47,21 @@ echo "Frame geometry: ${WIDTH}x${HEIGHT} @ ${FPS} fps"
 echo "Raw input size: ${RAW_SIZE} bytes"
 echo "Frame count:    ${FRAME_COUNT}"
 echo "Sim timeout:    ${TIMEOUT} cycles"
+echo "Build jobs:     ${JOBS}"
 
 echo ""
-echo "Step 3: Build Verilator simulation..."
-ORIG_DIR="$PWD"
-rm -rf /tmp/h264_build
-mkdir -p /tmp/h264_build/tb
-cp -r "$PWD/rtl" /tmp/h264_build/
-cp -r "$PWD/tb" /tmp/h264_build/
-cd /tmp/h264_build/tb
-make clean && make
-cp Vh264_encoder_top "$ORIG_DIR/tb/"
-cd "$ORIG_DIR/tb"
-
-echo ""
-echo "Step 4: Run H.264 encoder simulation..."
-rm -f "$ENCODED_H264" "$OUTPUT_MP4"
-./Vh264_encoder_top \
-    +frames="$FRAME_COUNT" \
-    +timeout="$TIMEOUT" \
-    +input="$RAW_YUV" \
-    +output="$ENCODED_H264"
-
-echo ""
-echo "Step 5: Package encoded bitstream to MP4..."
-python3 "$PWD/scripts/package_mp4.py" \
-    "$ENCODED_H264" \
-    "$OUTPUT_MP4" \
-    --fps "$FPS" \
-    --width "$WIDTH" \
-    --height "$HEIGHT"
+echo "Step 3: Build, run, and package..."
+JOBS="$JOBS" \
+WIDTH="$WIDTH" \
+HEIGHT="$HEIGHT" \
+BIT_DEPTH="${BIT_DEPTH:-8}" \
+CHROMA_FORMAT_IDC="${CHROMA_FORMAT_IDC:-1}" \
+FRAMES="$FRAME_COUNT" \
+TIMEOUT="$TIMEOUT" \
+YUV_INPUT="$RAW_YUV" \
+H264_OUTPUT="$ENCODED_H264" \
+OUTPUT_MP4="$OUTPUT_MP4" \
+bash "$SCRIPT_DIR/build_run.sh"
 
 echo ""
 echo "=== Done! Output: $OUTPUT_MP4 ==="

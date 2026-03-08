@@ -1,73 +1,51 @@
+# OS and editor junk
+.DS_Store
+Thumbs.db
+Desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
 # Build artifacts
 tb/obj_dir/
 tb/Vh264_encoder_top
+tb/*.d
 *.o
 *.a
+*.vcd
 
-# Large data files
-data/raw_frames.yuv
-data/raw_frames.hex
-data/bigbuckbunny.mp4
-data/test_frame.yuv
+# Python cache and local virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# Debug/analysis scripts (one-off debugging)
-analyze*.py
-debug_*.py
-decode_f23.py
-dump_bits.py
-find_desync.py
-fix_nz.py
-full_parse.py
-parse_f23.py
-parse_h264.py
-parse_mvd.py
-patch_top.py
-check_cavlc.py
-check_yuv.py
-compare_all.py
-compare_nodeblock.py
-compare_yuv.py
-test_4x4.py
-test_cbp.py
-test_drift.py
-test_pps.py
-test_q.py
-test_sps.py
-test_transform_math*.py
-verify_bs.py
-verify_cavlc_full.py
-verify_ct.py
-verify_ct_tables.py
+# Generated data inputs
+data/*.mp4
+data/*.yuv
+data/*.hex
+data/frame_info.h
+!data/README.md
 
-# Output artifacts (keep only key outputs)
-output/orig_*.png
-output/frame[0-9]*.png
-output/frame_[0-9][0-9][0-9].png
-output/frame_0.png
-output/frame_[0-9][0-9].png
-# Keep key frames for viewer.html
-!output/frame_01.png
-!output/frame_02.png
-!output/frame_03.png
-!output/frame_04.png
-output/raw_frame*.png
-output/key_*.png
-output/ref_frame_*.raw
-output/decoded*.yuv
-output/recon.yuv
-output/test28.h264
-output/bbb_*.mp4
-output/bbb_*.gif
-output/bbb_*.webm
-output/fresh_encoded.mp4
-output/my_encoded.mp4
-output/encoded48.mp4
-output/output_reenc.mp4
-output/debug_compare.html
-output/compare.html
-output/player.html
-output/test_frame_*.png
-output/enc_f47.png
-output/orig_f47.png
-output/source_frame47.png
-output/decoded_nodeblock.yuv
+# Local reference material
+references/**/*.pdf
+references/**/*.zip
+references/**/*.epub
+!references/README.md
+
+# Generated outputs
+output/*
+!output/README.md
+
+# Local logs and runtime markers
+*.log
+*.pid
+*.tmp
+*.bak
