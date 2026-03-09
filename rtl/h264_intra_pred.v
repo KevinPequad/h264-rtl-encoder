@@ -1,4 +1,4 @@
-// h264_intra_pred.v - Intra Prediction (vertical, horizontal, DC for 4x4)
+// h264_intra_pred.v - Intra Prediction (vertical, horizontal, DC, horizontal-up for 4x4)
 // Chooses the best supported mode by minimum SAD against the original block.
 // Outputs the selected prediction block, residual, and H.264 intra4x4 mode.
 
@@ -26,6 +26,7 @@ module h264_intra_pred #(
     localparam [3:0] MODE_VERT = 4'd0;
     localparam [3:0] MODE_HOR  = 4'd1;
     localparam [3:0] MODE_DC   = 4'd2;
+    localparam [3:0] MODE_HU   = 4'd8;
 
     localparam [BD-1:0] DC_DEFAULT = {1'b1, {(BD-1){1'b0}}};
 
@@ -39,15 +40,18 @@ module h264_intra_pred #(
     reg [16*BD-1:0] pred_v_c;
     reg [16*BD-1:0] pred_h_c;
     reg [16*BD-1:0] pred_d_c;
+    reg [16*BD-1:0] pred_hu_c;
     reg [16*BD1-1:0] resid_v_c;
     reg [16*BD1-1:0] resid_h_c;
     reg [16*BD1-1:0] resid_d_c;
+    reg [16*BD1-1:0] resid_hu_c;
     reg [16*BD-1:0] best_pred_c;
     reg [16*BD1-1:0] best_resid_c;
 
     reg [SAD_W-1:0] sad_v_c;
     reg [SAD_W-1:0] sad_h_c;
     reg [SAD_W-1:0] sad_d_c;
+    reg [SAD_W-1:0] sad_hu_c;
     reg [SAD_W-1:0] best_sad_c;
     reg [3:0] best_mode_c;
 
@@ -59,6 +63,8 @@ module h264_intra_pred #(
     reg [BD-1:0] orig_pix_c;
     reg [BD-1:0] pred_pix_c;
     reg [BD:0] abs_diff_c;
+    reg [2:0] hu_z_c;
+    reg [2:0] hu_idx_c;
 
     genvar gi;
     generate
@@ -90,13 +96,16 @@ module h264_intra_pred #(
         pred_v_c = {(16*BD){1'b0}};
         pred_h_c = {(16*BD){1'b0}};
         pred_d_c = {(16*BD){1'b0}};
+        pred_hu_c = {(16*BD){1'b0}};
         resid_v_c = {(16*BD1){1'b0}};
         resid_h_c = {(16*BD1){1'b0}};
         resid_d_c = {(16*BD1){1'b0}};
+        resid_hu_c = {(16*BD1){1'b0}};
 
         sad_v_c = {SAD_W{1'b1}};
         sad_h_c = {SAD_W{1'b1}};
         sad_d_c = {SAD_W{1'b0}};
+        sad_hu_c = {SAD_W{1'b1}};
 
         for (row_idx = 0; row_idx < 4; row_idx = row_idx + 1) begin
             for (col_idx = 0; col_idx < 4; col_idx = col_idx + 1) begin
@@ -131,6 +140,25 @@ module h264_intra_pred #(
                 else
                     abs_diff_c = {1'b0, pred_pix_c} - {1'b0, orig_pix_c};
                 sad_d_c = sad_d_c + abs_diff_c[SAD_W-1:0];
+
+                hu_z_c = col_idx[2:0] + {row_idx[1:0], 1'b0};
+                hu_idx_c = row_idx[2:0] + {2'b00, col_idx[0]};
+                if (hu_z_c == 3'd0 || hu_z_c == 3'd2 || hu_z_c == 3'd4)
+                    pred_pix_c = (left_pix[hu_idx_c] + left_pix[hu_idx_c + 3'd1] + 1'b1) >> 1;
+                else if (hu_z_c == 3'd1 || hu_z_c == 3'd3)
+                    pred_pix_c = (left_pix[hu_idx_c] + (left_pix[hu_idx_c + 3'd1] << 1) + left_pix[hu_idx_c + 3'd2] + 2'd2) >> 2;
+                else if (hu_z_c == 3'd5)
+                    pred_pix_c = (left_pix[3'd2] + (left_pix[3'd3] * 2'd3) + 2'd2) >> 2;
+                else
+                    pred_pix_c = left_pix[3'd3];
+                pred_hu_c[flat_idx*BD +: BD] = pred_pix_c;
+                resid_hu_c[flat_idx*BD1 +: BD1] = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
+                if (orig_pix_c >= pred_pix_c)
+                    abs_diff_c = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
+                else
+                    abs_diff_c = {1'b0, pred_pix_c} - {1'b0, orig_pix_c};
+                if (left_avail)
+                    sad_hu_c = sad_hu_c + abs_diff_c[SAD_W-1:0];
             end
         end
 
@@ -151,6 +179,13 @@ module h264_intra_pred #(
             best_sad_c = sad_h_c;
             best_pred_c = pred_h_c;
             best_resid_c = resid_h_c;
+        end
+
+        if (left_avail && (sad_hu_c < best_sad_c)) begin
+            best_mode_c = MODE_HU;
+            best_sad_c = sad_hu_c;
+            best_pred_c = pred_hu_c;
+            best_resid_c = resid_hu_c;
         end
     end
 
