@@ -583,13 +583,17 @@ pred_buf = {(256*BD){1'b0}};
         end
     endfunction
 
+    wire       intra_left_avail_w = (sb_c > 0) ? 1'b1 : mb_left_avail;
+    wire       intra_top_avail_w  = (sb_r > 0) ? 1'b1 : mb_top_avail;
     wire [3:0] intra_left_mode_w =
         (sb_c > 0) ? intra_mode_cur[left_blk_idx[3:0]] :
         ((mb_left_avail && !left_is_inter) ? left_mb_mode[sb_r] : INTRA_MODE_DC);
     wire [3:0] intra_top_mode_w =
         (sb_r > 0) ? intra_mode_cur[top_blk_idx[3:0]] :
         ((mb_top_avail && !top_is_inter[mb_x]) ? top_mb_mode[mb_x * 4 + sb_c] : INTRA_MODE_DC);
-    wire [3:0] intra_mpm_w = (intra_left_mode_w < intra_top_mode_w) ? intra_left_mode_w : intra_top_mode_w;
+    wire       intra_dc_pred_forced_w = !intra_left_avail_w || !intra_top_avail_w;
+    wire [3:0] intra_mpm_w = intra_dc_pred_forced_w ? INTRA_MODE_DC :
+        ((intra_left_mode_w < intra_top_mode_w) ? intra_left_mode_w : intra_top_mode_w);
     wire       intra_prev_flag_w = (pred_mode_w == intra_mpm_w);
     wire [3:0] intra_pred_minus1_w = pred_mode_w - 4'd1;
     wire [2:0] intra_rem_mode_w = (pred_mode_w < intra_mpm_w) ? pred_mode_w[2:0] : intra_pred_minus1_w[2:0];
