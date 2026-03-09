@@ -96,6 +96,7 @@ module h264_encoder_top #(
     localparam TS_DONE         = 5'd16;
     localparam TS_CHROMA       = 5'd17;  // Phased chroma processing
     localparam TS_CHR_FETCH    = 5'd18;  // Fetch inter chroma prediction from reference
+    localparam TS_DEFER_MB_HDR = 5'd19;  // Emit buffered intra MB header after full MB encode
 
     reg [4:0]  top_state;
     reg [6:0]  mb_x;
@@ -185,6 +186,7 @@ module h264_encoder_top #(
     reg [16*BIT_DEPTH-1:0] sb_orig_pixels;
     wire [16*BIT_DEPTH-1:0]      pred_4x4_w;
     wire [16*(BIT_DEPTH+1)-1:0]  resid_4x4_w;
+    wire [3:0]                   pred_mode_w;
 
     // Motion estimation
     reg         me_start;
@@ -260,6 +262,7 @@ module h264_encoder_top #(
     reg         bs_cmd_sps, bs_cmd_pps, bs_cmd_slice, bs_cmd_mb_hdr, bs_cmd_trailing, bs_cmd_flush;
     wire        bs_busy, bs_cmd_done;
     reg         mb_has_residual;
+    reg         bs_hold_fifo_drain;
 
     // Neighbor storage
     reg [MB_COLS*16*BIT_DEPTH-1:0] top_ref_flat;
@@ -461,7 +464,8 @@ pred_buf = {(256*BD){1'b0}};
 
     h264_intra_pred #(.BIT_DEPTH(BIT_DEPTH)) u_pred (
         .clk(clk), .rst_n(rst_n), .start(pred_start), .done(pred_done), .top_avail(sb_top_avail), .left_avail(sb_left_avail),
-        .orig_4x4(sb_orig_pixels), .top_4(sb_top_pixels), .left_4(sb_left_pixels), .pred_4x4(pred_4x4_w), .resid_4x4(resid_4x4_w)
+        .orig_4x4(sb_orig_pixels), .top_4(sb_top_pixels), .left_4(sb_left_pixels),
+        .pred_4x4(pred_4x4_w), .resid_4x4(resid_4x4_w), .pred_mode(pred_mode_w)
     );
 
     h264_transform #(.BIT_DEPTH(BIT_DEPTH)) u_xform (.clk(clk), .rst_n(rst_n), .start(xform_start), .done(xform_done), .in_flat(resid_mux), .out_flat(xform_out_flat));
@@ -523,9 +527,18 @@ pred_buf = {(256*BD){1'b0}};
 
     h264_zigzag u_zigzag (.clk(clk), .rst_n(rst_n), .start(zz_start), .done(zz_done), .in_flat(zigzag_in_final), .chroma_ac_mode(zz_chroma_ac_mode), .chroma_dc_mode(zz_chroma_dc_mode), .chroma_dc_422(chroma_dc_422_flag), .scan_flat(scan_flat), .total_coeffs(total_coeffs), .trailing_ones(trailing_ones), .last_nonzero_idx(last_nonzero_idx));
 
+    localparam [3:0] INTRA_MODE_VERT = 4'd0;
+    localparam [3:0] INTRA_MODE_HOR  = 4'd1;
+    localparam [3:0] INTRA_MODE_DC   = 4'd2;
+
     reg [4:0] nz_coeff [0:TOTAL_SUB_BLOCKS-1];
     reg [4:0] left_mb_nz [0:3];
     reg [4:0] top_mb_nz [0:MB_COLS*4-1];
+    reg [3:0] intra_mode_cur [0:15];
+    reg [3:0] left_mb_mode [0:3];
+    reg [3:0] top_mb_mode [0:MB_COLS*4-1];
+    reg [63:0] intra_pred_bits_mb;
+    reg [6:0]  intra_pred_count_mb;
     // Chroma cross-MB nC neighbors
     reg [4:0] left_mb_nz_cb [0:CHR_BLOCK_ROWS-1];
     reg [4:0] left_mb_nz_cr [0:CHR_BLOCK_ROWS-1];
@@ -559,6 +572,27 @@ pred_buf = {(256*BD){1'b0}};
             default: top_blk_idx = 5'd0;
         endcase
     end
+
+    function automatic [63:0] append_bits64;
+        input [63:0] cur_bits;
+        input [6:0]  cur_count;
+        input [3:0]  append_count;
+        input [63:0] append_payload;
+        begin
+            append_bits64 = cur_bits | (append_payload << (7'd64 - cur_count - append_count));
+        end
+    endfunction
+
+    wire [3:0] intra_left_mode_w =
+        (sb_c > 0) ? intra_mode_cur[left_blk_idx[3:0]] :
+        ((mb_left_avail && !left_is_inter) ? left_mb_mode[sb_r] : INTRA_MODE_DC);
+    wire [3:0] intra_top_mode_w =
+        (sb_r > 0) ? intra_mode_cur[top_blk_idx[3:0]] :
+        ((mb_top_avail && !top_is_inter[mb_x]) ? top_mb_mode[mb_x * 4 + sb_c] : INTRA_MODE_DC);
+    wire [3:0] intra_mpm_w = (intra_left_mode_w < intra_top_mode_w) ? intra_left_mode_w : intra_top_mode_w;
+    wire       intra_prev_flag_w = (pred_mode_w == intra_mpm_w);
+    wire [3:0] intra_pred_minus1_w = pred_mode_w - 4'd1;
+    wire [2:0] intra_rem_mode_w = (pred_mode_w < intra_mpm_w) ? pred_mode_w[2:0] : intra_pred_minus1_w[2:0];
 
     // Cross-MB chroma nC lookup
     wire [4:0] left_chr_nz = is_cb ? left_mb_nz_cb[sb_r] : left_mb_nz_cr[sb_r];
@@ -608,6 +642,7 @@ pred_buf = {(256*BD){1'b0}};
         .mb_qp_delta(8'd0), .mb_has_residual(mb_has_residual),
         .is_p_slice(is_p_frame), .frame_num(cur_frame_num),
         .is_inter_mb(is_inter_mb_reg), .mvd_x(mvd_x_w), .mvd_y(mvd_y_w),
+        .hold_fifo_drain(bs_hold_fifo_drain), .intra_pred_bits(intra_pred_bits_mb), .intra_pred_count(intra_pred_count_mb),
         .busy(bs_busy), .cmd_done(bs_cmd_done),
         .bs_mem_addr(bs_mem_addr), .bs_mem_data(bs_mem_data), .bs_mem_wr(bs_mem_wr), .bs_bytes_written(bs_bytes_written)
     );
@@ -621,7 +656,7 @@ pred_buf = {(256*BD){1'b0}};
             fetch_start <= 1'b0; pred_start <= 1'b0; xform_start <= 1'b0; quant_start <= 1'b0; zz_start <= 1'b0;
             cavlc_start <= 1'b0; iq_start <= 1'b0; it_start <= 1'b0; recon_start <= 1'b0; me_start <= 1'b0;
             bs_cmd_sps <= 1'b0; bs_cmd_pps <= 1'b0; bs_cmd_slice <= 1'b0; bs_cmd_mb_hdr <= 1'b0; bs_cmd_trailing <= 1'b0; bs_cmd_flush <= 1'b0;
-            mb_top_avail <= 1'b0; mb_left_avail <= 1'b0; mb_has_residual <= 1'b0;
+            mb_top_avail <= 1'b0; mb_left_avail <= 1'b0; mb_has_residual <= 1'b0; bs_hold_fifo_drain <= 1'b0;
             blk_state <= BS_PRED; blk_started <= 1'b0; iq_done_latched <= 1'b0;
             recon_buf <= {(256*BD){1'b0}}; top_ref_flat <= {(MB_COLS*16*BD){1'b0}}; left_ref_flat <= {(16*BD){1'b0}};
             top_pixels_flat <= {(16*BD){1'b0}}; left_pixels_flat <= {(16*BD){1'b0}}; flush_pending <= 1'b0; flush_accepted <= 1'b0;
@@ -661,6 +696,8 @@ pred_buf = {(256*BD){1'b0}};
             use_chr_iq_input <= 1'b0; chr_iq_input <= 256'd0;
             use_chr_it_input <= 1'b0; chr_it_dc_patch <= {CW{1'b0}};
             chr_recon_blk <= 3'd0;
+            intra_pred_bits_mb <= 64'd0;
+            intra_pred_count_mb <= 7'd0;
         end else begin
             fetch_start <= 1'b0; pred_start <= 1'b0; xform_start <= 1'b0; quant_start <= 1'b0; zz_start <= 1'b0;
             cavlc_start <= 1'b0; iq_start <= 1'b0; it_start <= 1'b0; recon_start <= 1'b0; me_start <= 1'b0;
@@ -798,10 +835,21 @@ pred_buf = {(256*BD){1'b0}};
                 end
 
                 TS_MB_HDR: if (!bs_busy) begin
-                    mb_has_residual <= 1'b1; bs_cmd_mb_hdr <= 1'b1; sub_blk <= 5'd0;
+                    mb_has_residual <= 1'b1;
+                    sub_blk <= 5'd0;
                     blk_state <= is_inter_mb_reg ? BS_XFORM : BS_PRED;
-                    blk_started <= 1'b0; recon_buf <= {(256*BD){1'b0}}; top_state <= TS_ENCODE_SBLK;
+                    blk_started <= 1'b0;
+                    recon_buf <= {(256*BD){1'b0}};
                     chr_pred_mode <= 1'b0;
+                    intra_pred_bits_mb <= 64'd0;
+                    intra_pred_count_mb <= 7'd0;
+                    if (is_inter_mb_reg) begin
+                        bs_cmd_mb_hdr <= 1'b1;
+                        bs_hold_fifo_drain <= 1'b0;
+                    end else begin
+                        bs_hold_fifo_drain <= 1'b1;
+                    end
+                    top_state <= TS_ENCODE_SBLK;
                 end
 
                 TS_ENCODE_SBLK: begin
@@ -809,7 +857,20 @@ pred_buf = {(256*BD){1'b0}};
                         BS_PRED: begin
                             // Intra prediction (skipped for inter MBs — they start at BS_XFORM)
                             if (!blk_started) begin pred_start <= 1'b1; blk_started <= 1'b1; end
-                            else if (pred_done) begin blk_state <= BS_XFORM; blk_started <= 1'b0; end
+                            else if (pred_done) begin
+                                if (is_luma) begin
+                                    intra_mode_cur[sub_blk[3:0]] <= pred_mode_w;
+                                    if (intra_prev_flag_w) begin
+                                        intra_pred_bits_mb <= append_bits64(intra_pred_bits_mb, intra_pred_count_mb, 4'd1, 64'd1);
+                                        intra_pred_count_mb <= intra_pred_count_mb + 7'd1;
+                                    end else begin
+                                        intra_pred_bits_mb <= append_bits64(intra_pred_bits_mb, intra_pred_count_mb, 4'd4, {60'd0, 1'b0, intra_rem_mode_w});
+                                        intra_pred_count_mb <= intra_pred_count_mb + 7'd4;
+                                    end
+                                end
+                                blk_state <= BS_XFORM;
+                                blk_started <= 1'b0;
+                            end
                         end
                         BS_XFORM:  if (!blk_started) begin
                             xform_start <= 1'b1; blk_started <= 1'b1;
@@ -870,9 +931,21 @@ pred_buf = {(256*BD){1'b0}};
                     endcase
                 end
 
+                TS_DEFER_MB_HDR: if (!bs_busy) begin
+                    bs_hold_fifo_drain <= 1'b0;
+                    bs_cmd_mb_hdr <= 1'b1;
+                    top_state <= TS_NEXT_MB;
+                end
+
                 TS_NEXT_MB: begin
                     left_mb_nz[0] <= nz_coeff[5]; left_mb_nz[1] <= nz_coeff[7]; left_mb_nz[2] <= nz_coeff[13]; left_mb_nz[3] <= nz_coeff[15];
                     top_mb_nz[mb_x * 4 + 0] <= nz_coeff[10]; top_mb_nz[mb_x * 4 + 1] <= nz_coeff[11]; top_mb_nz[mb_x * 4 + 2] <= nz_coeff[14]; top_mb_nz[mb_x * 4 + 3] <= nz_coeff[15];
+                    left_mb_mode[0] <= intra_mode_cur[5]; left_mb_mode[1] <= intra_mode_cur[7];
+                    left_mb_mode[2] <= intra_mode_cur[13]; left_mb_mode[3] <= intra_mode_cur[15];
+                    top_mb_mode[mb_x * 4 + 0] <= intra_mode_cur[10];
+                    top_mb_mode[mb_x * 4 + 1] <= intra_mode_cur[11];
+                    top_mb_mode[mb_x * 4 + 2] <= intra_mode_cur[14];
+                    top_mb_mode[mb_x * 4 + 3] <= intra_mode_cur[15];
                     // Chroma nC neighbors (parameterized for 4:2:0 and 4:2:2)
                     begin : chr_nz_save
                         integer nr;
@@ -1457,7 +1530,7 @@ pred_buf = {(256*BD){1'b0}};
                                             use_chr_ac_zigzag <= 1'b0;
                                             cavlc_is_chroma_ac <= 1'b0;
                                             zz_chroma_ac_mode <= 1'b0;
-                                            top_state <= TS_NEXT_MB;
+                                            top_state <= is_inter_mb_reg ? TS_NEXT_MB : TS_DEFER_MB_HDR;
                                             blk_started <= 1'b0;
                                         end else begin
                                             chr_is_cr <= 1'b1;

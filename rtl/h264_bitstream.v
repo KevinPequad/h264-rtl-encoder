@@ -41,6 +41,9 @@ module h264_bitstream #(
     input  wire        is_inter_mb,
     input  wire signed [8:0] mvd_x,
     input  wire signed [8:0] mvd_y,
+    input  wire        hold_fifo_drain,
+    input  wire [63:0] intra_pred_bits,
+    input  wire [6:0]  intra_pred_count,
 
     output reg         busy,
     output reg         cmd_done,
@@ -253,7 +256,7 @@ module h264_bitstream #(
             end else begin
                 case (state)
                     S_IDLE: begin
-                        busy <= (!fifo_empty) || (bit_cnt >= 7'd8) || do_write;
+                        busy <= (!hold_fifo_drain && !fifo_empty) || (bit_cnt >= 7'd8) || do_write;
                         if (cmd_write_sps) begin
                             state <= S_SPS; sub <= 6'd0; busy <= 1'b1;
                         end else if (cmd_write_pps) begin
@@ -266,7 +269,7 @@ module h264_bitstream #(
                             state <= S_TRAIL; sub <= 6'd0; busy <= 1'b1;
                         end else if (cmd_flush) begin
                             state <= S_FLUSH; busy <= 1'b1;
-                        end else if (!fifo_empty) begin
+                        end else if (!hold_fifo_drain && !fifo_empty) begin
                             bit_buf <= bit_buf | (({fifo_rd_bits, 64'd0} >> bit_cnt[6:0]));
                             bit_cnt <= bit_cnt + {1'b0, fifo_rd_count};
                             fifo_rd_ptr <= fifo_rd_ptr + 6'd1;
@@ -559,59 +562,45 @@ module h264_bitstream #(
                                     bit_buf <= bit_buf | ({2'b11, 94'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + 7'd2;
                                     sub <= 6'd10;  // jump to inter path
-                                end else if (is_p_slice) begin
-                                    // Intra in P-slice: mb_type offset +5
-                                    // I_4x4 = 0+5 = 5 -> UE(5) = '00110' (5 bits)
-                                    if (mb_has_residual) begin
-                                        // mb_skip_run=UE(0)='1' + UE(5)='00110' + 16 pred '1'
-                                        // + chroma=UE(0)'1' + CBP=47(intra)->UE(0)='1'
-                                        // + qp_delta SE(0)='1'
-                                        // Total: 1+5+16+1+1+1 = 25 bits
-                                        bit_buf <= bit_buf | ({25'b1_00110_1111111111111111_1_1_1, 71'd0} >> bit_cnt[6:0]);
-                                        bit_cnt <= bit_cnt + 7'd25;
-                                    end else begin
-                                        // UE(5) + 16x pred_flag + chroma_pred + CBP=0 codeNum=0 UE(0)='1'
-                                        // I_4x4 in P with no residual: mb_type=UE(5)='00110'
-                                        // + 16 pred flags '1' + chroma UE(0)='1' + CBP=0 -> no cbp/qp
-                                        // Actually for CBP=0 in intra, codeNum for CBP=0 is '1' (UE(0))
-                                        // But if CBP=0, no qp_delta follows, and no residual
-                                        // Wait - mb_has_residual=0 means we use P_Skip or CBP=0
-                                        // For intra MB with no residual, CBP=0 -> UE(0)='1'
-                                        // mb_skip_run=UE(0)='1' + UE(5)='00110' + 16 pred + chroma=UE(0) + CBP=0->UE(0)='1'
-                                        // 1+5+16+1+1 = 24 bits (no qp_delta when CBP=0)
-                                        bit_buf <= bit_buf | ({24'b1_00110_1111111111111111_1_1, 72'd0} >> bit_cnt[6:0]);
-                                        bit_cnt <= bit_cnt + 7'd24;
-                                    end
-                                    sub <= 6'd1;
                                 end else begin
-                                    // I-slice: original intra path
-                                    if (mb_has_residual) begin
-                                        // mb_type=UE(0) + 16 pred flags '1' + chroma=UE(0) + CBP=47(intra)->UE(0)='1'
-                                        // 1+16+1+1 = 19 bits (qp_delta added in sub=1)
-                                        bit_buf <= bit_buf | ({19'b1_1111111111111111_1_1, 77'd0} >> bit_cnt[6:0]);
-                                        bit_cnt <= bit_cnt + 7'd19;
+                                    if (is_p_slice) begin
+                                        // Intra in P-slice: mb_skip_run=UE(0)='1' + I4x4 mb_type=UE(5)='00110'
+                                        bit_buf <= bit_buf | ({6'b1_00110, 90'd0} >> bit_cnt[6:0]);
+                                        bit_cnt <= bit_cnt + 7'd6;
                                     end else begin
-                                        bit_buf <= bit_buf | ({3'b010, 93'd0} >> bit_cnt[6:0]);
-                                        bit_cnt <= bit_cnt + 7'd3;
+                                        // I-slice: I4x4 mb_type=UE(0)='1'
+                                        bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
+                                        bit_cnt <= bit_cnt + 7'd1;
                                     end
                                     sub <= 6'd1;
                                 end
                             end
-                            // Intra continuation (sub 1-3)
                             6'd1: begin
-                                if (mb_has_residual && !is_p_slice) begin
-                                    // qp_delta = SE(0) = '1'
-                                    bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
-                                    bit_cnt <= bit_cnt + 7'd1;
+                                if (!is_inter_mb && intra_pred_count != 7'd0) begin
+                                    bit_buf <= bit_buf | ({intra_pred_bits, 32'd0} >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + intra_pred_count;
                                 end
                                 sub <= 6'd2;
                             end
                             6'd2: begin
-                                state <= S_EMIT;
-                                return_state <= S_MB_HDR;
+                                if (!is_inter_mb) begin
+                                    if (mb_has_residual) begin
+                                        // intra_chroma_pred_mode=UE(0)='1', coded_block_pattern=UE(0)='1', qp_delta=SE(0)='1'
+                                        bit_buf <= bit_buf | ({3'b111, 93'd0} >> bit_cnt[6:0]);
+                                        bit_cnt <= bit_cnt + 7'd3;
+                                    end else begin
+                                        bit_buf <= bit_buf | ({2'b11, 94'd0} >> bit_cnt[6:0]);
+                                        bit_cnt <= bit_cnt + 7'd2;
+                                    end
+                                end
                                 sub <= 6'd3;
                             end
                             6'd3: begin
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
+                                sub <= 6'd4;
+                            end
+                            6'd4: begin
                                 cmd_done <= 1'b1;
                                 busy     <= 1'b0;
                                 state    <= S_IDLE;

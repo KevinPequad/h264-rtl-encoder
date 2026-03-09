@@ -47,7 +47,11 @@ def stage_workspace(prefix: str) -> Path:
     root = repo_root()
     workspace = Path(tempfile.mkdtemp(prefix=prefix))
     shutil.copytree(root / "rtl", workspace / "rtl")
-    shutil.copytree(root / "tb", workspace / "tb")
+    shutil.copytree(
+        root / "tb",
+        workspace / "tb",
+        ignore=shutil.ignore_patterns("obj_dir", "Vh264_encoder_top"),
+    )
     return workspace
 
 
