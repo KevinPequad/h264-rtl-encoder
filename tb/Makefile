@@ -25,8 +25,18 @@ WIDTH           ?= 320
 HEIGHT          ?= 176
 BIT_DEPTH       ?= 8
 CHROMA_FORMAT_IDC ?= 1
+WEIGHTED_PRED_ENABLE ?= 0
+LUMA_LOG2_WEIGHT_DENOM ?= 0
+LUMA_WEIGHT ?= 1
+LUMA_OFFSET ?= 0
+CHROMA_LOG2_WEIGHT_DENOM ?= 0
+CHROMA_WEIGHT_CB ?= 1
+CHROMA_OFFSET_CB ?= 0
+CHROMA_WEIGHT_CR ?= 1
+CHROMA_OFFSET_CR ?= 0
 TRACE           ?= 0
 TRACE_FILE      ?= output/trace.vcd
+EXTRA_VERILATOR_ARGS ?=
 
 ifneq ($(filter wave,$(MAKECMDGOALS)),)
 TRACE := 1
@@ -48,7 +58,12 @@ VERILATOR_FLAGS := --cc --exe --build \
     $(VERILATOR_TRACE_FLAGS) \
     --top-module $(TOP_MODULE) \
     -I$(RTL_DIR) \
+    $(EXTRA_VERILATOR_ARGS) \
     -GFRAME_WIDTH=$(WIDTH) -GFRAME_HEIGHT=$(HEIGHT) -GBIT_DEPTH=$(BIT_DEPTH) -GCHROMA_FORMAT_IDC=$(CHROMA_FORMAT_IDC) \
+    -GWEIGHTED_PRED_ENABLE=$(WEIGHTED_PRED_ENABLE) \
+    -GLUMA_LOG2_WEIGHT_DENOM=$(LUMA_LOG2_WEIGHT_DENOM) -GLUMA_WEIGHT=$(LUMA_WEIGHT) -GLUMA_OFFSET=$(LUMA_OFFSET) \
+    -GCHROMA_LOG2_WEIGHT_DENOM=$(CHROMA_LOG2_WEIGHT_DENOM) -GCHROMA_WEIGHT_CB=$(CHROMA_WEIGHT_CB) -GCHROMA_OFFSET_CB=$(CHROMA_OFFSET_CB) \
+    -GCHROMA_WEIGHT_CR=$(CHROMA_WEIGHT_CR) -GCHROMA_OFFSET_CR=$(CHROMA_OFFSET_CR) \
     -CFLAGS "-O2 -std=c++17 -DFRAME_W=$(WIDTH) -DFRAME_H=$(HEIGHT) -DBIT_DEPTH=$(BIT_DEPTH) -DCHROMA_FORMAT_IDC=$(CHROMA_FORMAT_IDC)"
 
 # Runtime defaults (override on command line)
@@ -113,6 +128,11 @@ help:
 	@echo "  H264_OUTPUT  Encoded H.264 output file     (default: /workspace/output/encoded.h264)"
 	@echo "  TRACE        Enable Verilator VCD tracing  (default: 0)"
 	@echo "  TRACE_FILE   Output VCD path               (default: output/trace.vcd)"
+	@echo "  WEIGHTED_PRED_ENABLE  Enable weighted P prediction syntax/path"
+	@echo "  LUMA_LOG2_WEIGHT_DENOM, LUMA_WEIGHT, LUMA_OFFSET"
+	@echo "  CHROMA_LOG2_WEIGHT_DENOM, CHROMA_WEIGHT_CB, CHROMA_OFFSET_CB"
+	@echo "  CHROMA_WEIGHT_CR, CHROMA_OFFSET_CR"
+	@echo "  EXTRA_VERILATOR_ARGS  Additional Verilator/parameter args"
 	@echo "  EXTRA_PLUSARGS  Additional +args for sim"
 	@echo ""
 	@echo "Examples:"

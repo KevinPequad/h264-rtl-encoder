@@ -39,11 +39,24 @@ module h264_bitstream #(
     input  wire        is_p_slice,
     input  wire [3:0]  frame_num,
     input  wire        is_inter_mb,
+    input  wire [1:0]  mb_ref_idx_l0,
     input  wire signed [8:0] mvd_x,
     input  wire signed [8:0] mvd_y,
+    input  wire [1:0]  slice_num_ref_idx_l0_active_minus1,
     input  wire        hold_fifo_drain,
+    input  wire        is_intra16_mb,
+    input  wire [5:0]  intra_mb_type_code_num,
     input  wire [63:0] intra_pred_bits,
     input  wire [6:0]  intra_pred_count,
+    input  wire        weighted_pred_enable,
+    input  wire [3:0]  luma_log2_weight_denom,
+    input  wire signed [8:0] luma_weight,
+    input  wire signed [8:0] luma_offset,
+    input  wire [3:0]  chroma_log2_weight_denom,
+    input  wire signed [8:0] chroma_weight_cb,
+    input  wire signed [8:0] chroma_offset_cb,
+    input  wire signed [8:0] chroma_weight_cr,
+    input  wire signed [8:0] chroma_offset_cr,
 
     output reg         busy,
     output reg         cmd_done,
@@ -103,9 +116,21 @@ module h264_bitstream #(
 
     wire use_high_profile = (BIT_DEPTH > 8) || (CHROMA_FORMAT_IDC != 1);
     wire use_high422_profile = (CHROMA_FORMAT_IDC == 2) || (BIT_DEPTH > 10);
+    wire use_main_profile = weighted_pred_enable && !use_high_profile;
+    wire weighted_pred_flag = weighted_pred_enable;
+    wire slice_multi_ref_enable = (slice_num_ref_idx_l0_active_minus1 != 2'd0);
+    wire [4:0] slice_multi_ref_bits =
+        (slice_num_ref_idx_l0_active_minus1 == 2'd1) ? 5'b10100 : 5'b10110;
+    wire [9:0] slice_multi_ref_bits_qp =
+        (slice_num_ref_idx_l0_active_minus1 == 2'd1) ? 10'b1010001010 : 10'b1011001010;
+    wire luma_weight_non_default = (luma_weight != $signed(9'd1 << luma_log2_weight_denom)) || (luma_offset != 9'sd0);
+    wire chroma_weight_non_default =
+        (chroma_weight_cb != $signed(9'd1 << chroma_log2_weight_denom)) || (chroma_offset_cb != 9'sd0) ||
+        (chroma_weight_cr != $signed(9'd1 << chroma_log2_weight_denom)) || (chroma_offset_cr != 9'sd0);
     wire [7:0] sps_profile_idc = use_high422_profile ? 8'h7A :
-                                 use_high_profile   ? 8'h6E : 8'h42;
-    wire [7:0] sps_constraint_flags = use_high_profile ? 8'h00 : 8'hC0;
+                                 use_high_profile   ? 8'h6E :
+                                 use_main_profile   ? 8'h4D : 8'h42;
+    wire [7:0] sps_constraint_flags = (use_high_profile || use_main_profile) ? 8'h00 : 8'hC0;
     wire [3:0] sps_id_and_chroma_bits = (CHROMA_FORMAT_IDC == 2) ? 4'b1011 : 4'b1010;
     wire [5:0] pic_order_cnt_lsb = {frame_num, 1'b0};
 
@@ -161,6 +186,12 @@ module h264_bitstream #(
                             (se_input[8])        ? {se_abs, 1'b0} :       // negative: 2*|v|
                                                    {1'b0, se_abs, 1'b0} - 10'd1; // positive: 2*v-1
     wire [10:0] se_code1 = se_codenum + 11'd1;  // codeNum + 1
+    wire [9:0]  mvd_x_codenum_w = (mvd_x == 9'sd0) ? 10'd0 :
+                                  (mvd_x[8])        ? ({(~mvd_x + 9'd1), 1'b0}) :
+                                                       ({mvd_x, 1'b0} - 10'd1);
+    wire [9:0]  mvd_y_codenum_w = (mvd_y == 9'sd0) ? 10'd0 :
+                                  (mvd_y[8])        ? ({(~mvd_y + 9'd1), 1'b0}) :
+                                                       ({mvd_y, 1'b0} - 10'd1);
 
     // Find MSB position of se_code1 (priority encoder)
     reg [3:0] se_msb;
@@ -330,7 +361,7 @@ module h264_bitstream #(
                             //   qpprime_y_zero_transform_bypass=0,
                             //   seq_scaling_matrix_present=0
                             // Then: log2_max_frame_num_minus4=UE(0)='1'
-                            // + poc_type=UE(2)='011' + max_num_ref_frames=UE(1)='010'
+                            // + poc_type=UE(2)='011' + max_num_ref_frames=UE(3)='00100'
                             // + gaps_in_frame_num=0
                             6'd8: begin
                                 if (use_high_profile) begin
@@ -343,9 +374,9 @@ module h264_bitstream #(
                                 end else begin
                                     // Baseline: all-in-one
                                     // sps_id + log2_max_frame_num + poc_type + max_ref + gaps
-                                    // 1+1+3+3+1 = 9 bits: 110110100
-                                    bit_buf <= {9'b110110100, 87'd0};
-                                    bit_cnt <= 7'd9;
+                                    // 1+1+3+5+1 = 11 bits: 11011001000
+                                    bit_buf <= {11'b11011001000, 85'd0};
+                                    bit_cnt <= 7'd11;
                                     ue_input <= MB_COLS - 1;
                                     sub <= sub + 6'd1;
                                 end
@@ -418,12 +449,12 @@ module h264_bitstream #(
                             // Then: log2_max_frame_num_minus4=UE(0)='1'
                             // + poc_type=UE(0)='1' (poc_type=0)
                             // + log2_max_pic_order_cnt_lsb_minus4=UE(2)='011' (max_poc_lsb=64)
-                            // + max_num_ref_frames=UE(1)='010'
+                            // + max_num_ref_frames=UE(3)='00100'
                             // + gaps_in_frame_num=0
-                            // = 0,0 + 1,1,011,010,0 = 2+9 = 11 bits: 00110110100
+                            // = 0,0 + 1,1,011,00100,0 = 13 bits: 0011011001000
                             6'd22: begin
-                                bit_buf <= bit_buf | ({11'b00110110100, 85'd0} >> bit_cnt[6:0]);
-                                bit_cnt <= bit_cnt + 7'd11;
+                                bit_buf <= bit_buf | ({13'b0011011001000, 83'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd13;
                                 // Emit to make room
                                 state <= S_EMIT;
                                 return_state <= S_SPS;
@@ -460,12 +491,14 @@ module h264_bitstream #(
                                     // transform_8x8_mode=0, pic_scaling_matrix_present=0,
                                     // second_chroma_qp_index_offset=SE(0)'1'
                                     // = 19 bits before rbsp_stop_one_bit.
-                                    bit_buf <= {19'b1100111000111100001, 77'd0};
+                                    bit_buf <= {7'b1100111, weighted_pred_flag, 8'b00111100, 3'b001, 77'd0};
                                     bit_cnt <= 7'd19;
                                     sub <= 6'd10; // jump to emit+trailing
                                 end else begin
-                                    // Baseline PPS: hardcoded bytes CE 3C 80
-                                    write_byte<=8'hCE; do_write<=1'b1; sub<=sub+6'd1;
+                                    // Baseline/Main PPS: first byte varies only with weighted_pred_flag.
+                                    write_byte <= weighted_pred_flag ? 8'hCF : 8'hCE;
+                                    do_write <= 1'b1;
+                                    sub <= sub + 6'd1;
                                 end
                             end
                             6'd6:  begin write_byte<=8'h3C; do_write<=1'b1; sub<=sub+6'd1; end
@@ -511,17 +544,51 @@ module h264_bitstream #(
                             end
                             6'd5: begin
                                 if (is_p_slice) begin
-                                    if (use_high_profile) begin
-                                        // High-profile P-slice: SPS has poc_type=0, need poc_lsb(6 bits)
-                                        // first_mb=UE(0)'1', slice_type(P)=UE(0)'1', pps_id=UE(0)'1',
-                                        // frame_num(4), poc_lsb(6), num_ref_override=0, ref_list_reorder=0,
-                                        // adaptive_marking=0, qp_delta=SE(0)'1', disable_deblocking=UE(1)'010'
-                                        bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, 3'b010, 76'd0};
-                                        bit_cnt <= 7'd20;
+                                    if (weighted_pred_flag) begin
+                                        if (use_high_profile) begin
+                                            // P-slice base header up to ref_pic_list_reordering_flag_l0.
+                                            if (slice_multi_ref_enable) begin
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits, 76'd0};
+                                                bit_cnt <= 7'd18;
+                                            end else begin
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 2'b00, 81'd0};
+                                                bit_cnt <= 7'd15;
+                                            end
+                                        end else begin
+                                            if (slice_multi_ref_enable) begin
+                                                bit_buf <= {3'b111, frame_num, slice_multi_ref_bits, 84'd0};
+                                                bit_cnt <= 7'd12;
+                                            end else begin
+                                                bit_buf <= {3'b111, frame_num, 2'b00, 87'd0};
+                                                bit_cnt <= 7'd9;
+                                            end
+                                        end
+                                        ue_input <= {6'd0, luma_log2_weight_denom};
+                                        sub <= 6'd8;
                                     end else begin
-                                        // Baseline P-slice: SPS has poc_type=2, no poc_lsb
-                                        bit_buf <= {3'b111, frame_num, 4'b0001, 3'b010, 82'd0};
-                                        bit_cnt <= 7'd14;
+                                        if (use_high_profile) begin
+                                            // High-profile P-slice: SPS has poc_type=0, need poc_lsb(6 bits)
+                                            // first_mb=UE(0)'1', slice_type(P)=UE(0)'1', pps_id=UE(0)'1',
+                                            // frame_num(4), poc_lsb(6), num_ref_override=0, ref_list_reorder=0,
+                                            // adaptive_marking=0, qp_delta=SE(0)'1', disable_deblocking=UE(1)'010'
+                                            if (slice_multi_ref_enable) begin
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits_qp, 73'd0};
+                                                bit_cnt <= 7'd23;
+                                            end else begin
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, 3'b010, 76'd0};
+                                                bit_cnt <= 7'd20;
+                                            end
+                                        end else begin
+                                            // Baseline/Main P-slice with poc_type=2, no poc_lsb
+                                            if (slice_multi_ref_enable) begin
+                                                bit_buf <= {3'b111, frame_num, slice_multi_ref_bits_qp, 79'd0};
+                                                bit_cnt <= 7'd17;
+                                            end else begin
+                                                bit_buf <= {3'b111, frame_num, 4'b0001, 3'b010, 82'd0};
+                                                bit_cnt <= 7'd14;
+                                            end
+                                        end
+                                        sub <= sub + 6'd1;
                                     end
                                 end else begin
                                     if (use_high_profile) begin
@@ -537,8 +604,8 @@ module h264_bitstream #(
                                         bit_buf <= {16'b1011100001001010, 80'd0};
                                         bit_cnt <= 7'd16;
                                     end
+                                    sub <= sub + 6'd1;
                                 end
-                                sub <= sub + 6'd1;
                             end
                             6'd6: begin
                                 state <= S_EMIT;
@@ -549,6 +616,83 @@ module h264_bitstream #(
                                 cmd_done <= 1'b1;
                                 busy     <= 1'b0;
                                 state    <= S_IDLE;
+                            end
+                            6'd8: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= {6'd0, chroma_log2_weight_denom};
+                                sub <= 6'd9;
+                            end
+                            6'd9: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                sub <= 6'd10;
+                            end
+                            6'd10: begin
+                                bit_buf <= bit_buf | (({luma_weight_non_default, 95'd0}) >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd1;
+                                if (luma_weight_non_default) begin
+                                    se_input <= luma_weight;
+                                    sub <= 6'd11;
+                                end else begin
+                                    sub <= 6'd13;
+                                end
+                            end
+                            6'd11: begin
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                se_input <= luma_offset;
+                                sub <= 6'd12;
+                            end
+                            6'd12: begin
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                sub <= 6'd13;
+                            end
+                            6'd13: begin
+                                state <= S_EMIT;
+                                return_state <= S_SLICE;
+                                sub <= 6'd14;
+                            end
+                            6'd14: begin
+                                bit_buf <= bit_buf | (({chroma_weight_non_default, 95'd0}) >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd1;
+                                if (chroma_weight_non_default) begin
+                                    se_input <= chroma_weight_cb;
+                                    sub <= 6'd15;
+                                end else begin
+                                    sub <= 6'd19;
+                                end
+                            end
+                            6'd15: begin
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                se_input <= chroma_offset_cb;
+                                sub <= 6'd16;
+                            end
+                            6'd16: begin
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                se_input <= chroma_weight_cr;
+                                sub <= 6'd17;
+                            end
+                            6'd17: begin
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                se_input <= chroma_offset_cr;
+                                sub <= 6'd18;
+                            end
+                            6'd18: begin
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                sub <= 6'd19;
+                            end
+                            6'd19: begin
+                                // adaptive_ref_pic_marking_mode_flag=0, slice_qp_delta=SE(0)='1',
+                                // disable_deblocking_filter_idc=UE(1)='010'
+                                bit_buf <= bit_buf | ({5'b01010, 91'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd5;
+                                sub <= 6'd6;
                             end
                             default: state <= S_IDLE;
                         endcase
@@ -564,19 +708,18 @@ module h264_bitstream #(
                                     sub <= 6'd10;  // jump to inter path
                                 end else begin
                                     if (is_p_slice) begin
-                                        // Intra in P-slice: mb_skip_run=UE(0)='1' + I4x4 mb_type=UE(5)='00110'
-                                        bit_buf <= bit_buf | ({6'b1_00110, 90'd0} >> bit_cnt[6:0]);
-                                        bit_cnt <= bit_cnt + 7'd6;
-                                    end else begin
-                                        // I-slice: I4x4 mb_type=UE(0)='1'
                                         bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
                                         bit_cnt <= bit_cnt + 7'd1;
+                                        ue_input <= {4'd0, intra_mb_type_code_num};
+                                        sub <= 6'd20;
+                                    end else begin
+                                        ue_input <= {4'd0, intra_mb_type_code_num};
+                                        sub <= 6'd21;
                                     end
-                                    sub <= 6'd1;
                                 end
                             end
                             6'd1: begin
-                                if (!is_inter_mb && intra_pred_count != 7'd0) begin
+                                if (!is_inter_mb && !is_intra16_mb && intra_pred_count != 7'd0) begin
                                     bit_buf <= bit_buf | ({intra_pred_bits, 32'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + intra_pred_count;
                                 end
@@ -584,7 +727,10 @@ module h264_bitstream #(
                             end
                             6'd2: begin
                                 if (!is_inter_mb) begin
-                                    if (mb_has_residual) begin
+                                    if (is_intra16_mb) begin
+                                        bit_buf <= bit_buf | ({2'b11, 94'd0} >> bit_cnt[6:0]);
+                                        bit_cnt <= bit_cnt + 7'd2;
+                                    end else if (mb_has_residual) begin
                                         // intra_chroma_pred_mode=UE(0)='1', coded_block_pattern=UE(0)='1', qp_delta=SE(0)='1'
                                         bit_buf <= bit_buf | ({3'b111, 93'd0} >> bit_cnt[6:0]);
                                         bit_cnt <= bit_cnt + 7'd3;
@@ -605,34 +751,61 @@ module h264_bitstream #(
                                 busy     <= 1'b0;
                                 state    <= S_IDLE;
                             end
+                            6'd20: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                sub <= 6'd1;
+                            end
+                            6'd21: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                sub <= 6'd1;
+                            end
 
                             // ===== Inter MB path (sub 10+) =====
-                            // After mb_type=UE(0), encode mvd_x
+                            // After mb_type=UE(0), encode ref_idx_l0 if the slice has more than
+                            // one active ref, then emit mvd_x/mvd_y.
+                            // For exactly two active refs, ref_idx_l0 uses TE(v) with x=1,
+                            // which is a single bit encoded as (1 ^ ref_idx).
+                            // For three active refs, TE(v) falls back to UE(v) of ref_idx.
                             6'd10: begin
-                                se_input <= mvd_x;
-                                sub <= 6'd11;
+                                if (slice_multi_ref_enable) begin
+                                    if (slice_num_ref_idx_l0_active_minus1 == 2'd1) begin
+                                        bit_buf <= bit_buf | ({(~mb_ref_idx_l0[0]), 95'd0} >> bit_cnt[6:0]);
+                                        bit_cnt <= bit_cnt + 7'd1;
+                                        sub <= 6'd11;
+                                    end else begin
+                                        ue_input <= {8'd0, mb_ref_idx_l0};
+                                        sub <= 6'd23;
+                                    end
+                                end else begin
+                                    sub <= 6'd11;
+                                end
                             end
                             6'd11: begin
-                                // Load SE(mvd_x) into bit_buf
-                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
-                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
-                                // Prepare mvd_y
-                                se_input <= mvd_y;
+                                ue_input <= mvd_x_codenum_w;
                                 sub <= 6'd12;
                             end
                             6'd12: begin
-                                // Emit to make room
-                                state <= S_EMIT;
-                                return_state <= S_MB_HDR;
+                                // MVD uses signed Exp-Golomb, but the mapped codeNum is still
+                                // encoded with the same UE(v) machinery as the parameter sets.
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= mvd_y_codenum_w;
                                 sub <= 6'd13;
                             end
                             6'd13: begin
-                                // Load SE(mvd_y) into bit_buf
-                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
-                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                // Emit to make room
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
                                 sub <= 6'd14;
                             end
                             6'd14: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                sub <= 6'd15;
+                            end
+                            6'd15: begin
                                 // Inter CBP: CBP=47 -> codeNum=12 -> UE(12)='0001101'
                                 //   (luma all, chroma DC+AC)
                                 //             CBP=0  -> codeNum=0  -> UE(0)='1'
@@ -643,25 +816,30 @@ module h264_bitstream #(
                                     bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + 7'd1;
                                 end
-                                sub <= 6'd15;
+                                sub <= 6'd16;
                             end
-                            6'd15: begin
+                            6'd16: begin
                                 // qp_delta = SE(0) = '1' (only if CBP != 0)
                                 if (mb_has_residual) begin
                                     bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + 7'd1;
                                 end
-                                sub <= 6'd16;
-                            end
-                            6'd16: begin
-                                state <= S_EMIT;
-                                return_state <= S_MB_HDR;
                                 sub <= 6'd17;
                             end
                             6'd17: begin
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
+                                sub <= 6'd18;
+                            end
+                            6'd18: begin
                                 cmd_done <= 1'b1;
                                 busy     <= 1'b0;
                                 state    <= S_IDLE;
+                            end
+                            6'd23: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                sub <= 6'd11;
                             end
 
                             default: state <= S_IDLE;

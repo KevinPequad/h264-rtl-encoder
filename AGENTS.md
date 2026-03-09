@@ -14,6 +14,17 @@ verified and the byte stream came from the RTL output path.
 Full completion now means **full H.264 standard capability**, not a permanently
 restricted subset.
 
+Do not stop at partial subset milestones, decode-only smoke wins, or
+documentation updates. Keep going until the remaining full-standard feature
+gaps are implemented in the RTL-owned encoder path, or there is a real,
+concrete technical blocker that can be stated precisely.
+
+Do not stop just because a milestone was reached. After each meaningful feature
+implementation or correctness fix, update the repo status docs, push the
+current progress, and continue working. Only stop if the encoder is genuinely
+complete or there is a full blocker that makes further responsible progress
+impossible.
+
 ## Goal
 
 The goal is to finish a full end-to-end H.264 encoder whose final output is:
@@ -28,6 +39,9 @@ Completion means the encoder has produced the final decoded `1280x720 @ 24 fps`
 Big Buck Bunny result from the RTL byte stream path, not from a software-made
 fallback bitstream, and that the remaining gaps against full H.264 standard
 coverage have been closed.
+
+Completion also means the repo is no longer missing the major feature classes
+tracked against the chosen `x264` software baseline.
 
 ## Final Target
 
@@ -81,10 +95,15 @@ The testbench must not:
 - Download and keep the needed spec sheets and reference material available
   locally when working through standard details
 - Expected local spec path: `references/itu/T-REC-H.264-202408-I.pdf`
+- Expected local software encoder baseline path: `references/software/x264/`
 - Local reference PDFs are for development use and are not committed by default
+- Local software reference trees are for development use and are not committed
+  by default
+- Use the official VideoLAN `x264` source as the default software encoder
+  comparison baseline unless a stronger primary reference is justified
 - Prefer primary references over memory
 - Do not guess unless you absolutely have to after checking the spec, the repo,
-  and the available reference implementations
+  the local `x264` baseline, and the available reference implementations
 - If you must infer something, treat it as a temporary assumption and verify it
   as soon as possible
 
@@ -116,6 +135,9 @@ The testbench must not:
 3. Use small smoke cases first
 4. Scale to longer clips only after decode and visual checks pass
 5. Preserve or improve reproducibility of the build / run flow
+6. Do not stop while major baseline feature gaps are still open
+7. After each meaningful implementation step, update `README.md` / `STATUS.md`,
+   push progress, and continue unless fully blocked
 
 ## Current Practical Notes
 
@@ -141,15 +163,22 @@ The testbench must not:
   - P-frame support
   - IDR + non-IDR encoded stream output
   - `16x16` macroblock raster-order processing
-  - One forward reference frame
+  - Up to three forward reference pictures for P-slice motion search
   - Inter/intra macroblock decisioning for P-frames
+  - Slice-level active reference override and per-macroblock `ref_idx_l0`
+    syntax
   - Motion-vector-difference syntax for supported P macroblocks
   - Integer-pel motion estimation
   - Fixed search range motion estimation
   - Diamond-style luma ME search
+  - Quarter-pel luma refinement on the current `16x16` P-macroblock inter path
   - Luma inter prediction from previous reconstructed frame
-  - Chroma inter prediction in RTL
-  - Luma intra prediction: `4x4` DC mode
+  - Chroma fractional interpolation on the current inter path
+  - Weighted P prediction for inter luma and chroma on the RTL path
+  - `pred_weight_table` slice signaling in RTL for weighted P slices
+  - Full directional `Intra_4x4` mode support
+  - `Intra_16x16` luma prediction with `Vertical`, `Horizontal`, `DC`, and
+    `Plane` mode search
   - Chroma intra prediction: DC-style path
   - `4x4` H.264 integer transform
   - Inverse transform path
@@ -159,6 +188,7 @@ The testbench must not:
   - Reconstruction loop in RTL
   - Reference-frame writeback for reconstructed luma
   - Reference-frame writeback for reconstructed chroma
+  - Standalone CABAC arithmetic coding core in `rtl/h264_cabac_core.v`
   - Parameterized resolution
   - Parameterized bit depth
   - Parameterized chroma format
@@ -169,11 +199,31 @@ The testbench must not:
   - `10-bit 4:2:0`
   - `10-bit 4:2:2`
 
+- Current software comparison baseline:
+  - local path: `references/software/x264/`
+  - upstream: `https://code.videolan.org/videolan/x264`
+  - local comparison checkout:
+    `0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee` from `2025-08-31`
+  - baseline feature evidence comes from the current `x264.c` CLI help and
+    `x264.h` pixel-format / picture-type definitions
+
+- Implemented now relative to the chosen `x264` baseline:
+  - Annex B bitstream generation owned by RTL
+  - SPS / PPS / slice-header / macroblock-header ownership in RTL
+  - CAVLC entropy path owned by RTL
+  - I-picture and P-picture coding
+  - Full directional `Intra_4x4` luma mode coverage
+  - `Intra_16x16` luma prediction and syntax support
+  - Up-to-three-reference P-slice inter coding with integer-pel search and
+    current quarter-pel luma refinement
+  - Weighted P prediction and `pred_weight_table` signaling on the RTL path
+  - `8-bit` and `10-bit` support for `4:2:0` and `4:2:2`
+
 - Verified validation/features around the current encoder flow:
   - Docker one-frame smoke run producing RTL-generated `.h264` and `.mp4`
   - FFmpeg-decodable RTL-generated `.h264`
   - MP4 remux of the RTL-generated stream
-  - Reproducible smoke matrix
+  - Reproducible smoke matrix for fast parser/profile sanity on generated tiny inputs
   - Multi-frame validation at `320x176`
   - Multi-frame validation at `1280x720`
   - PSNR / SSIM comparison scripts
@@ -183,9 +233,13 @@ The testbench must not:
 
 - Use `scripts/regress_smoke_matrix.py` to keep the current smoke matrix
   reproducible, including simulator logs and cycle counts
+  - Treat it as a fast parser/profile sanity matrix, not the final strict
+    decode-quality gate
 
 - Use `scripts/validate_clip.py` for staged multi-frame validation, PSNR / SSIM,
   side-by-side comparison output, MP4 packaging, and x264 reference checks
+  - Treat this as the stricter decode/metrics path; it now uses strict FFmpeg
+    decode checking
 
 - Verified smoke runs exist for:
   - `8-bit 4:2:0`
@@ -196,27 +250,79 @@ The testbench must not:
 - Verified multi-frame validation runs now include:
   - Docker one-frame smoke at `320x176`, `1` frame, `816,975` cycles,
     `output/docker_320x176_1f.h264`, and `output/docker_320x176_1f.mp4`
-  - `320x176 @ 24 fps`, `24` frames, `249,438,699` cycles, RTL PSNR avg
-    `44.661152`, RTL SSIM all `0.992607`
+  - strict current-tree validation at `320x176`, `10` frames,
+    `253,064,186` cycles, RTL PSNR avg `45.745576`, RTL SSIM all `0.994893`,
+    `output/validation_tefix_320x176_10f.h264`, and
+    `output/validation_tefix_320x176_10f.mp4`
+  - strict current-tree validation at `320x176`, `24` frames,
+    `640,575,297` cycles, RTL PSNR avg `43.767484`, RTL SSIM all `0.989193`,
+    `output/validation_tefix_320x176_24f.h264`, and
+    `output/validation_tefix_320x176_24f.mp4`
+  - strict three-reference P-slice validation at `320x176`, `10` frames,
+    `367,542,946` cycles, `15,781` bytes, SPS `max_num_ref_frames = 3`, RTL
+    PSNR avg `45.752063`, RTL SSIM all `0.994913`,
+    `output/validation_multiref3_320x176_10f.h264`, and
+    `output/validation_multiref3_320x176_10f.mp4`
+  - strict three-reference P-slice validation at `320x176`, `24` frames,
+    `913,475,277` cycles, `51,219` bytes, later P-slices with
+    `num_ref_idx_l0_active_minus1 = 2`, RTL PSNR avg `43.7528`, RTL SSIM all
+    `0.989176`, `output/validation_multiref3_320x176_24f_timeout1e9.h264`,
+    and `output/validation_multiref3_320x176_24f_timeout1e9.mp4`
   - `1280x720 @ 24 fps`, `24` frames, `4,096,671,438` cycles, RTL PSNR avg
     `41.759917`, RTL SSIM all `0.995232`
+  - weighted-P validation at `320x176`, `4` frames, strict FFmpeg-decodable
+    Main-profile stream, RTL PSNR avg `25.806041`, RTL SSIM all `0.333568`,
+    `output/validation_320x176_4f_weightedp.h264`, and
+    `output/validation_320x176_4f_weightedp.mp4`
+  - two-reference P-slice validation at `320x176`, `4` frames,
+    `50,611,399` cycles, strict FFmpeg-decodable,
+    `output/validation_multiref_320x176_4f.h264`, and
+    `output/validation_multiref_320x176_4f.mp4`
+  - current-tree `Intra_16x16` smoke at `320x176`, `1` frame,
+    `output/validation_320x176_1f_i16x16_fix2.h264`, and
+    `output/validation_320x176_1f_i16x16_fix2.mp4`
 
 - A 720p chroma corruption bug was traced to raw input address overflow in the Cr plane fetch path and fixed by widening the raw input address width
+- A directional `Intra_4x4` top-right reference fetch bug was fixed in
+  `h264_encoder_top.v`
+- The two-reference P-slice path must use `TE(v)` for `ref_idx_l0` when two
+  refs are active; the current tree now does that, and the strict `320x176`
+  `10`-frame / `24`-frame validations close cleanly on that fix
+- The current tree now advertises `max_num_ref_frames = 3` and later P-slices
+  can emit `num_ref_idx_l0_active_minus1 = 2`
+- The current inter path already performs quarter-pel luma refinement and
+  chroma fractional interpolation after the integer-pel ME pass
 
 - Important missing features, so this does not get confused with a full-standard
   H.264 encoder yet:
-  - No `CABAC`
+  - No CABAC syntax integration into the final RTL bitstream path yet
   - No `B-frames`
-  - No multiple reference pictures
-  - No full sub-pel luma motion compensation path
-  - No broad intra mode coverage
+  - No weighted bipred / `B`-picture weighted prediction
+  - No direct motion-vector prediction modes
+  - No reference management beyond the current three-reference P-slice subset
+  - No broader full-standard sub-pel motion path beyond the current `16x16`
+    quarter-pel luma / chroma fractional inter flow
+  - No broader inter partition coverage or `8x8dct`-class transform support
+  - No `4:4:4` support
   - No full in-loop deblocking engine
   - No full-standard profile/tool coverage yet
 
+- Required closure before calling the encoder complete:
+  - CABAC integrated into real RTL slice syntax, not only a standalone core
+  - `B` / `BREF` picture support
+  - Reference-picture management beyond the current three-reference P-slice subset
+  - Weighted bipred support beyond the current weighted P path
+  - Direct motion-vector prediction support
+  - Broader sub-pel motion estimation / compensation support
+  - Broader inter partition coverage and `8x8dct`-class transform coverage
+  - `4:4:4` support if the project is claiming full-standard feature coverage
+  - In-loop deblocking
+  - Enough profile / level / tool coverage to stop calling the repo a subset
+
 - The current repo is still only a partial H.264 implementation today; full
   completion still requires closing major gaps such as CABAC, B-slices,
-  multiple references, broader prediction coverage, sub-pel motion handling,
-  and deblocking
+  weighted/direct prediction, broader partition coverage,
+  sub-pel motion handling, and deblocking
 
 - The current high-resolution validation closes the first `24` frames / `1`
   second at `1280x720`; the final first-10-seconds milestone still requires the
@@ -227,5 +333,7 @@ The testbench must not:
 - Full completion is the final decoded `1280x720 @ 24 fps` Big Buck Bunny output from the RTL-generated H.264 stream
 - Full completion also means the remaining gaps against full H.264 standard
   support are closed
+- Full completion also means the major `x264` baseline feature gaps are closed,
+  not merely documented
 - Use **24 threads**
 - Be wary of simulation time before scaling up

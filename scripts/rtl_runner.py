@@ -21,6 +21,16 @@ class BuildConfig:
     chroma_format_idc: int
     jobs: int = DEFAULT_JOBS
     trace: bool = False
+    extra_verilator_args: tuple[str, ...] = ()
+    weighted_pred_enable: int = 0
+    luma_log2_weight_denom: int = 0
+    luma_weight: int = 1
+    luma_offset: int = 0
+    chroma_log2_weight_denom: int = 0
+    chroma_weight_cb: int = 1
+    chroma_offset_cb: int = 0
+    chroma_weight_cr: int = 1
+    chroma_offset_cr: int = 0
 
 
 def repo_root() -> Path:
@@ -66,7 +76,18 @@ def build_sim(workspace: Path, config: BuildConfig) -> Path:
         f"BIT_DEPTH={config.bit_depth}",
         f"CHROMA_FORMAT_IDC={config.chroma_format_idc}",
         f"TRACE={1 if config.trace else 0}",
+        f"WEIGHTED_PRED_ENABLE={config.weighted_pred_enable}",
+        f"LUMA_LOG2_WEIGHT_DENOM={config.luma_log2_weight_denom}",
+        f"LUMA_WEIGHT={config.luma_weight}",
+        f"LUMA_OFFSET={config.luma_offset}",
+        f"CHROMA_LOG2_WEIGHT_DENOM={config.chroma_log2_weight_denom}",
+        f"CHROMA_WEIGHT_CB={config.chroma_weight_cb}",
+        f"CHROMA_OFFSET_CB={config.chroma_offset_cb}",
+        f"CHROMA_WEIGHT_CR={config.chroma_weight_cr}",
+        f"CHROMA_OFFSET_CR={config.chroma_offset_cr}",
     ]
+    if config.extra_verilator_args:
+        cmd.append(f"EXTRA_VERILATOR_ARGS={' '.join(config.extra_verilator_args)}")
     run_cmd(cmd, cwd=tb_dir)
     return tb_dir / "Vh264_encoder_top"
 
