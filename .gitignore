@@ -38,7 +38,9 @@ data/frame_info.h
 references/**/*.pdf
 references/**/*.zip
 references/**/*.epub
+references/software/*
 !references/README.md
+!references/software/README.md
 
 # Generated outputs
 output/*

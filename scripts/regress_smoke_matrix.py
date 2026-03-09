@@ -13,10 +13,10 @@ import sys
 from rtl_runner import BuildConfig, build_sim, repo_root, require_tool, run_cmd, run_sim, stage_workspace
 
 
-WIDTH = 32
-HEIGHT = 16
-FRAMES = 2
-TIMEOUT = 20_000_000
+DEFAULT_WIDTH = 32
+DEFAULT_HEIGHT = 16
+DEFAULT_FRAMES = 2
+DEFAULT_TIMEOUT = 20_000_000
 SIM_SUMMARY_RE = re.compile(r"\[TB\]\s+(?P<frames>\d+)\s+frames encoded,\s+(?P<cycles>\d+)\s+cycles,\s+(?P<bytes>\d+)\s+bytes")
 
 
@@ -27,6 +27,19 @@ class SmokeCase:
     chroma_format_idc: int
     input_file: str
     output_file: str
+    width: int = DEFAULT_WIDTH
+    height: int = DEFAULT_HEIGHT
+    frames: int = DEFAULT_FRAMES
+    timeout: int = DEFAULT_TIMEOUT
+    weighted_pred_enable: int = 0
+    luma_log2_weight_denom: int = 0
+    luma_weight: int = 1
+    luma_offset: int = 0
+    chroma_log2_weight_denom: int = 0
+    chroma_weight_cb: int = 1
+    chroma_offset_cb: int = 0
+    chroma_weight_cr: int = 1
+    chroma_offset_cr: int = 0
 
 
 CASES = [
@@ -41,9 +54,9 @@ def clamp(value: int, lo: int, hi: int) -> int:
     return max(lo, min(hi, value))
 
 
-def frame_sizes(chroma_format_idc: int) -> tuple[int, int, int]:
-    luma = WIDTH * HEIGHT
-    chroma = (WIDTH // 2) * (HEIGHT if chroma_format_idc == 2 else HEIGHT // 2)
+def frame_sizes(width: int, height: int, chroma_format_idc: int) -> tuple[int, int, int]:
+    luma = width * height
+    chroma = (width // 2) * (height if chroma_format_idc == 2 else height // 2)
     return luma, chroma, chroma
 
 
@@ -80,15 +93,15 @@ def write_sample(out_f, value: int, bit_depth: int) -> None:
         out_f.write(bytes((value,)))
 
 
-def generate_smoke_input(path: Path, bit_depth: int, chroma_format_idc: int) -> None:
+def generate_smoke_input(path: Path, width: int, height: int, frames: int, bit_depth: int, chroma_format_idc: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    chroma_height = HEIGHT if chroma_format_idc == 2 else HEIGHT // 2
-    chroma_width = WIDTH // 2
+    chroma_height = height if chroma_format_idc == 2 else height // 2
+    chroma_width = width // 2
 
     with path.open("wb") as out_f:
-        for frame_idx in range(FRAMES):
-            for y in range(HEIGHT):
-                for x in range(WIDTH):
+        for frame_idx in range(frames):
+            for y in range(height):
+                for x in range(width):
                     write_sample(out_f, plane_value(bit_depth, "y", x, y, frame_idx), bit_depth)
 
             for y in range(chroma_height):
@@ -122,6 +135,8 @@ def ffprobe_stream(path: Path) -> dict[str, str]:
 
 
 def decode_check(path: Path) -> None:
+    # The tiny generated smoke cases are kept as a fast bitstream/parser sanity
+    # check. Strict decoder-quality gating lives in validate_clip.py.
     run_cmd(["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"])
 
 
@@ -151,17 +166,26 @@ def main() -> int:
         input_path = data_dir / case.input_file
         output_path = output_dir / case.output_file
         log_path = output_dir / f"{case.name}.sim.log"
-        generate_smoke_input(input_path, case.bit_depth, case.chroma_format_idc)
+        generate_smoke_input(input_path, case.width, case.height, case.frames, case.bit_depth, case.chroma_format_idc)
 
         workspace = stage_workspace(f"h264_{case.name}_")
         config = BuildConfig(
-            width=WIDTH,
-            height=HEIGHT,
+            width=case.width,
+            height=case.height,
             bit_depth=case.bit_depth,
             chroma_format_idc=case.chroma_format_idc,
+            weighted_pred_enable=case.weighted_pred_enable,
+            luma_log2_weight_denom=case.luma_log2_weight_denom,
+            luma_weight=case.luma_weight,
+            luma_offset=case.luma_offset,
+            chroma_log2_weight_denom=case.chroma_log2_weight_denom,
+            chroma_weight_cb=case.chroma_weight_cb,
+            chroma_offset_cb=case.chroma_offset_cb,
+            chroma_weight_cr=case.chroma_weight_cr,
+            chroma_offset_cr=case.chroma_offset_cr,
         )
         sim_bin = build_sim(workspace, config)
-        sim_proc = run_sim(sim_bin, FRAMES, TIMEOUT, input_path, output_path, capture=True)
+        sim_proc = run_sim(sim_bin, case.frames, case.timeout, input_path, output_path, capture=True)
         sim_log = (sim_proc.stdout or "") + (sim_proc.stderr or "")
         log_path.write_text(sim_log, encoding="utf-8")
         sim_summary = parse_sim_summary(sim_log)

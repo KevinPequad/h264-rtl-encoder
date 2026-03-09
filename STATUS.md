@@ -11,11 +11,14 @@ Current state:
 - RTL-owned H.264 Annex B bitstream generation works for a constrained subset
 - the current flow can produce FFmpeg-decodable `.h264` and packaged `.mp4`
 - multi-frame validation has been completed at `320x176` and `1280x720`
+- the strict current-tree `320x176` validation path now passes `10` and `24`
+  frames after fixing multi-reference `ref_idx_l0` signaling and extending the
+  P-slice path to three forward refs
 - the repository is still not complete as a full H.264 standard encoder
 
-Completion is still blocked by major missing features including `CABAC`,
-`B-frames`, multiple references, broader prediction coverage, sub-pel motion
-handling, deblocking, and the final long-run target.
+Completion is still blocked by major missing features including CABAC syntax
+integration, `B-frames`, weighted bipred / direct-mode support, broader
+partition/tool coverage, deblocking, and the final long-run target.
 
 ## Source Inventory
 
@@ -41,12 +44,15 @@ handling, deblocking, and the final long-run target.
 | `rtl/h264_encoder_top.v` | Top-level pipeline and frame / macroblock orchestration |
 | `rtl/h264_fetch.v` | Input frame fetch and plane address handling |
 | `rtl/h264_me.v` | Motion estimation for the current inter path |
-| `rtl/h264_intra_pred.v` | Current intra prediction logic |
+| `rtl/h264_intra_pred.v` | Full `Intra_4x4` directional prediction logic |
+| `rtl/h264_intra16_pred.v` | `Intra_16x16` luma prediction mode search |
 | `rtl/h264_transform.v` | Forward integer transform |
 | `rtl/h264_quantize.v` | Quantization |
 | `rtl/h264_zigzag.v` | Zigzag coefficient scan |
+| `rtl/h264_cabac_core.v` | Standalone CABAC arithmetic coding core |
 | `rtl/h264_cavlc.v` | CAVLC syntax generation |
 | `rtl/h264_chroma_dc.v` | Chroma DC transform support |
+| `rtl/h264_luma_dc.v` | `Intra_16x16` luma DC transform support |
 | `rtl/h264_inverse_quant.v` | Inverse quantization |
 | `rtl/h264_inverse_transform.v` | Inverse transform |
 | `rtl/h264_reconstruct.v` | Reconstruction and reference update path |
@@ -80,6 +86,37 @@ handling, deblocking, and the final long-run target.
 These directories are intentionally treated as local-only working areas and are
 ignored by default except for their small README files.
 
+## Software Baseline
+
+The normative reference remains the H.264 / AVC specification at
+`references/itu/T-REC-H.264-202408-I.pdf`.
+
+For practical implementation comparison, the current software baseline for this
+repo is the official VideoLAN `x264` encoder source tree at:
+
+- `references/software/x264`
+
+Local checkout used for the current docs update:
+
+- commit: `0480cb05fa188d37ae87e8f4fd8f1aea3711f7ee`
+- date: `2025-08-31`
+
+Why this baseline was chosen:
+
+- it is a current and widely used H.264 encoder implementation
+- its public source clearly exposes the standard feature classes this repo still
+  needs to close
+- it is a better practical implementation target than treating the spec PDF
+  alone as the gap checklist
+
+Feature evidence in the local `x264` source:
+
+- `x264.c` exposes `--profile`, `--level`, `--bframes`, `--b-pyramid`, `--ref`,
+  `--no-deblock`, `--direct`, `--weightp`, `--me`, `--subme`, and
+  `--no-cabac`
+- `x264.h` exposes `I420`, `I422`, `I444`, high-depth pixel formats, and
+  `IDR`, `P`, `BREF`, and `B` picture types
+
 ## Implemented Features
 
 Current implemented features in the RTL encoder, based on the actual pipeline
@@ -101,15 +138,23 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - P-frame support
 - IDR + non-IDR encoded stream output
 - `16x16` macroblock raster-order processing
-- one forward reference frame
+- up to three forward reference pictures for P-slice motion search
 - inter / intra macroblock decisioning for P-frames
+- slice-level active reference override and per-macroblock `ref_idx_l0` syntax
+- standards-correct `TE(v)` coding for `ref_idx_l0` in the two-reference
+  P-slice case, with `UE(v)` fallback when three references are active
 - motion-vector-difference syntax for supported P macroblocks
 - integer-pel motion estimation
 - fixed search range motion estimation
 - diamond-style luma ME search
+- quarter-pel luma refinement on the current `16x16` P-macroblock inter path
 - luma inter prediction from the previous reconstructed frame
-- chroma inter prediction in RTL
-- luma intra prediction: `4x4` DC mode
+- chroma fractional interpolation on the current inter path
+- weighted P prediction for inter luma and chroma on the RTL path
+- `pred_weight_table` slice signaling in RTL for weighted P slices
+- full directional `Intra_4x4` mode support
+- `Intra_16x16` luma prediction with `Vertical`, `Horizontal`, `DC`, and
+  `Plane` mode search
 - chroma intra prediction: DC-style path
 - `4x4` H.264 integer transform
 - inverse transform path
@@ -119,9 +164,23 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - reconstruction loop in RTL
 - reference-frame writeback for reconstructed luma
 - reference-frame writeback for reconstructed chroma
+- standalone CABAC arithmetic coder core RTL
 - parameterized resolution
 - parameterized bit depth
 - parameterized chroma format
+
+Implemented now relative to the chosen `x264` baseline:
+
+- Annex B bitstream generation owned by RTL
+- SPS / PPS / slice-header / macroblock-header ownership in RTL
+- CAVLC entropy path owned by RTL
+- I-picture and P-picture coding
+- full `Intra_4x4` directional luma mode coverage
+- `Intra_16x16` luma prediction and syntax support
+- up-to-three-reference P-slice inter coding with integer-pel search and
+  current quarter-pel luma refinement
+- weighted P prediction and `pred_weight_table` signaling on the RTL path
+- `8-bit` and `10-bit` support for `4:2:0` and `4:2:2`
 
 ## Supported And Smoke-Verified Modes
 
@@ -132,12 +191,13 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 
 ## Validated Capabilities
 
-Verified validation and tooling coverage around the current encoder flow:
+Verified validation and tooling coverage around the encoder flow:
 
 - FFmpeg-decodable RTL-generated `.h264`
 - MP4 remux of the RTL-generated stream
 - Docker one-frame smoke run producing RTL-generated `.h264` and `.mp4`
-- reproducible smoke matrix
+- reproducible smoke matrix for fast parser/profile sanity on generated tiny
+  inputs
 - multi-frame validation at `320x176`
 - multi-frame validation at `1280x720`
 - PSNR / SSIM comparison scripts
@@ -148,10 +208,29 @@ Verified validation and tooling coverage around the current encoder flow:
 Measured validation points:
 
 - `docker_320x176_1f`: `816,975` cycles
-- `320x176_24f`: `249,438,699` cycles, RTL PSNR avg `44.661152`, RTL SSIM all
-  `0.992607`
+- `320x176_10f_tefix`: strict FFmpeg-decodable current-tree validation,
+  `253,064,186` cycles, RTL PSNR avg `45.745576`, RTL SSIM all `0.994893`
+- `320x176_24f_tefix`: strict FFmpeg-decodable current-tree validation,
+  `640,575,297` cycles, RTL PSNR avg `43.767484`, RTL SSIM all `0.989193`
+- `320x176_10f_multiref3`: strict FFmpeg-decodable three-reference P-slice
+  validation, `367,542,946` cycles, `15,781` bytes, SPS
+  `max_num_ref_frames = 3`, RTL PSNR avg `45.752063`, RTL SSIM all `0.994913`
+- `320x176_24f_multiref3`: strict FFmpeg-decodable three-reference P-slice
+  validation, `913,475,277` cycles, `51,219` bytes, later P-slices with
+  `num_ref_idx_l0_active_minus1 = 2`, RTL PSNR avg `43.7528`, RTL SSIM all
+  `0.989176`
+- `320x176_4f_weightedp`: strict FFmpeg-decodable weighted-P validation on the
+  RTL path, Main profile stream, RTL PSNR avg `25.806041`, RTL SSIM all
+  `0.333568`
+- `320x176_4f_multiref`: earlier strict FFmpeg-decodable two-reference P-slice
+  validation on the RTL path, `50,611,399` cycles, SPS
+  `max_num_ref_frames = 2`, later P-slices with
+  `num_ref_idx_active_override_flag = 1`, RTL PSNR avg `25.806041`, RTL SSIM
+  all `0.333568`
 - `720p_24f`: `4,096,671,438` cycles, RTL PSNR avg `41.759917`, RTL SSIM all
   `0.995232`
+- `320x176_1f_i16x16_fix2`: current-tree FFmpeg-decodable `Intra_16x16`
+  smoke, RTL PSNR avg `25.8060`, RTL SSIM all `0.333568`
 
 Current verified milestone outputs:
 
@@ -163,19 +242,47 @@ Current verified milestone outputs:
 
 - a `720p` chroma corruption issue was traced to raw input address overflow on
   the Cr plane fetch path and fixed by widening the raw input address width
+- a directional `Intra_4x4` top-right reference fetch bug was fixed in
+  `rtl/h264_encoder_top.v`
+- the multi-reference P-slice path was fixed to encode `ref_idx_l0` with
+  standards-correct `TE(v)` coding when two refs are active, removing the
+  later-frame parser corruption seen in strict `320x176` multi-frame decode
+- the current tree now advertises `max_num_ref_frames = 3` and later P-slices
+  can emit `num_ref_idx_l0_active_minus1 = 2`
+- the current inter path already performs quarter-pel luma refinement and
+  chroma fractional interpolation after the integer-pel ME pass
 
 ## Not Done Yet
 
 Important missing features, so this does not get confused with a full-standard
 H.264 encoder yet:
 
-- `CABAC`
+- CABAC context modelling, syntax binarization, and final bitstream-path
+  integration
 - `B-frames`
-- multiple reference pictures
-- full sub-pel luma motion compensation path
-- broad intra mode coverage
+- weighted bipred / `B`-picture weighted prediction
+- direct motion-vector prediction modes
+- reference-picture management beyond the current three-reference P-slice subset
+- broader full-standard sub-pel motion handling beyond the current `16x16`
+  quarter-pel luma path
+- broader inter partition coverage and `8x8dct`-class transform support
+- `4:4:4` chroma support
 - full in-loop deblocking engine
 - full-standard profile / level / tool coverage
+
+Still missing relative to the chosen `x264` software baseline:
+
+- final CABAC slice integration instead of the current standalone arithmetic
+  core only
+- `B` / `BREF` picture handling and the associated reference management
+- reference-picture management beyond the current three-reference P-slice subset
+- weighted bipred support beyond the current weighted P path
+- direct prediction modes
+- broader sub-pel motion estimation / compensation and richer mode decision
+- broader partition / transform coverage including `8x8dct`-class tools
+- `I444` / `4:4:4` format coverage
+- in-loop deblocking
+- enough profile / level / tool coverage to stop calling the repo a subset
 
 Additional project-level open work:
 
@@ -198,6 +305,8 @@ The encoder should only be marked complete once:
 ## Development Rules That Matter
 
 - use the H.264 spec and primary references before making codec decisions
+- use the local `x264` source tree as the default software encoder comparison
+  baseline after consulting the spec
 - keep the encoder end to end through the RTL bitstream path
 - use all `24` threads by default for build and simulation work on this machine
 - be wary of simulation times and prove fixes on small cases first

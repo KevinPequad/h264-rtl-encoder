@@ -17,6 +17,18 @@ from rtl_runner import BuildConfig, build_sim, repo_root, require_tool, run_cmd,
 PSNR_RE = re.compile(r"PSNR y:(?P<y>[0-9.inf-]+).*average:(?P<avg>[0-9.inf-]+)")
 SSIM_RE = re.compile(r"SSIM Y:(?P<y>[0-9.]+).*All:(?P<all>[0-9.]+)")
 SIM_SUMMARY_RE = re.compile(r"\[TB\]\s+(?P<frames>\d+)\s+frames encoded,\s+(?P<cycles>\d+)\s+cycles,\s+(?P<bytes>\d+)\s+bytes")
+DECODE_ERROR_PATTERNS = (
+    "error while decoding",
+    "mb_type ",
+    "cbp too large",
+    "top block unavailable",
+    "corrupted macroblock",
+    "negative number of zero coeffs",
+    "sub_mb_type",
+    "corrupt decoded frame",
+    "error processing packet in decoder",
+    "decoder thread returned error",
+)
 
 
 def pix_fmt_for_config(bit_depth: int, chroma_format_idc: int) -> str:
@@ -54,6 +66,15 @@ def sanitize_for_json(value):
     if isinstance(value, list):
         return [sanitize_for_json(item) for item in value]
     return value
+
+
+def extract_decode_errors(stderr: str) -> list[str]:
+    hits: list[str] = []
+    for line in stderr.splitlines():
+        lowered = line.lower()
+        if any(pattern in lowered for pattern in DECODE_ERROR_PATTERNS):
+            hits.append(line.strip())
+    return hits
 
 
 def ffmpeg_metric(
@@ -229,6 +250,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--frames", type=int, default=24)
     parser.add_argument("--bit-depth", type=int, default=8)
     parser.add_argument("--chroma-format-idc", type=int, default=1)
+    parser.add_argument("--weighted-pred-enable", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--luma-log2-weight-denom", type=int, default=0)
+    parser.add_argument("--luma-weight", type=int, default=1)
+    parser.add_argument("--luma-offset", type=int, default=0)
+    parser.add_argument("--chroma-log2-weight-denom", type=int, default=0)
+    parser.add_argument("--chroma-weight-cb", type=int, default=1)
+    parser.add_argument("--chroma-offset-cb", type=int, default=0)
+    parser.add_argument("--chroma-weight-cr", type=int, default=1)
+    parser.add_argument("--chroma-offset-cr", type=int, default=0)
     parser.add_argument("--jobs", type=int, default=24)
     parser.add_argument("--timeout", type=int, default=500_000_000)
     parser.add_argument("--input", type=Path, default=root / "data" / "raw_frames.yuv")
@@ -242,6 +272,9 @@ def main() -> int:
     require_tool("make")
 
     root = repo_root()
+    input_path = args.input if args.input.is_absolute() else (root / args.input).resolve()
+    if not input_path.exists():
+        raise FileNotFoundError(f"Input clip not found: {input_path}")
     output_dir = root / "output"
     rtl_h264 = output_dir / f"validation_{args.label}.h264"
     rtl_mp4 = output_dir / f"validation_{args.label}.mp4"
@@ -258,22 +291,39 @@ def main() -> int:
         bit_depth=args.bit_depth,
         chroma_format_idc=args.chroma_format_idc,
         jobs=args.jobs,
+        weighted_pred_enable=args.weighted_pred_enable,
+        luma_log2_weight_denom=args.luma_log2_weight_denom,
+        luma_weight=args.luma_weight,
+        luma_offset=args.luma_offset,
+        chroma_log2_weight_denom=args.chroma_log2_weight_denom,
+        chroma_weight_cb=args.chroma_weight_cb,
+        chroma_offset_cb=args.chroma_offset_cb,
+        chroma_weight_cr=args.chroma_weight_cr,
+        chroma_offset_cr=args.chroma_offset_cr,
     )
     sim_bin = build_sim(workspace, config)
-    sim_proc = run_sim(sim_bin, args.frames, args.timeout, args.input, rtl_h264, capture=True)
+    sim_proc = run_sim(sim_bin, args.frames, args.timeout, input_path, rtl_h264, capture=True)
     sim_log = (sim_proc.stdout or "") + (sim_proc.stderr or "")
     sim_log_path.write_text(sim_log, encoding="utf-8")
     sim_summary = parse_sim_summary(sim_log)
-    run_cmd(["ffmpeg", "-v", "error", "-i", str(rtl_h264), "-f", "null", "-"])
+    decode_probe = run_cmd(
+        ["ffmpeg", "-v", "error", "-i", str(rtl_h264), "-f", "null", "-"],
+        capture=True,
+    )
+    decode_errors = extract_decode_errors(decode_probe.stderr)
+    if decode_errors:
+        raise RuntimeError(
+            "FFmpeg decoder reported H.264 errors:\n" + "\n".join(decode_errors[:16])
+        )
 
-    rtl_psnr = ffmpeg_metric(args.input, rtl_h264, args.width, args.height, args.fps, args.frames, pix_fmt, "psnr")
-    rtl_ssim = ffmpeg_metric(args.input, rtl_h264, args.width, args.height, args.fps, args.frames, pix_fmt, "ssim")
+    rtl_psnr = ffmpeg_metric(input_path, rtl_h264, args.width, args.height, args.fps, args.frames, pix_fmt, "psnr")
+    rtl_ssim = ffmpeg_metric(input_path, rtl_h264, args.width, args.height, args.fps, args.frames, pix_fmt, "ssim")
 
     ref_psnr = None
     ref_ssim = None
     if args.bit_depth == 8:
         encode_x264_reference(
-            args.input,
+            input_path,
             x264_mp4,
             args.width,
             args.height,
@@ -282,11 +332,11 @@ def main() -> int:
             pix_fmt,
             args.chroma_format_idc,
         )
-        ref_psnr = ffmpeg_metric(args.input, x264_mp4, args.width, args.height, args.fps, args.frames, pix_fmt, "psnr")
-        ref_ssim = ffmpeg_metric(args.input, x264_mp4, args.width, args.height, args.fps, args.frames, pix_fmt, "ssim")
+        ref_psnr = ffmpeg_metric(input_path, x264_mp4, args.width, args.height, args.fps, args.frames, pix_fmt, "psnr")
+        ref_ssim = ffmpeg_metric(input_path, x264_mp4, args.width, args.height, args.fps, args.frames, pix_fmt, "ssim")
 
     build_side_by_side(
-        args.input,
+        input_path,
         rtl_h264,
         compare_png,
         args.width,
@@ -301,7 +351,7 @@ def main() -> int:
         "config": asdict(config),
         "frames": args.frames,
         "timeout": args.timeout,
-        "input": str(args.input),
+        "input": str(input_path),
         "pix_fmt": pix_fmt,
         "rtl_h264": str(rtl_h264),
         "rtl_mp4": str(rtl_mp4),

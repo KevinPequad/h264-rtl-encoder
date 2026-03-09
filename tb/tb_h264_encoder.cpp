@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <array>
 #include <fstream>
 #include <memory>
 #include <string>
@@ -45,10 +46,9 @@ using pixel_t = typename std::conditional<(BD > 8), uint16_t, uint8_t>::type;
 static std::vector<uint8_t> raw_file_buf;  // Raw file bytes
 static std::vector<pixel_t> raw_pixel_mem; // Unpacked pixels
 static std::vector<uint8_t> bitstream_mem;
-static std::vector<pixel_t> ref_frame_rd;   // Read buffer (previous frame)
-static std::vector<pixel_t> ref_frame_wr;   // Write buffer (current frame reconstruction)
-static std::vector<pixel_t> ref_cb_rd, ref_cb_wr;  // Chroma Cb reference
-static std::vector<pixel_t> ref_cr_rd, ref_cr_wr;  // Chroma Cr reference
+static std::array<std::vector<pixel_t>, 4> ref_frame_bank;
+static std::array<std::vector<pixel_t>, 4> ref_cb_bank;
+static std::array<std::vector<pixel_t>, 4> ref_cr_bank;
 static volatile bool got_sigint = false;
 static void sigint_handler(int) { got_sigint = true; }
 
@@ -103,12 +103,11 @@ int main(int argc, char** argv) {
     f.close();
 
     bitstream_mem.assign(DEFAULT_MAX_BITSTREAM, 0);
-    ref_frame_rd.assign(LUMA_SIZE, 0);
-    ref_frame_wr.assign(LUMA_SIZE, 0);
-    ref_cb_rd.assign(CHROMA_SIZE, CHROMA_MID);
-    ref_cb_wr.assign(CHROMA_SIZE, CHROMA_MID);
-    ref_cr_rd.assign(CHROMA_SIZE, CHROMA_MID);
-    ref_cr_wr.assign(CHROMA_SIZE, CHROMA_MID);
+    for (size_t bank = 0; bank < ref_frame_bank.size(); ++bank) {
+        ref_frame_bank[bank].assign(LUMA_SIZE, 0);
+        ref_cb_bank[bank].assign(CHROMA_SIZE, CHROMA_MID);
+        ref_cr_bank[bank].assign(CHROMA_SIZE, CHROMA_MID);
+    }
 
     fprintf(stderr, "==========================================================\n");
     fprintf(stderr, "  H.264 RTL Encoder Testbench (%d-bit)\n", BD);
@@ -180,20 +179,25 @@ int main(int argc, char** argv) {
         }
 
         { // Reference frame memory read (from previous frame's reconstruction)
+            uint32_t bank = dut->ref_rd_bank_sel & 0x3;
             uint32_t addr = dut->ref_mem_rd_addr;
-            if (addr < ref_frame_rd.size())
-                dut->ref_mem_rd_data = ref_frame_rd[addr];
+            if (bank < ref_frame_bank.size() && addr < ref_frame_bank[bank].size())
+                dut->ref_mem_rd_data = ref_frame_bank[bank][addr];
             else
                 dut->ref_mem_rd_data = 0;
         }
 
         { // Chroma Cb reference read
+            uint32_t bank = dut->ref_rd_bank_sel & 0x3;
             uint32_t addr = dut->chr_cb_ref_rd_addr;
-            dut->chr_cb_ref_rd_data = (addr < ref_cb_rd.size()) ? ref_cb_rd[addr] : CHROMA_MID;
+            dut->chr_cb_ref_rd_data =
+                (bank < ref_cb_bank.size() && addr < ref_cb_bank[bank].size()) ? ref_cb_bank[bank][addr] : CHROMA_MID;
         }
         { // Chroma Cr reference read
+            uint32_t bank = dut->ref_rd_bank_sel & 0x3;
             uint32_t addr = dut->chr_cr_ref_rd_addr;
-            dut->chr_cr_ref_rd_data = (addr < ref_cr_rd.size()) ? ref_cr_rd[addr] : CHROMA_MID;
+            dut->chr_cr_ref_rd_data =
+                (bank < ref_cr_bank.size() && addr < ref_cr_bank[bank].size()) ? ref_cr_bank[bank][addr] : CHROMA_MID;
         }
 
         dut->eval();
@@ -207,20 +211,23 @@ int main(int argc, char** argv) {
         }
 
         if (dut->ref_mem_wr_en) {
+            uint32_t bank = dut->ref_wr_bank_sel & 0x3;
             uint32_t addr = dut->ref_mem_wr_addr;
-            if (addr < ref_frame_wr.size())
-                ref_frame_wr[addr] = dut->ref_mem_wr_data;
+            if (bank < ref_frame_bank.size() && addr < ref_frame_bank[bank].size())
+                ref_frame_bank[bank][addr] = dut->ref_mem_wr_data;
         }
 
         if (dut->chr_cb_ref_wr_en) {
+            uint32_t bank = dut->ref_wr_bank_sel & 0x3;
             uint32_t addr = dut->chr_cb_ref_wr_addr;
-            if (addr < ref_cb_wr.size())
-                ref_cb_wr[addr] = dut->chr_cb_ref_wr_data;
+            if (bank < ref_cb_bank.size() && addr < ref_cb_bank[bank].size())
+                ref_cb_bank[bank][addr] = dut->chr_cb_ref_wr_data;
         }
         if (dut->chr_cr_ref_wr_en) {
+            uint32_t bank = dut->ref_wr_bank_sel & 0x3;
             uint32_t addr = dut->chr_cr_ref_wr_addr;
-            if (addr < ref_cr_wr.size())
-                ref_cr_wr[addr] = dut->chr_cr_ref_wr_data;
+            if (bank < ref_cr_bank.size() && addr < ref_cr_bank[bank].size())
+                ref_cr_bank[bank][addr] = dut->chr_cr_ref_wr_data;
         }
 
         if (dut->done) {
@@ -228,13 +235,17 @@ int main(int argc, char** argv) {
             fprintf(stderr, "[TB] Frame %d done @ cycle %llu -- bs_bytes=%u\n",
                     frame_idx, (unsigned long long)cycle, total_bs_bytes);
 
-            // Swap: write buffer becomes read buffer for next frame
             {
+                uint32_t bank = dut->ref_wr_bank_sel & 0x3;
+                if (bank >= ref_frame_bank.size()) bank = 0;
+                const auto& ref_frame_cur = ref_frame_bank[bank];
+                const auto& ref_cb_cur = ref_cb_bank[bank];
+                const auto& ref_cr_cur = ref_cr_bank[bank];
                 uint64_t sum = 0; pixel_t mn = (pixel_t)((1<<BD)-1), mx = 0;
                 for (int i = 0; i < LUMA_SIZE; i++) {
-                    sum += ref_frame_wr[i];
-                    if (ref_frame_wr[i] < mn) mn = ref_frame_wr[i];
-                    if (ref_frame_wr[i] > mx) mx = ref_frame_wr[i];
+                    sum += ref_frame_cur[i];
+                    if (ref_frame_cur[i] < mn) mn = ref_frame_cur[i];
+                    if (ref_frame_cur[i] > mx) mx = ref_frame_cur[i];
                 }
                 fprintf(stderr, "[TB] Ref frame luma: avg=%llu min=%u max=%u\n",
                         (unsigned long long)(sum / LUMA_SIZE), (unsigned)mn, (unsigned)mx);
@@ -245,15 +256,11 @@ int main(int argc, char** argv) {
                         recon_yuv.open("output/recon.yuv", std::ios::binary);
                     }
                     if (recon_yuv.is_open()) {
-                        recon_yuv.write(reinterpret_cast<char*>(ref_frame_wr.data()), LUMA_SIZE * BYTES_PER_PEL);
-                        recon_yuv.write(reinterpret_cast<char*>(ref_cb_wr.data()), CHROMA_SIZE * BYTES_PER_PEL);
-                        recon_yuv.write(reinterpret_cast<char*>(ref_cr_wr.data()), CHROMA_SIZE * BYTES_PER_PEL);
+                        recon_yuv.write(reinterpret_cast<const char*>(ref_frame_cur.data()), LUMA_SIZE * BYTES_PER_PEL);
+                        recon_yuv.write(reinterpret_cast<const char*>(ref_cb_cur.data()), CHROMA_SIZE * BYTES_PER_PEL);
+                        recon_yuv.write(reinterpret_cast<const char*>(ref_cr_cur.data()), CHROMA_SIZE * BYTES_PER_PEL);
                     }
                 }
-                // Swap: current reconstruction becomes next frame's reference
-                ref_frame_rd = ref_frame_wr;
-                ref_cb_rd = ref_cb_wr;
-                ref_cr_rd = ref_cr_wr;
             }
 
             frame_idx++;
