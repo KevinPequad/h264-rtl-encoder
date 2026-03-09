@@ -15,6 +15,7 @@ Implemented and validated now:
 - SPS, PPS, IDR, non-IDR, macroblock headers, CAVLC, RBSP trailing bits, and
   emulation-prevention bytes in RTL
 - I-frame and P-frame encode flow
+- partial directional `Intra_4x4` coverage with corrected edge-mode derivation
 - validated `320x176` and `1280x720` multi-frame runs
 - Docker one-frame smoke run
 
@@ -24,7 +25,8 @@ Still missing before full-standard completion:
 - `B-frames`
 - multiple reference pictures
 - full sub-pel motion handling
-- broader intra prediction coverage
+- full `Intra_4x4` coverage
+- `Intra_16x16` luma prediction
 - full in-loop deblocking
 - broader profile and tool coverage
 - final `1280x720 @ 24 fps`, `10`-second RTL-path completion run
@@ -100,7 +102,10 @@ Current implemented features:
 - diamond-style luma motion estimation
 - luma inter prediction from the previous reconstructed frame
 - chroma inter prediction in RTL
-- luma intra prediction: `4x4` DC mode
+- luma intra prediction:
+  `Intra_4x4_Vertical`, `Intra_4x4_Horizontal`, `Intra_4x4_DC`,
+  `Intra_4x4_Diagonal_Down_Right`, `Intra_4x4_Vertical_Right`,
+  `Intra_4x4_Horizontal_Down`, and `Intra_4x4_Horizontal_Up`
 - chroma intra prediction: DC-style path
 - `4x4` H.264 integer transform
 - inverse transform path
@@ -129,7 +134,8 @@ Important non-completion gaps:
 - `B-frames` are not implemented
 - multiple reference pictures are not implemented
 - full sub-pel luma motion compensation is not implemented
-- broad intra mode coverage is not implemented
+- remaining `Intra_4x4` directional modes are not implemented yet
+- `Intra_16x16` luma prediction is not implemented yet
 - full in-loop deblocking is not implemented
 - full-standard profile / level / tool coverage is not implemented
 - the final `240`-frame `1280x720 @ 24 fps` run is not closed yet
@@ -155,15 +161,24 @@ Verified validation/features around the current encoder flow:
 Measured validation points:
 
 - `docker_320x176_1f`: `816,975` cycles
-- `320x176_24f`: `249,438,699` cycles, RTL PSNR avg `44.661152`, RTL SSIM all
-  `0.992607`
-- `720p_24f`: `4,096,671,438` cycles, RTL PSNR avg `41.759917`, RTL SSIM all
-  `0.995232`
+- `320x176_24f_intra_tl_modes`: `249,218,179` cycles, RTL PSNR avg
+  `44.664131`, RTL SSIM all `0.992173`
+- `720p_4f_intra_tl_modes`: `522,499,266` cycles, RTL PSNR avg `43.871116`,
+  RTL SSIM all `0.995403`
 
 Recent correctness fix:
 
 - a `720p` chroma corruption issue was traced to raw input address overflow on
   the Cr fetch path and fixed by widening the raw input address width
+- `Intra_4x4` most-probable-mode derivation at picture edges was fixed to
+  follow the unavailable-neighbor rule, removing the earlier FFmpeg decode
+  errors on the `320x176` multi-frame regression
+
+Recent intra prediction expansion:
+
+- added `Intra_4x4_Horizontal_Up`
+- added top-left-dependent directional `Intra_4x4` support for
+  `Diagonal_Down_Right`, `Vertical_Right`, and `Horizontal_Down`
 
 ## Requirements
 
