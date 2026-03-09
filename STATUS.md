@@ -11,9 +11,9 @@ Current state:
 - RTL-owned H.264 Annex B bitstream generation works for a constrained subset
 - the current flow can produce FFmpeg-decodable `.h264` and packaged `.mp4`
 - multi-frame validation has been completed at `320x176` and `1280x720`
-- the strict current-tree `320x176` validation path now passes `10` and `24`
-  frames after fixing multi-reference `ref_idx_l0` signaling and extending the
-  P-slice path to three forward refs
+- the strict current-tree `320x176` validation path now passes after extending
+  the P-slice path to four forward refs and re-closing decode on that banked
+  path
 - the repository is still not complete as a full H.264 standard encoder
 
 Completion is still blocked by major missing features including CABAC syntax
@@ -138,7 +138,7 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - P-frame support
 - IDR + non-IDR encoded stream output
 - `16x16` macroblock raster-order processing
-- up to three forward reference pictures for P-slice motion search
+- up to four forward reference pictures for P-slice motion search
 - inter / intra macroblock decisioning for P-frames
 - slice-level active reference override and per-macroblock `ref_idx_l0` syntax
 - standards-correct `TE(v)` coding for `ref_idx_l0` in the two-reference
@@ -177,7 +177,7 @@ Implemented now relative to the chosen `x264` baseline:
 - I-picture and P-picture coding
 - full `Intra_4x4` directional luma mode coverage
 - `Intra_16x16` luma prediction and syntax support
-- up-to-three-reference P-slice inter coding with integer-pel search and
+- up-to-four-reference P-slice inter coding with integer-pel search and
   current quarter-pel luma refinement
 - weighted P prediction and `pred_weight_table` signaling on the RTL path
 - `8-bit` and `10-bit` support for `4:2:0` and `4:2:2`
@@ -219,6 +219,13 @@ Measured validation points:
   validation, `913,475,277` cycles, `51,219` bytes, later P-slices with
   `num_ref_idx_l0_active_minus1 = 2`, RTL PSNR avg `43.7528`, RTL SSIM all
   `0.989176`
+- `320x176_4f_multiref4`: strict FFmpeg-decodable four-reference P-slice
+  validation, `92,027,039` cycles, `5,058` bytes, SPS
+  `max_num_ref_frames = 4`, RTL PSNR avg `43.883472`, RTL SSIM all `0.995357`
+- `320x176_6f_multiref4`: strict FFmpeg-decodable four-reference P-slice
+  validation, `217,593,800` cycles, `7,844` bytes, later P-slices with
+  `num_ref_idx_l0_active_minus1 = 3`, RTL PSNR avg `45.207556`, RTL SSIM all
+  `0.996333`
 - `320x176_4f_weightedp`: strict FFmpeg-decodable weighted-P validation on the
   RTL path, Main profile stream, RTL PSNR avg `25.806041`, RTL SSIM all
   `0.333568`
@@ -249,6 +256,8 @@ Current verified milestone outputs:
   later-frame parser corruption seen in strict `320x176` multi-frame decode
 - the current tree now advertises `max_num_ref_frames = 3` and later P-slices
   can emit `num_ref_idx_l0_active_minus1 = 2`
+- the current tree now advertises `max_num_ref_frames = 4` and later P-slices
+  can emit `num_ref_idx_l0_active_minus1 = 3`
 - the current inter path already performs quarter-pel luma refinement and
   chroma fractional interpolation after the integer-pel ME pass
 
@@ -262,7 +271,7 @@ H.264 encoder yet:
 - `B-frames`
 - weighted bipred / `B`-picture weighted prediction
 - direct motion-vector prediction modes
-- reference-picture management beyond the current three-reference P-slice subset
+- reference-picture management beyond the current four-reference P-slice subset
 - broader full-standard sub-pel motion handling beyond the current `16x16`
   quarter-pel luma path
 - broader inter partition coverage and `8x8dct`-class transform support
@@ -275,7 +284,7 @@ Still missing relative to the chosen `x264` software baseline:
 - final CABAC slice integration instead of the current standalone arithmetic
   core only
 - `B` / `BREF` picture handling and the associated reference management
-- reference-picture management beyond the current three-reference P-slice subset
+- reference-picture management beyond the current four-reference P-slice subset
 - weighted bipred support beyond the current weighted P path
 - direct prediction modes
 - broader sub-pel motion estimation / compensation and richer mode decision

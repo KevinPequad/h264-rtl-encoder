@@ -38,10 +38,10 @@ module h264_encoder_top #(
     input  wire [BIT_DEPTH-1:0]  raw_mem_data,
 
     // Reference frame memory (external, luma only)
-    output reg  [1:0]  ref_rd_bank_sel,
+    output reg  [2:0]  ref_rd_bank_sel,
     output reg  [19:0] ref_mem_rd_addr,
     input  wire [BIT_DEPTH-1:0]  ref_mem_rd_data,
-    output reg  [1:0]  ref_wr_bank_sel,
+    output reg  [2:0]  ref_wr_bank_sel,
     output reg         ref_mem_wr_en,
     output reg  [19:0] ref_mem_wr_addr,
     output reg  [BIT_DEPTH-1:0]  ref_mem_wr_data,
@@ -188,12 +188,13 @@ module h264_encoder_top #(
     reg [1:0]  diag_ref_idx;
     reg [1:0]  mb_ref_idx_reg;
     reg [1:0]  me_search_pass;
-    reg [1:0]  valid_ref_count;
-    reg [1:0]  newest_ref_bank;
-    reg [1:0]  older_ref_bank;
-    reg [1:0]  oldest_ref_bank;
-    reg [1:0]  next_write_bank;
-    reg [1:0]  current_write_bank;
+    reg [2:0]  valid_ref_count;
+    reg [2:0]  newest_ref_bank;
+    reg [2:0]  older_ref_bank;
+    reg [2:0]  oldest_ref_bank;
+    reg [2:0]  ancient_ref_bank;
+    reg [2:0]  next_write_bank;
+    reg [2:0]  current_write_bank;
     reg [1:0]  slice_num_ref_idx_l0_active_minus1;
     reg signed [7:0] me_pass0_mvx, me_pass0_mvy;
     reg [17:0] me_pass0_sad;
@@ -399,19 +400,22 @@ wire is_luma = (sub_blk < 5'd16);
         end
     endfunction
 
-    function [1:0] pick_free_ref_bank;
-        input [1:0] latest_bank;
-        input [1:0] older_bank;
-        input [1:0] oldest_bank;
+    function [2:0] pick_free_ref_bank;
+        input [2:0] latest_bank;
+        input [2:0] older_bank;
+        input [2:0] oldest_bank;
+        input [2:0] ancient_bank;
         begin
-            if (latest_bank != 2'd0 && older_bank != 2'd0 && oldest_bank != 2'd0)
-                pick_free_ref_bank = 2'd0;
-            else if (latest_bank != 2'd1 && older_bank != 2'd1 && oldest_bank != 2'd1)
-                pick_free_ref_bank = 2'd1;
-            else if (latest_bank != 2'd2 && older_bank != 2'd2 && oldest_bank != 2'd2)
-                pick_free_ref_bank = 2'd2;
+            if (latest_bank != 3'd0 && older_bank != 3'd0 && oldest_bank != 3'd0 && ancient_bank != 3'd0)
+                pick_free_ref_bank = 3'd0;
+            else if (latest_bank != 3'd1 && older_bank != 3'd1 && oldest_bank != 3'd1 && ancient_bank != 3'd1)
+                pick_free_ref_bank = 3'd1;
+            else if (latest_bank != 3'd2 && older_bank != 3'd2 && oldest_bank != 3'd2 && ancient_bank != 3'd2)
+                pick_free_ref_bank = 3'd2;
+            else if (latest_bank != 3'd3 && older_bank != 3'd3 && oldest_bank != 3'd3 && ancient_bank != 3'd3)
+                pick_free_ref_bank = 3'd3;
             else
-                pick_free_ref_bank = 2'd3;
+                pick_free_ref_bank = 3'd4;
         end
     endfunction
 
@@ -1052,14 +1056,14 @@ pred_buf = {(256*BD){1'b0}};
             me_best_mvx <= 8'sd0; me_best_mvy <= 8'sd0; me_best_sad <= 18'd0; me_fullpel_best_sad <= 18'd0;
             inter_pred_buf <= {(256*BD){1'b0}}; ref_wr_idx <= 9'd0;
             intra16_pred_buf <= {(256*BD){1'b0}}; intra16_mode_mb <= 2'd2;
-            ref_rd_bank_sel <= 2'd0; ref_wr_bank_sel <= 2'd0;
+            ref_rd_bank_sel <= 3'd0; ref_wr_bank_sel <= 3'd0;
             ref_mem_wr_en <= 1'b0; ref_mem_wr_addr <= 20'd0; ref_mem_wr_data <= {BD{1'b0}};
             mvp_x <= 8'sd0; mvp_y <= 8'sd0;
             left_mvx <= 8'sd0; left_mvy <= 8'sd0;
             left_is_inter <= 1'b0; left_is_i16 <= 1'b0; left_ref_idx <= 2'd0; left_mb_i16dc_nz <= 5'd0;
             diag_mvx <= 8'sd0; diag_mvy <= 8'sd0; diag_is_inter <= 1'b0; diag_ref_idx <= 2'd0;
             mb_ref_idx_reg <= 2'd0; me_search_pass <= 2'd0;
-            valid_ref_count <= 2'd0; newest_ref_bank <= 2'd0; older_ref_bank <= 2'd1; oldest_ref_bank <= 2'd2; next_write_bank <= 2'd0; current_write_bank <= 2'd0;
+            valid_ref_count <= 3'd0; newest_ref_bank <= 3'd0; older_ref_bank <= 3'd1; oldest_ref_bank <= 3'd2; ancient_ref_bank <= 3'd3; next_write_bank <= 3'd0; current_write_bank <= 3'd0;
             slice_num_ref_idx_l0_active_minus1 <= 2'd0;
             me_pass0_mvx <= 8'sd0; me_pass0_mvy <= 8'sd0; me_pass0_sad <= 18'd0; me_pass0_ref_mb <= {(256*BD){1'b0}};
             me_pass0_ref_idx <= 2'd0;
@@ -1118,21 +1122,22 @@ pred_buf = {(256*BD){1'b0}};
                     me_search_pass <= 2'd0;
                     mb_ref_idx_reg <= 2'd0;
                     if (is_idr_in) begin
-                        valid_ref_count <= 2'd0;
-                        newest_ref_bank <= 2'd0;
-                        older_ref_bank <= 2'd1;
-                        oldest_ref_bank <= 2'd2;
-                        current_write_bank <= 2'd0;
-                        next_write_bank <= 2'd1;
-                        ref_rd_bank_sel <= 2'd0;
-                        ref_wr_bank_sel <= 2'd0;
+                        valid_ref_count <= 3'd0;
+                        newest_ref_bank <= 3'd0;
+                        older_ref_bank <= 3'd1;
+                        oldest_ref_bank <= 3'd2;
+                        ancient_ref_bank <= 3'd3;
+                        current_write_bank <= 3'd0;
+                        next_write_bank <= 3'd1;
+                        ref_rd_bank_sel <= 3'd0;
+                        ref_wr_bank_sel <= 3'd0;
                         slice_num_ref_idx_l0_active_minus1 <= 2'd0;
                         top_state <= TS_WRITE_SPS;  // IDR: write SPS+PPS
                     end else begin
                         current_write_bank <= next_write_bank;
                         ref_wr_bank_sel <= next_write_bank;
                         ref_rd_bank_sel <= newest_ref_bank;
-                        slice_num_ref_idx_l0_active_minus1 <= (valid_ref_count == 2'd0) ? 2'd0 : (valid_ref_count - 2'd1);
+                        slice_num_ref_idx_l0_active_minus1 <= (valid_ref_count == 3'd0) ? 2'd0 : (valid_ref_count[1:0] - 2'd1);
                         top_state <= TS_WRITE_SLICE; // P-frame: skip SPS/PPS
                     end
                 end
@@ -1172,7 +1177,7 @@ pred_buf = {(256*BD){1'b0}};
                     top_state <= TS_WAIT_ME;
                 end
                 TS_WAIT_ME: if (me_done) begin
-                    if ((valid_ref_count >= 2'd2) && (me_search_pass == 2'd0)) begin
+                    if ((valid_ref_count >= 3'd2) && (me_search_pass == 2'd0)) begin
                         me_pass0_mvx <= me_mvx_w;
                         me_pass0_mvy <= me_mvy_w;
                         me_pass0_sad <= me_sad_w;
@@ -1181,7 +1186,7 @@ pred_buf = {(256*BD){1'b0}};
                         me_search_pass <= 2'd1;
                         ref_rd_bank_sel <= older_ref_bank;
                         top_state <= TS_ME_START;
-                    end else if ((valid_ref_count >= 2'd3) && (me_search_pass == 2'd1)) begin
+                    end else if ((valid_ref_count >= 3'd3) && (me_search_pass == 2'd1)) begin
                         if (me_sad_w < me_pass0_sad) begin
                             me_pass0_mvx <= me_mvx_w;
                             me_pass0_mvy <= me_mvy_w;
@@ -1191,6 +1196,17 @@ pred_buf = {(256*BD){1'b0}};
                         end
                         me_search_pass <= 2'd2;
                         ref_rd_bank_sel <= oldest_ref_bank;
+                        top_state <= TS_ME_START;
+                    end else if ((valid_ref_count >= 3'd4) && (me_search_pass == 2'd2)) begin
+                        if (me_sad_w < me_pass0_sad) begin
+                            me_pass0_mvx <= me_mvx_w;
+                            me_pass0_mvy <= me_mvy_w;
+                            me_pass0_sad <= me_sad_w;
+                            me_pass0_ref_mb <= me_ref_mb_w;
+                            me_pass0_ref_idx <= 2'd2;
+                        end
+                        me_search_pass <= 2'd3;
+                        ref_rd_bank_sel <= ancient_ref_bank;
                         top_state <= TS_ME_START;
                     end else begin : me_finalize
                         reg signed [7:0] sel_fullpel_mvx, sel_fullpel_mvy;
@@ -1203,21 +1219,28 @@ pred_buf = {(256*BD){1'b0}};
                         reg [1:0] match_cnt;
                         reg signed [7:0] med_x, med_y;
 
-                        if ((valid_ref_count >= 2'd3) && (me_search_pass == 2'd2) && (me_sad_w < me_pass0_sad)) begin
+                        if ((valid_ref_count >= 3'd4) && (me_search_pass == 2'd3) && (me_sad_w < me_pass0_sad)) begin
+                            sel_fullpel_mvx = me_mvx_w;
+                            sel_fullpel_mvy = me_mvy_w;
+                            sel_sad = me_sad_w;
+                            sel_ref_mb = me_ref_mb_w;
+                            sel_ref_idx = 2'd3;
+                            ref_rd_bank_sel <= ancient_ref_bank;
+                        end else if ((valid_ref_count >= 3'd3) && (me_search_pass == 2'd2) && (me_sad_w < me_pass0_sad)) begin
                             sel_fullpel_mvx = me_mvx_w;
                             sel_fullpel_mvy = me_mvy_w;
                             sel_sad = me_sad_w;
                             sel_ref_mb = me_ref_mb_w;
                             sel_ref_idx = 2'd2;
                             ref_rd_bank_sel <= oldest_ref_bank;
-                        end else if ((valid_ref_count >= 2'd2) && (me_search_pass == 2'd1) && (me_sad_w < me_pass0_sad)) begin
+                        end else if ((valid_ref_count >= 3'd2) && (me_search_pass == 2'd1) && (me_sad_w < me_pass0_sad)) begin
                             sel_fullpel_mvx = me_mvx_w;
                             sel_fullpel_mvy = me_mvy_w;
                             sel_sad = me_sad_w;
                             sel_ref_mb = me_ref_mb_w;
                             sel_ref_idx = 2'd1;
                             ref_rd_bank_sel <= older_ref_bank;
-                        end else if ((valid_ref_count >= 2'd2) && (me_search_pass != 2'd0)) begin
+                        end else if ((valid_ref_count >= 3'd2) && (me_search_pass != 2'd0)) begin
                             sel_fullpel_mvx = me_pass0_mvx;
                             sel_fullpel_mvy = me_pass0_mvy;
                             sel_sad = me_pass0_sad;
@@ -1225,7 +1248,8 @@ pred_buf = {(256*BD){1'b0}};
                             sel_ref_idx = me_pass0_ref_idx;
                             ref_rd_bank_sel <= (me_pass0_ref_idx == 2'd0) ? newest_ref_bank :
                                                (me_pass0_ref_idx == 2'd1) ? older_ref_bank :
-                                                                            oldest_ref_bank;
+                                               (me_pass0_ref_idx == 2'd2) ? oldest_ref_bank :
+                                                                            ancient_ref_bank;
                         end else begin
                             sel_fullpel_mvx = me_mvx_w;
                             sel_fullpel_mvy = me_mvy_w;
@@ -2511,18 +2535,19 @@ pred_buf = {(256*BD){1'b0}};
                          else if (bs_cmd_done) begin
                              done <= 1'b1;
                              if (is_p_frame) begin
+                                 ancient_ref_bank <= oldest_ref_bank;
                                  oldest_ref_bank <= older_ref_bank;
                                  older_ref_bank <= newest_ref_bank;
                                  newest_ref_bank <= current_write_bank;
-                                 valid_ref_count <= (valid_ref_count == 2'd0) ? 2'd1 :
-                                                    (valid_ref_count == 2'd1) ? 2'd2 : 2'd3;
-                                 next_write_bank <= pick_free_ref_bank(current_write_bank, newest_ref_bank, older_ref_bank);
+                                 valid_ref_count <= (valid_ref_count < 3'd4) ? (valid_ref_count + 3'd1) : 3'd4;
+                                 next_write_bank <= pick_free_ref_bank(current_write_bank, newest_ref_bank, older_ref_bank, oldest_ref_bank);
                              end else begin
                                  newest_ref_bank <= current_write_bank;
                                  older_ref_bank <= current_write_bank;
                                  oldest_ref_bank <= current_write_bank;
-                                 valid_ref_count <= 2'd1;
-                                 next_write_bank <= pick_free_ref_bank(current_write_bank, current_write_bank, current_write_bank);
+                                 ancient_ref_bank <= current_write_bank;
+                                 valid_ref_count <= 3'd1;
+                                 next_write_bank <= pick_free_ref_bank(current_write_bank, current_write_bank, current_write_bank, current_write_bank);
                              end
                              top_state <= TS_IDLE;
                              dbg_frame_cnt <= dbg_frame_cnt + 8'd1;

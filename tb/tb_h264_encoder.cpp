@@ -46,9 +46,9 @@ using pixel_t = typename std::conditional<(BD > 8), uint16_t, uint8_t>::type;
 static std::vector<uint8_t> raw_file_buf;  // Raw file bytes
 static std::vector<pixel_t> raw_pixel_mem; // Unpacked pixels
 static std::vector<uint8_t> bitstream_mem;
-static std::array<std::vector<pixel_t>, 4> ref_frame_bank;
-static std::array<std::vector<pixel_t>, 4> ref_cb_bank;
-static std::array<std::vector<pixel_t>, 4> ref_cr_bank;
+static std::array<std::vector<pixel_t>, 5> ref_frame_bank;
+static std::array<std::vector<pixel_t>, 5> ref_cb_bank;
+static std::array<std::vector<pixel_t>, 5> ref_cr_bank;
 static volatile bool got_sigint = false;
 static void sigint_handler(int) { got_sigint = true; }
 
@@ -179,7 +179,7 @@ int main(int argc, char** argv) {
         }
 
         { // Reference frame memory read (from previous frame's reconstruction)
-            uint32_t bank = dut->ref_rd_bank_sel & 0x3;
+            uint32_t bank = dut->ref_rd_bank_sel & 0x7;
             uint32_t addr = dut->ref_mem_rd_addr;
             if (bank < ref_frame_bank.size() && addr < ref_frame_bank[bank].size())
                 dut->ref_mem_rd_data = ref_frame_bank[bank][addr];
@@ -188,13 +188,13 @@ int main(int argc, char** argv) {
         }
 
         { // Chroma Cb reference read
-            uint32_t bank = dut->ref_rd_bank_sel & 0x3;
+            uint32_t bank = dut->ref_rd_bank_sel & 0x7;
             uint32_t addr = dut->chr_cb_ref_rd_addr;
             dut->chr_cb_ref_rd_data =
                 (bank < ref_cb_bank.size() && addr < ref_cb_bank[bank].size()) ? ref_cb_bank[bank][addr] : CHROMA_MID;
         }
         { // Chroma Cr reference read
-            uint32_t bank = dut->ref_rd_bank_sel & 0x3;
+            uint32_t bank = dut->ref_rd_bank_sel & 0x7;
             uint32_t addr = dut->chr_cr_ref_rd_addr;
             dut->chr_cr_ref_rd_data =
                 (bank < ref_cr_bank.size() && addr < ref_cr_bank[bank].size()) ? ref_cr_bank[bank][addr] : CHROMA_MID;
@@ -211,20 +211,20 @@ int main(int argc, char** argv) {
         }
 
         if (dut->ref_mem_wr_en) {
-            uint32_t bank = dut->ref_wr_bank_sel & 0x3;
+            uint32_t bank = dut->ref_wr_bank_sel & 0x7;
             uint32_t addr = dut->ref_mem_wr_addr;
             if (bank < ref_frame_bank.size() && addr < ref_frame_bank[bank].size())
                 ref_frame_bank[bank][addr] = dut->ref_mem_wr_data;
         }
 
         if (dut->chr_cb_ref_wr_en) {
-            uint32_t bank = dut->ref_wr_bank_sel & 0x3;
+            uint32_t bank = dut->ref_wr_bank_sel & 0x7;
             uint32_t addr = dut->chr_cb_ref_wr_addr;
             if (bank < ref_cb_bank.size() && addr < ref_cb_bank[bank].size())
                 ref_cb_bank[bank][addr] = dut->chr_cb_ref_wr_data;
         }
         if (dut->chr_cr_ref_wr_en) {
-            uint32_t bank = dut->ref_wr_bank_sel & 0x3;
+            uint32_t bank = dut->ref_wr_bank_sel & 0x7;
             uint32_t addr = dut->chr_cr_ref_wr_addr;
             if (bank < ref_cr_bank.size() && addr < ref_cr_bank[bank].size())
                 ref_cr_bank[bank][addr] = dut->chr_cr_ref_wr_data;
@@ -236,7 +236,7 @@ int main(int argc, char** argv) {
                     frame_idx, (unsigned long long)cycle, total_bs_bytes);
 
             {
-                uint32_t bank = dut->ref_wr_bank_sel & 0x3;
+                uint32_t bank = dut->ref_wr_bank_sel & 0x7;
                 if (bank >= ref_frame_bank.size()) bank = 0;
                 const auto& ref_frame_cur = ref_frame_bank[bank];
                 const auto& ref_cb_cur = ref_cb_bank[bank];

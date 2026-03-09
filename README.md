@@ -15,7 +15,7 @@ Implemented and validated now:
 - SPS, PPS, IDR, non-IDR, macroblock headers, CAVLC, RBSP trailing bits, and
   emulation-prevention bytes in RTL
 - I-frame and P-frame encode flow
-- up to three-reference P-slice support with RTL-owned `ref_idx_l0`
+- up to four-reference P-slice support with RTL-owned `ref_idx_l0`
   signaling across the active-reference count
 - full directional `Intra_4x4` mode support in RTL
 - `Intra_16x16` luma prediction and syntax support in RTL
@@ -149,7 +149,7 @@ Current implemented features:
 - P-frame support
 - IDR + non-IDR encoded stream output
 - `16x16` macroblock raster-order processing
-- up to three forward reference pictures for P-slice motion search
+- up to four forward reference pictures for P-slice motion search
 - inter/intra macroblock decisioning for P-frames
 - slice-level active reference override and per-macroblock `ref_idx_l0` syntax
 - standards-correct `TE(v)` coding for `ref_idx_l0` when two P-slice
@@ -193,7 +193,7 @@ Implemented now relative to the chosen `x264` baseline:
 - I and P picture flow
 - full `Intra_4x4` directional luma mode coverage
 - `Intra_16x16` luma prediction and syntax support
-- up-to-three-reference P-slice inter flow with integer-pel search and current
+- up-to-four-reference P-slice inter flow with integer-pel search and current
   quarter-pel luma refinement
 - weighted P prediction and `pred_weight_table` ownership on the RTL path
 - `8-bit` and `10-bit` operation for `4:2:0` and `4:2:2`
@@ -213,7 +213,7 @@ Important non-completion gaps:
 - `B-frames` are not implemented
 - weighted bipred / `B`-picture weighted prediction is not implemented
 - direct motion-vector prediction modes are not implemented
-- reference-picture management beyond the current three-reference P-slice subset
+- reference-picture management beyond the current four-reference P-slice subset
   is not implemented
 - broader full-standard sub-pel motion handling beyond the current `16x16`
   quarter-pel luma path is not implemented
@@ -258,6 +258,13 @@ Measured validation points:
   validation on the current tree, `913,475,277` cycles, `51,219` bytes, later
   P-slices with `num_ref_idx_l0_active_minus1 = 2`, RTL PSNR avg `43.7528`,
   RTL SSIM all `0.989176`
+- `320x176_4f_multiref4`: strict FFmpeg-decodable four-reference P-slice
+  validation on the current tree, `92,027,039` cycles, `5,058` bytes, SPS
+  `max_num_ref_frames = 4`, RTL PSNR avg `43.883472`, RTL SSIM all `0.995357`
+- `320x176_6f_multiref4`: strict FFmpeg-decodable four-reference P-slice
+  validation on the current tree, `217,593,800` cycles, `7,844` bytes, later
+  P-slices with `num_ref_idx_l0_active_minus1 = 3`, RTL PSNR avg `45.207556`,
+  RTL SSIM all `0.996333`
 - `320x176_4f_weightedp`: strict FFmpeg-decodable weighted-P validation on the
   RTL path, Main profile stream, RTL PSNR avg `25.806041`, RTL SSIM all
   `0.333568`
@@ -283,6 +290,8 @@ Recent correctness fix:
   later-frame parser corruption on the strict `320x176` multi-frame path
 - the current tree now advertises `max_num_ref_frames = 3` and can emit later
   P-slices with `num_ref_idx_l0_active_minus1 = 2`
+- the current tree now advertises `max_num_ref_frames = 4` and later P-slices
+  can emit `num_ref_idx_l0_active_minus1 = 3`
 - the current inter path already performs quarter-pel luma refinement and
   chroma fractional interpolation after the integer-pel motion-estimation pass
 
@@ -302,12 +311,12 @@ Recent entropy coding groundwork:
 Recent multi-reference expansion:
 
 - expanded the banked P-slice reference path from two forward refs to up to
-  three forward refs on the current tree
-- SPS now advertises `max_num_ref_frames = 3`
+  four forward refs on the current tree
+- SPS now advertises `max_num_ref_frames = 4`
 - later P-slices now emit `num_ref_idx_active_override_flag = 1` and
-  `num_ref_idx_l0_active_minus1 = 2` when the third reference is active
+  `num_ref_idx_l0_active_minus1 = 3` when the fourth reference is active
 - inter macroblock headers now emit RTL-owned `ref_idx_l0` syntax for the
-  current three-reference P-slice path
+  current four-reference P-slice path
 
 ## Requirements
 
