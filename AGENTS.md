@@ -163,7 +163,7 @@ The testbench must not:
   - P-frame support
   - IDR + non-IDR encoded stream output
   - `16x16` macroblock raster-order processing
-  - Up to three forward reference pictures for P-slice motion search
+  - Up to four forward reference pictures for P-slice motion search
   - Inter/intra macroblock decisioning for P-frames
   - Slice-level active reference override and per-macroblock `ref_idx_l0`
     syntax
@@ -214,7 +214,7 @@ The testbench must not:
   - I-picture and P-picture coding
   - Full directional `Intra_4x4` luma mode coverage
   - `Intra_16x16` luma prediction and syntax support
-  - Up-to-three-reference P-slice inter coding with integer-pel search and
+  - Up-to-four-reference P-slice inter coding with integer-pel search and
     current quarter-pel luma refinement
   - Weighted P prediction and `pred_weight_table` signaling on the RTL path
   - `8-bit` and `10-bit` support for `4:2:0` and `4:2:2`
@@ -268,6 +268,16 @@ The testbench must not:
     `num_ref_idx_l0_active_minus1 = 2`, RTL PSNR avg `43.7528`, RTL SSIM all
     `0.989176`, `output/validation_multiref3_320x176_24f_timeout1e9.h264`,
     and `output/validation_multiref3_320x176_24f_timeout1e9.mp4`
+  - strict four-reference P-slice validation at `320x176`, `4` frames,
+    `92,027,039` cycles, `5,058` bytes, SPS `max_num_ref_frames = 4`, RTL
+    PSNR avg `43.883472`, RTL SSIM all `0.995357`,
+    `output/validation_multiref4_320x176_4f.h264`, and
+    `output/validation_multiref4_320x176_4f.mp4`
+  - strict four-reference P-slice validation at `320x176`, `6` frames,
+    `217,593,800` cycles, `7,844` bytes, later P-slices with
+    `num_ref_idx_l0_active_minus1 = 3`, RTL PSNR avg `45.207556`, RTL SSIM all
+    `0.996333`, `output/validation_multiref4_320x176_6f.h264`, and
+    `output/validation_multiref4_320x176_6f.mp4`
   - `1280x720 @ 24 fps`, `24` frames, `4,096,671,438` cycles, RTL PSNR avg
     `41.759917`, RTL SSIM all `0.995232`
   - weighted-P validation at `320x176`, `4` frames, strict FFmpeg-decodable
@@ -290,6 +300,8 @@ The testbench must not:
   `10`-frame / `24`-frame validations close cleanly on that fix
 - The current tree now advertises `max_num_ref_frames = 3` and later P-slices
   can emit `num_ref_idx_l0_active_minus1 = 2`
+- The current tree now advertises `max_num_ref_frames = 4` and later P-slices
+  can emit `num_ref_idx_l0_active_minus1 = 3`
 - The current inter path already performs quarter-pel luma refinement and
   chroma fractional interpolation after the integer-pel ME pass
 
@@ -299,7 +311,7 @@ The testbench must not:
   - No `B-frames`
   - No weighted bipred / `B`-picture weighted prediction
   - No direct motion-vector prediction modes
-  - No reference management beyond the current three-reference P-slice subset
+  - No reference management beyond the current four-reference P-slice subset
   - No broader full-standard sub-pel motion path beyond the current `16x16`
     quarter-pel luma / chroma fractional inter flow
   - No broader inter partition coverage or `8x8dct`-class transform support
@@ -310,7 +322,7 @@ The testbench must not:
 - Required closure before calling the encoder complete:
   - CABAC integrated into real RTL slice syntax, not only a standalone core
   - `B` / `BREF` picture support
-  - Reference-picture management beyond the current three-reference P-slice subset
+  - Reference-picture management beyond the current four-reference P-slice subset
   - Weighted bipred support beyond the current weighted P path
   - Direct motion-vector prediction support
   - Broader sub-pel motion estimation / compensation support

@@ -119,10 +119,38 @@ module h264_bitstream #(
     wire use_main_profile = weighted_pred_enable && !use_high_profile;
     wire weighted_pred_flag = weighted_pred_enable;
     wire slice_multi_ref_enable = (slice_num_ref_idx_l0_active_minus1 != 2'd0);
-    wire [4:0] slice_multi_ref_bits =
-        (slice_num_ref_idx_l0_active_minus1 == 2'd1) ? 5'b10100 : 5'b10110;
-    wire [9:0] slice_multi_ref_bits_qp =
-        (slice_num_ref_idx_l0_active_minus1 == 2'd1) ? 10'b1010001010 : 10'b1011001010;
+    reg [6:0]  slice_multi_ref_bits;
+    reg [3:0]  slice_multi_ref_bits_len;
+    reg [11:0] slice_multi_ref_bits_qp;
+    reg [3:0]  slice_multi_ref_bits_qp_len;
+    always @(*) begin
+        case (slice_num_ref_idx_l0_active_minus1)
+            2'd1: begin
+                slice_multi_ref_bits    = 7'b1010000;      // 1 + ue(1)=010 + reorder_l0=0
+                slice_multi_ref_bits_len = 4'd5;
+                slice_multi_ref_bits_qp = 12'b101000101000; // + adaptive_marking=0 + qp_delta=1 + deblock=010
+                slice_multi_ref_bits_qp_len = 4'd10;
+            end
+            2'd2: begin
+                slice_multi_ref_bits    = 7'b1011000;      // 1 + ue(2)=011 + reorder_l0=0
+                slice_multi_ref_bits_len = 4'd5;
+                slice_multi_ref_bits_qp = 12'b101100101000;
+                slice_multi_ref_bits_qp_len = 4'd10;
+            end
+            2'd3: begin
+                slice_multi_ref_bits    = 7'b1001000;      // 1 + ue(3)=00100 + reorder_l0=0
+                slice_multi_ref_bits_len = 4'd7;
+                slice_multi_ref_bits_qp = 12'b100100001010;
+                slice_multi_ref_bits_qp_len = 4'd12;
+            end
+            default: begin
+                slice_multi_ref_bits    = 7'd0;
+                slice_multi_ref_bits_len = 4'd0;
+                slice_multi_ref_bits_qp = 12'd0;
+                slice_multi_ref_bits_qp_len = 4'd0;
+            end
+        endcase
+    end
     wire luma_weight_non_default = (luma_weight != $signed(9'd1 << luma_log2_weight_denom)) || (luma_offset != 9'sd0);
     wire chroma_weight_non_default =
         (chroma_weight_cb != $signed(9'd1 << chroma_log2_weight_denom)) || (chroma_offset_cb != 9'sd0) ||
@@ -361,7 +389,7 @@ module h264_bitstream #(
                             //   qpprime_y_zero_transform_bypass=0,
                             //   seq_scaling_matrix_present=0
                             // Then: log2_max_frame_num_minus4=UE(0)='1'
-                            // + poc_type=UE(2)='011' + max_num_ref_frames=UE(3)='00100'
+                            // + poc_type=UE(2)='011' + max_num_ref_frames=UE(4)='00101'
                             // + gaps_in_frame_num=0
                             6'd8: begin
                                 if (use_high_profile) begin
@@ -374,8 +402,8 @@ module h264_bitstream #(
                                 end else begin
                                     // Baseline: all-in-one
                                     // sps_id + log2_max_frame_num + poc_type + max_ref + gaps
-                                    // 1+1+3+5+1 = 11 bits: 11011001000
-                                    bit_buf <= {11'b11011001000, 85'd0};
+                                    // 1+1+3+5+1 = 11 bits: 11011001010
+                                    bit_buf <= {11'b11011001010, 85'd0};
                                     bit_cnt <= 7'd11;
                                     ue_input <= MB_COLS - 1;
                                     sub <= sub + 6'd1;
@@ -449,11 +477,11 @@ module h264_bitstream #(
                             // Then: log2_max_frame_num_minus4=UE(0)='1'
                             // + poc_type=UE(0)='1' (poc_type=0)
                             // + log2_max_pic_order_cnt_lsb_minus4=UE(2)='011' (max_poc_lsb=64)
-                            // + max_num_ref_frames=UE(3)='00100'
+                            // + max_num_ref_frames=UE(4)='00101'
                             // + gaps_in_frame_num=0
-                            // = 0,0 + 1,1,011,00100,0 = 13 bits: 0011011001000
+                            // = 0,0 + 1,1,011,00101,0 = 13 bits: 0011011001010
                             6'd22: begin
-                                bit_buf <= bit_buf | ({13'b0011011001000, 83'd0} >> bit_cnt[6:0]);
+                                bit_buf <= bit_buf | ({13'b0011011001010, 83'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + 7'd13;
                                 // Emit to make room
                                 state <= S_EMIT;
@@ -549,15 +577,15 @@ module h264_bitstream #(
                                             // P-slice base header up to ref_pic_list_reordering_flag_l0.
                                             if (slice_multi_ref_enable) begin
                                                 bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits, 76'd0};
-                                                bit_cnt <= 7'd18;
+                                                bit_cnt <= 7'd13 + {3'd0, slice_multi_ref_bits_len};
                                             end else begin
                                                 bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 2'b00, 81'd0};
                                                 bit_cnt <= 7'd15;
                                             end
                                         end else begin
                                             if (slice_multi_ref_enable) begin
-                                                bit_buf <= {3'b111, frame_num, slice_multi_ref_bits, 84'd0};
-                                                bit_cnt <= 7'd12;
+                                                bit_buf <= {3'b111, frame_num, slice_multi_ref_bits, 82'd0};
+                                                bit_cnt <= 7'd7 + {3'd0, slice_multi_ref_bits_len};
                                             end else begin
                                                 bit_buf <= {3'b111, frame_num, 2'b00, 87'd0};
                                                 bit_cnt <= 7'd9;
@@ -572,8 +600,8 @@ module h264_bitstream #(
                                             // frame_num(4), poc_lsb(6), num_ref_override=0, ref_list_reorder=0,
                                             // adaptive_marking=0, qp_delta=SE(0)'1', disable_deblocking=UE(1)'010'
                                             if (slice_multi_ref_enable) begin
-                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits_qp, 73'd0};
-                                                bit_cnt <= 7'd23;
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits_qp, 71'd0};
+                                                bit_cnt <= 7'd13 + {3'd0, slice_multi_ref_bits_qp_len};
                                             end else begin
                                                 bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, 3'b010, 76'd0};
                                                 bit_cnt <= 7'd20;
@@ -581,8 +609,8 @@ module h264_bitstream #(
                                         end else begin
                                             // Baseline/Main P-slice with poc_type=2, no poc_lsb
                                             if (slice_multi_ref_enable) begin
-                                                bit_buf <= {3'b111, frame_num, slice_multi_ref_bits_qp, 79'd0};
-                                                bit_cnt <= 7'd17;
+                                                bit_buf <= {3'b111, frame_num, slice_multi_ref_bits_qp, 77'd0};
+                                                bit_cnt <= 7'd7 + {3'd0, slice_multi_ref_bits_qp_len};
                                             end else begin
                                                 bit_buf <= {3'b111, frame_num, 4'b0001, 3'b010, 82'd0};
                                                 bit_cnt <= 7'd14;
