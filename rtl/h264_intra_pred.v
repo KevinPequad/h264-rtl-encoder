@@ -1,53 +1,65 @@
-// h264_intra_pred.v — Intra Prediction (DC mode for 4x4 block)
-// Computes DC prediction for a 4x4 block
-// Produces predicted block and signed residual (original - predicted)
-// All arrays are flattened for Verilator compatibility
+// h264_intra_pred.v - Intra Prediction (vertical, horizontal, DC for 4x4)
+// Chooses the best supported mode by minimum SAD against the original block.
+// Outputs the selected prediction block, residual, and H.264 intra4x4 mode.
 
 module h264_intra_pred #(
     parameter BIT_DEPTH = 8
 ) (
-    input  wire        clk,
-    input  wire        rst_n,
-
-    input  wire        start,
-    output reg         done,
-
-    input  wire        top_avail,
-    input  wire        left_avail,
-
-    // Input: 4x4 original block (flattened, each pixel BIT_DEPTH bits)
-    input  wire [16*BIT_DEPTH-1:0]  orig_4x4,
-
-    // Neighbor pixels
-    input  wire [4*BIT_DEPTH-1:0]   top_4,
-    input  wire [4*BIT_DEPTH-1:0]   left_4,
-
-    // Outputs (flattened)
-    output reg  [16*BIT_DEPTH-1:0]    pred_4x4,
-    output reg  [16*(BIT_DEPTH+1)-1:0] resid_4x4    // signed (BIT_DEPTH+1)-bit per pixel
+    input  wire                      clk,
+    input  wire                      rst_n,
+    input  wire                      start,
+    output reg                       done,
+    input  wire                      top_avail,
+    input  wire                      left_avail,
+    input  wire [16*BIT_DEPTH-1:0]   orig_4x4,
+    input  wire [4*BIT_DEPTH-1:0]    top_4,
+    input  wire [4*BIT_DEPTH-1:0]    left_4,
+    output reg  [16*BIT_DEPTH-1:0]   pred_4x4,
+    output reg  [16*(BIT_DEPTH+1)-1:0] resid_4x4,
+    output reg  [3:0]                pred_mode
 );
 
-    reg [2:0] state;
-    localparam S_IDLE    = 3'd0;
-    localparam S_SUM     = 3'd1;
-    localparam S_COMPUTE = 3'd2;
-    localparam S_FILL    = 3'd3;
-    localparam S_DONE    = 3'd4;
-
-    localparam BD = BIT_DEPTH;
+    localparam BD  = BIT_DEPTH;
     localparam BD1 = BIT_DEPTH + 1;
-    localparam [BD-1:0] DC_DEFAULT = {1'b1, {(BD-1){1'b0}}}; // 1 << (BIT_DEPTH-1)
+    localparam SAD_W = BIT_DEPTH + 5;
 
-    reg [BD+2:0] sum_top;
-    reg [BD+2:0] sum_left;
-    reg [BD-1:0] dc_value;
-    reg [2:0]  cnt;
-    reg [4:0]  fill_idx;
+    localparam [3:0] MODE_VERT = 4'd0;
+    localparam [3:0] MODE_HOR  = 4'd1;
+    localparam [3:0] MODE_DC   = 4'd2;
+
+    localparam [BD-1:0] DC_DEFAULT = {1'b1, {(BD-1){1'b0}}};
 
     wire [BD-1:0] top_pix  [0:3];
     wire [BD-1:0] left_pix [0:3];
 
-    // Unpack neighbor pixels from flat inputs
+    reg [BD+2:0] sum_top_c;
+    reg [BD+2:0] sum_left_c;
+    reg [BD-1:0] dc_value_c;
+
+    reg [16*BD-1:0] pred_v_c;
+    reg [16*BD-1:0] pred_h_c;
+    reg [16*BD-1:0] pred_d_c;
+    reg [16*BD1-1:0] resid_v_c;
+    reg [16*BD1-1:0] resid_h_c;
+    reg [16*BD1-1:0] resid_d_c;
+    reg [16*BD-1:0] best_pred_c;
+    reg [16*BD1-1:0] best_resid_c;
+
+    reg [SAD_W-1:0] sad_v_c;
+    reg [SAD_W-1:0] sad_h_c;
+    reg [SAD_W-1:0] sad_d_c;
+    reg [SAD_W-1:0] best_sad_c;
+    reg [3:0] best_mode_c;
+
+    integer idx;
+    integer row_idx;
+    integer col_idx;
+    integer flat_idx;
+
+    reg [BD-1:0] orig_pix_c;
+    reg [BD-1:0] pred_pix_c;
+    reg [BD:0] abs_diff_c;
+
     genvar gi;
     generate
         for (gi = 0; gi < 4; gi = gi + 1) begin : unpack_neighbors
@@ -56,74 +68,106 @@ module h264_intra_pred #(
         end
     endgenerate
 
+    always @(*) begin
+        sum_top_c = {(BD+3){1'b0}};
+        sum_left_c = {(BD+3){1'b0}};
+        for (idx = 0; idx < 4; idx = idx + 1) begin
+            if (top_avail)
+                sum_top_c = sum_top_c + {{3{1'b0}}, top_pix[idx]};
+            if (left_avail)
+                sum_left_c = sum_left_c + {{3{1'b0}}, left_pix[idx]};
+        end
+
+        if (top_avail && left_avail)
+            dc_value_c = (sum_top_c + sum_left_c + {{(BD+1){1'b0}}, 3'd4}) >> 3;
+        else if (top_avail)
+            dc_value_c = (sum_top_c + {{(BD+1){1'b0}}, 2'd2}) >> 2;
+        else if (left_avail)
+            dc_value_c = (sum_left_c + {{(BD+1){1'b0}}, 2'd2}) >> 2;
+        else
+            dc_value_c = DC_DEFAULT;
+
+        pred_v_c = {(16*BD){1'b0}};
+        pred_h_c = {(16*BD){1'b0}};
+        pred_d_c = {(16*BD){1'b0}};
+        resid_v_c = {(16*BD1){1'b0}};
+        resid_h_c = {(16*BD1){1'b0}};
+        resid_d_c = {(16*BD1){1'b0}};
+
+        sad_v_c = {SAD_W{1'b1}};
+        sad_h_c = {SAD_W{1'b1}};
+        sad_d_c = {SAD_W{1'b0}};
+
+        for (row_idx = 0; row_idx < 4; row_idx = row_idx + 1) begin
+            for (col_idx = 0; col_idx < 4; col_idx = col_idx + 1) begin
+                flat_idx = row_idx * 4 + col_idx;
+                orig_pix_c = orig_4x4[flat_idx*BD +: BD];
+
+                pred_pix_c = top_avail ? top_pix[col_idx] : {BD{1'b0}};
+                pred_v_c[flat_idx*BD +: BD] = pred_pix_c;
+                resid_v_c[flat_idx*BD1 +: BD1] = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
+                if (orig_pix_c >= pred_pix_c)
+                    abs_diff_c = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
+                else
+                    abs_diff_c = {1'b0, pred_pix_c} - {1'b0, orig_pix_c};
+                if (top_avail)
+                    sad_v_c = sad_v_c + abs_diff_c[SAD_W-1:0];
+
+                pred_pix_c = left_avail ? left_pix[row_idx] : {BD{1'b0}};
+                pred_h_c[flat_idx*BD +: BD] = pred_pix_c;
+                resid_h_c[flat_idx*BD1 +: BD1] = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
+                if (orig_pix_c >= pred_pix_c)
+                    abs_diff_c = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
+                else
+                    abs_diff_c = {1'b0, pred_pix_c} - {1'b0, orig_pix_c};
+                if (left_avail)
+                    sad_h_c = sad_h_c + abs_diff_c[SAD_W-1:0];
+
+                pred_pix_c = dc_value_c;
+                pred_d_c[flat_idx*BD +: BD] = pred_pix_c;
+                resid_d_c[flat_idx*BD1 +: BD1] = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
+                if (orig_pix_c >= pred_pix_c)
+                    abs_diff_c = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
+                else
+                    abs_diff_c = {1'b0, pred_pix_c} - {1'b0, orig_pix_c};
+                sad_d_c = sad_d_c + abs_diff_c[SAD_W-1:0];
+            end
+        end
+
+        best_mode_c = MODE_DC;
+        best_sad_c = sad_d_c;
+        best_pred_c = pred_d_c;
+        best_resid_c = resid_d_c;
+
+        if (top_avail && (sad_v_c < best_sad_c)) begin
+            best_mode_c = MODE_VERT;
+            best_sad_c = sad_v_c;
+            best_pred_c = pred_v_c;
+            best_resid_c = resid_v_c;
+        end
+
+        if (left_avail && (sad_h_c < best_sad_c)) begin
+            best_mode_c = MODE_HOR;
+            best_sad_c = sad_h_c;
+            best_pred_c = pred_h_c;
+            best_resid_c = resid_h_c;
+        end
+    end
+
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            state    <= S_IDLE;
-            done     <= 1'b0;
-            sum_top  <= {(BD+3){1'b0}};
-            sum_left <= {(BD+3){1'b0}};
-            dc_value <= DC_DEFAULT;
-            cnt      <= 3'd0;
-            fill_idx <= 5'd0;
-            pred_4x4   <= {(16*BD){1'b0}};
-            resid_4x4  <= {(16*BD1){1'b0}};
+            done <= 1'b0;
+            pred_4x4 <= {(16*BD){1'b0}};
+            resid_4x4 <= {(16*BD1){1'b0}};
+            pred_mode <= MODE_DC;
         end else begin
             done <= 1'b0;
-            case (state)
-                S_IDLE: begin
-                    if (start) begin
-                        state    <= S_SUM;
-                        sum_top  <= {(BD+3){1'b0}};
-                        sum_left <= {(BD+3){1'b0}};
-                        cnt      <= 3'd0;
-                    end
-                end
-
-                S_SUM: begin
-                    if (cnt < 3'd4) begin
-                        if (top_avail)
-                            sum_top <= sum_top + {{3{1'b0}}, top_pix[cnt[1:0]]};
-                        if (left_avail)
-                            sum_left <= sum_left + {{3{1'b0}}, left_pix[cnt[1:0]]};
-                        cnt <= cnt + 3'd1;
-                    end else begin
-                        state <= S_COMPUTE;
-                    end
-                end
-
-                S_COMPUTE: begin
-                    if (top_avail && left_avail) begin
-                        dc_value <= (sum_top + sum_left + {{(BD+1){1'b0}}, 2'd3, 1'b0} + 1'b0 + 1'b0) >> 3;
-                    end else if (top_avail) begin
-                        dc_value <= (sum_top + {{(BD+1){1'b0}}, 2'd2}) >> 2;
-                    end else if (left_avail) begin
-                        dc_value <= (sum_left + {{(BD+1){1'b0}}, 2'd2}) >> 2;
-                    end else begin
-                        dc_value <= DC_DEFAULT;
-                    end
-                    fill_idx <= 5'd0;
-                    state    <= S_FILL;
-                end
-
-                S_FILL: begin
-                    if (fill_idx < 5'd16) begin
-                        pred_4x4[fill_idx*BD +: BD] <= dc_value;
-                        resid_4x4[fill_idx*BD1 +: BD1] <=
-                            {1'b0, orig_4x4[fill_idx*BD +: BD]} -
-                            {1'b0, dc_value};
-                        fill_idx <= fill_idx + 5'd1;
-                    end else begin
-                        state <= S_DONE;
-                    end
-                end
-
-                S_DONE: begin
-                    done  <= 1'b1;
-                    state <= S_IDLE;
-                end
-
-                default: state <= S_IDLE;
-            endcase
+            if (start) begin
+                pred_4x4 <= best_pred_c;
+                resid_4x4 <= best_resid_c;
+                pred_mode <= best_mode_c;
+                done <= 1'b1;
+            end
         end
     end
 
