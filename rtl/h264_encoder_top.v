@@ -180,9 +180,10 @@ module h264_encoder_top #(
     // Intra prediction
     reg         pred_start;
     wire        pred_done;
-    reg         sb_top_avail, sb_left_avail;
+    reg         sb_top_avail, sb_left_avail, sb_top_left_avail;
     reg [4*BIT_DEPTH-1:0]  sb_top_pixels;
     reg [4*BIT_DEPTH-1:0]  sb_left_pixels;
+    reg [BIT_DEPTH-1:0]    sb_top_left_pixel;
     reg [16*BIT_DEPTH-1:0] sb_orig_pixels;
     wire [16*BIT_DEPTH-1:0]      pred_4x4_w;
     wire [16*(BIT_DEPTH+1)-1:0]  resid_4x4_w;
@@ -346,6 +347,8 @@ pred_buf = {(256*BD){1'b0}};
         end
 
         // Neighbor routing
+        sb_top_left_avail = 1'b0;
+        sb_top_left_pixel = {BD{1'b0}};
         if (sb_r == 2'd0) begin
             sb_top_avail  = is_luma ? mb_top_avail : 1'b0;
             sb_top_pixels = top_pixels_flat[sb_c*4*BD +: 4*BD];
@@ -365,6 +368,27 @@ pred_buf = {(256*BD){1'b0}};
                 sb_top_pixels[1*BD +: BD] = chr_recon_cr[((sb_r*4-1)*8 + sb_c*4 + 1)*BD +: BD];
                 sb_top_pixels[2*BD +: BD] = chr_recon_cr[((sb_r*4-1)*8 + sb_c*4 + 2)*BD +: BD];
                 sb_top_pixels[3*BD +: BD] = chr_recon_cr[((sb_r*4-1)*8 + sb_c*4 + 3)*BD +: BD];
+            end
+        end
+
+        if (is_luma) begin
+            if (sb_r == 2'd0) begin
+                if (sb_c == 2'd0) begin
+                    sb_top_left_avail = mb_top_avail && mb_left_avail;
+                    if (mb_top_avail && mb_left_avail)
+                        sb_top_left_pixel = top_ref_flat[(mb_x * 16 * BD) - BD +: BD];
+                end else begin
+                    sb_top_left_avail = mb_top_avail;
+                    if (mb_top_avail)
+                        sb_top_left_pixel = top_pixels_flat[(sb_c*4 - 1)*BD +: BD];
+                end
+            end else if (sb_c == 2'd0) begin
+                sb_top_left_avail = mb_left_avail;
+                if (mb_left_avail)
+                    sb_top_left_pixel = left_pixels_flat[(sb_r*4 - 1)*BD +: BD];
+            end else begin
+                sb_top_left_avail = 1'b1;
+                sb_top_left_pixel = recon_buf[((sb_r*4 - 1)*16 + (sb_c*4 - 1))*BD +: BD];
             end
         end
 
@@ -464,6 +488,7 @@ pred_buf = {(256*BD){1'b0}};
 
     h264_intra_pred #(.BIT_DEPTH(BIT_DEPTH)) u_pred (
         .clk(clk), .rst_n(rst_n), .start(pred_start), .done(pred_done), .top_avail(sb_top_avail), .left_avail(sb_left_avail),
+        .top_left_avail(sb_top_left_avail), .top_left(sb_top_left_pixel),
         .orig_4x4(sb_orig_pixels), .top_4(sb_top_pixels), .left_4(sb_left_pixels),
         .pred_4x4(pred_4x4_w), .resid_4x4(resid_4x4_w), .pred_mode(pred_mode_w)
     );
