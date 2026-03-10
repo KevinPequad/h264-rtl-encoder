@@ -271,6 +271,11 @@ The testbench must not:
     decode checking
   - It now forces a clean staged rebuild and emits both `.build.log` and
     `.sim.log` artifacts
+  - Use `--decode-only` when you need a cheaper strict-decode regression on a
+    longer run without paying for metrics, x264 reference encode, or side-by-
+    side PNG generation
+  - Use `--skip-metrics`, `--skip-x264`, `--skip-compare`, and `--skip-mp4`
+    when you need finer control over post-sim validation cost
 
 - Verified smoke runs exist for:
   - `8-bit 4:2:0`
@@ -376,6 +381,9 @@ The testbench must not:
   emits 8-bit `frame_num` values in slice headers
 - The testbench and `validate_clip.py` now accept a runtime `idr_interval`;
   `1` forces every frame to IDR, and `0` means only the first frame is IDR
+- `validate_clip.py` now supports `--decode-only` and granular skip flags so
+  longer strict-decode regressions can stay cheaper while preserving staged
+  build / sim logs and JSON summaries
 - Deferred inter headers and FIFO discard now prevent illegal zero-residual
   CAVLC payloads from leaking after `cbp=0` or `P_SKIP`
 
