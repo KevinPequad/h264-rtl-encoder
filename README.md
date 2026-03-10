@@ -218,6 +218,8 @@ Implemented now relative to the chosen `x264` baseline:
 - I and P picture flow
 - full `Intra_4x4` directional luma mode coverage
 - `Intra_16x16` luma prediction and syntax support
+- `I_PCM` macroblock coding on the current IDR path, with raw-sample byte
+  emission owned by the RTL writer
 - up-to-four-reference P-slice inter flow with integer-pel search and current
   quarter-pel luma refinement
 - zero-residual inter-MB handling and `P_SKIP` skip-run ownership on the RTL
@@ -307,6 +309,13 @@ Measured validation points:
 - `320x176_4f_i16idr`: strict FFmpeg-decodable short-GOP validation with an
   IDR `Intra_16x16` first frame on the current tree, `91,031,284` cycles,
   `3,751` bytes, RTL PSNR avg `31.628391`, RTL SSIM all `0.829910`
+- `ipcm_320x176_1f`: strict FFmpeg-decodable forced-`I_PCM` IDR validation on
+  the RTL byte path, `242,396` cycles, `84,963` bytes, and decoded YUV exactly
+  matching the `320x176` source frame byte-for-byte
+- `ipcm_320x176_4f`: strict FFmpeg-decodable four-frame forced-`I_PCM`
+  all-IDR validation on the RTL byte path, `969,524` cycles, `339,852` bytes,
+  packaged MP4 output, and decoded YUV exactly matching the first four source
+  frames byte-for-byte
 - `320x176_4f_decodeonly`: strict FFmpeg-decodable multi-frame decode-only
   validation on the current tree, `92,028,425` cycles, `1,912` bytes, paired
   staged `.build.log` / `.sim.log`, JSON validation-mode recording, and
@@ -379,6 +388,10 @@ Recent correctness fix:
 - the `Intra_16x16` IDR path now emits mb_type values that match the residual
   syntax the RTL actually outputs, removing the earlier first-row FFmpeg decode
   failure at `MB 2 0`
+- the current RTL writer now supports `I_PCM` macroblocks on the IDR path,
+  byte-aligns with `pcm_alignment_zero_bit`, emits raw luma / Cb / Cr samples
+  through the RTL byte path itself, and decodes back to an exact byte-for-byte
+  match on the validated `320x176` all-IDR cases
 - the `Intra_16x16` DC inverse path in `h264_luma_dc.v` now preserves the full
   Hadamard dynamic range instead of truncating the top bits before inverse
   scaling

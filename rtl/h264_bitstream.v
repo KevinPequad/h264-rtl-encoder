@@ -48,9 +48,13 @@ module h264_bitstream #(
     input  wire [1:0]  slice_num_ref_idx_l0_active_minus1,
     input  wire        hold_fifo_drain,
     input  wire        is_intra16_mb,
+    input  wire        is_ipcm_mb,
     input  wire [5:0]  intra_mb_type_code_num,
     input  wire [63:0] intra_pred_bits,
     input  wire [6:0]  intra_pred_count,
+    input  wire [256*BIT_DEPTH-1:0] ipcm_luma_flat,
+    input  wire [((CHROMA_FORMAT_IDC == 2) ? 128 : 64)*BIT_DEPTH-1:0] ipcm_cb_flat,
+    input  wire [((CHROMA_FORMAT_IDC == 2) ? 128 : 64)*BIT_DEPTH-1:0] ipcm_cr_flat,
     input  wire        weighted_pred_enable,
     input  wire [3:0]  luma_log2_weight_denom,
     input  wire signed [8:0] luma_weight,
@@ -122,10 +126,14 @@ module h264_bitstream #(
     wire use_main_profile = weighted_pred_enable && !use_high_profile;
     wire weighted_pred_flag = weighted_pred_enable;
     wire slice_multi_ref_enable = (slice_num_ref_idx_l0_active_minus1 != 2'd0);
+    localparam integer CHR_MB_HEIGHT = (CHROMA_FORMAT_IDC == 2) ? 16 : 8;
+    localparam integer CHR_MB_PIXELS = 8 * CHR_MB_HEIGHT;
+    localparam integer IPCM_TOTAL_SAMPLES = 256 + 2*CHR_MB_PIXELS;
     reg [6:0]  slice_multi_ref_bits;
     reg [3:0]  slice_multi_ref_bits_len;
     reg [11:0] slice_multi_ref_bits_qp;
     reg [3:0]  slice_multi_ref_bits_qp_len;
+    reg [9:0]  ipcm_sample_idx;
     always @(*) begin
         case (slice_num_ref_idx_l0_active_minus1)
             2'd1: begin
@@ -379,6 +387,7 @@ module h264_bitstream #(
             se_input         <= 8'sd0;
             ue_input         <= 10'd0;
             pending_skip_run <= 13'd0;
+            ipcm_sample_idx  <= 10'd0;
         end else begin
             bs_mem_wr <= 1'b0;
             cmd_done  <= 1'b0;
@@ -421,7 +430,7 @@ module h264_bitstream #(
                         end else if (cmd_write_slice_hdr) begin
                             state <= S_SLICE; sub <= 6'd0; busy <= 1'b1;
                         end else if (cmd_write_mb_header) begin
-                            state <= S_MB_HDR; sub <= 6'd0; busy <= 1'b1;
+                            state <= S_MB_HDR; sub <= 6'd0; busy <= 1'b1; ipcm_sample_idx <= 10'd0;
                         end else if (cmd_write_trailing) begin
                             state <= S_TRAIL; sub <= 6'd0; busy <= 1'b1;
                         end else if (cmd_flush) begin
@@ -964,12 +973,12 @@ module h264_bitstream #(
                             6'd20: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
-                                sub <= 6'd1;
+                                sub <= is_ipcm_mb ? 6'd25 : 6'd1;
                             end
                             6'd21: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
-                                sub <= 6'd1;
+                                sub <= is_ipcm_mb ? 6'd25 : 6'd1;
                             end
 
                             // ===== Inter MB path (sub 10+) =====
@@ -1050,6 +1059,38 @@ module h264_bitstream #(
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
                                 sub <= 6'd11;
+                            end
+                            6'd25: begin
+                                if (bit_cnt[2:0] != 3'd0)
+                                    bit_cnt <= bit_cnt + {3'd0, (4'd8 - {1'b0, bit_cnt[2:0]})};
+                                sub <= 6'd26;
+                            end
+                            6'd26: begin
+                                if (bit_cnt >= 7'd8) begin
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                    sub <= 6'd26;
+                                end else begin
+                                    sub <= 6'd30;
+                                end
+                            end
+                            6'd30: begin : ipcm_emit_byte
+                                reg [9:0] ipcm_idx_i;
+                                reg [7:0] ipcm_byte_i;
+                                ipcm_idx_i = ipcm_sample_idx;
+                                if (ipcm_idx_i < IPCM_TOTAL_SAMPLES[9:0]) begin
+                                    if (ipcm_idx_i < 10'd256)
+                                        ipcm_byte_i = ipcm_luma_flat[ipcm_idx_i*BIT_DEPTH +: 8];
+                                    else if (ipcm_idx_i < (10'd256 + CHR_MB_PIXELS[9:0]))
+                                        ipcm_byte_i = ipcm_cb_flat[(ipcm_idx_i - 10'd256)*BIT_DEPTH +: 8];
+                                    else
+                                        ipcm_byte_i = ipcm_cr_flat[(ipcm_idx_i - 10'd256 - CHR_MB_PIXELS[9:0])*BIT_DEPTH +: 8];
+                                    write_byte <= ipcm_byte_i;
+                                    do_write <= 1'b1;
+                                    ipcm_sample_idx <= ipcm_sample_idx + 10'd1;
+                                end else begin
+                                    sub <= 6'd4;
+                                end
                             end
 
                             default: state <= S_IDLE;

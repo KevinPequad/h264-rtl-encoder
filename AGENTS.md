@@ -25,6 +25,17 @@ current progress, and continue working. Only stop if the encoder is genuinely
 complete or there is a full blocker that makes further responsible progress
 impossible.
 
+Pushes, checkpoint commits, strict-decode passes, and partial metric
+improvements are not stopping conditions. They are only progress markers.
+After pushing or validating a checkpoint, immediately continue to the next
+highest-priority implementation or correctness task in the same session unless
+there is a concrete blocker.
+
+Do not treat "it decodes" as equivalent to "it is correct." A decodable stream
+with visibly wrong output, poor quality, broken reconstruction state, or major
+feature gaps is not a valid place to stop. Keep going until the quality issue
+or missing feature is actually closed, or until a precise blocker is known.
+
 ## Goal
 
 The goal is to finish a full end-to-end H.264 encoder whose final output is:
@@ -140,6 +151,9 @@ The testbench must not:
 6. Do not stop while major baseline feature gaps are still open
 7. After each meaningful implementation step, update `README.md` / `STATUS.md`,
    push progress, and continue unless fully blocked
+8. After any push or validated checkpoint, immediately pick up the next
+   highest-priority unfinished codec task instead of pausing for a status-only
+   handoff
 
 ## Current Practical Notes
 
@@ -204,6 +218,8 @@ The testbench must not:
     `Plane` mode search
   - Current IDR-path `Intra_16x16` macroblock coding through the RTL byte
     stream
+  - Current IDR-path `I_PCM` macroblock coding through the RTL byte stream,
+    with raw luma / Cb / Cr sample emission owned by the RTL writer
   - Chroma intra prediction: DC-style path
   - `4x4` H.264 integer transform
   - Inverse transform path
@@ -239,6 +255,7 @@ The testbench must not:
   - I-picture and P-picture coding
   - Full directional `Intra_4x4` luma mode coverage
   - `Intra_16x16` luma prediction and syntax support
+  - Current IDR-path `I_PCM` macroblock coding and syntax support
   - Up-to-four-reference P-slice inter coding with integer-pel search and
     current quarter-pel luma refinement
   - Weighted P prediction and `pred_weight_table` signaling on the RTL path
@@ -368,6 +385,14 @@ The testbench must not:
     `31.628391`, RTL SSIM all `0.829910`,
     `output/validation_i16idr_320x176_4f.h264`, and
     `output/validation_i16idr_320x176_4f.mp4`
+  - strict FFmpeg-decodable forced-`I_PCM` IDR validation at `320x176`,
+    `1` frame, `242,396` cycles, `84,963` bytes,
+    `output/ipcm_320x176_1f.h264`, `output/ipcm_320x176_1f.mp4`, and decoded
+    YUV matching the source frame byte-for-byte
+  - strict FFmpeg-decodable four-frame forced-`I_PCM` all-IDR validation at
+    `320x176`, `4` frames, `969,524` cycles, `339,852` bytes,
+    `output/ipcm_320x176_4f.h264`, `output/ipcm_320x176_4f.mp4`, and decoded
+    YUV matching the first four source frames byte-for-byte
 
 - A 720p chroma corruption bug was traced to raw input address overflow in the Cr plane fetch path and fixed by widening the raw input address width
 - A directional `Intra_4x4` top-right reference fetch bug was fixed in
@@ -398,6 +423,10 @@ The testbench must not:
 - The `Intra_16x16` IDR path now emits mb_type values that match the residual
   syntax the RTL actually outputs, removing the earlier first-row FFmpeg decode
   failure at `MB 2 0`
+- The current RTL writer now supports `I_PCM` macroblocks on the IDR path,
+  byte-aligns with `pcm_alignment_zero_bit`, emits raw luma / Cb / Cr samples
+  through the RTL byte path itself, and decodes back to an exact byte-for-byte
+  match on the validated `320x176` all-IDR cases
 - The `Intra_16x16` DC inverse path in `h264_luma_dc.v` now preserves the full
   Hadamard dynamic range instead of truncating the top bits before inverse
   scaling
