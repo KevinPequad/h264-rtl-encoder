@@ -217,6 +217,8 @@ The testbench must not:
   - I-frame support
   - P-frame support
   - Non-reference `B`-slice support on the current intra / `I_PCM` path
+  - Limited non-reference inter-coded `B_L0_16x16` support on the current
+    single-list B path
   - IDR + non-IDR encoded stream output
   - `16x16` macroblock raster-order processing
   - Up to four forward reference pictures for P-slice motion search
@@ -288,6 +290,8 @@ The testbench must not:
   - CAVLC entropy path owned by RTL
   - I-picture and P-picture coding
   - Non-reference `B`-picture syntax on the current intra / `I_PCM` path
+  - Limited non-reference `B_L0_16x16` inter coding on the current single-list
+    B path
   - Full directional `Intra_4x4` luma mode coverage
   - `Intra_16x16` luma prediction and syntax support
   - Current IDR-path and P-slice intra-path `I_PCM` macroblock coding and
@@ -534,6 +538,11 @@ The testbench must not:
   the non-reference `B`-slice `I_PCM` path, exact decoded-YUV match, and
   `trace_headers` confirmation of `nal_ref_idc = 0` and `slice_type = 1` on
   the second picture
+- The current tree now also validates a non-reference inter-coded
+  `B_L0_16x16` path at `320x176` with frame `0` on the IDR `I_PCM` path and
+  frame `1` on the B inter path, exact decoded-YUV match, `trace_headers`
+  confirmation of `nal_ref_idc = 0` and `slice_type = 1` on the second
+  picture, and a `425` byte second-slice payload with `ENABLE_P_IPCM=0`
 - `scripts/validate_clip.py` and `scripts/rtl_runner.py` now expose
   `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
   `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths
@@ -550,7 +559,8 @@ The testbench must not:
 - Important missing features, so this does not get confused with a full-standard
   H.264 encoder yet:
   - No CABAC syntax integration into the final RTL bitstream path yet
-  - No inter-coded `B` / `BREF` picture support yet
+  - No broader `B` / `BREF` picture support beyond the current limited
+    non-reference `B_L0_16x16` path
   - No weighted bipred / `B`-picture weighted prediction
   - No direct motion-vector prediction modes
   - No reference management beyond the current four-reference P-slice subset

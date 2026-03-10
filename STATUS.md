@@ -18,10 +18,12 @@ Current state:
   and RTL-owned `P_SKIP` skip-run generation
 - the current tree now also supports a limited non-reference `B`-slice path on
   intra / `I_PCM` macroblocks
+- the current tree now also supports limited non-reference inter-coded
+  `B_L0_16x16` macroblocks on a single-list B path
 - the repository is still not complete as a full H.264 standard encoder
 
 Completion is still blocked by major missing features including CABAC syntax
-integration, inter-coded `B` / `BREF` support, weighted bipred / direct-mode
+integration, broader `B` / `BREF` support, weighted bipred / direct-mode
 support, broader partition/tool coverage, deblocking, and the final long-run
 target.
 
@@ -155,6 +157,8 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - I-frame support
 - P-frame support
 - non-reference `B`-slice support on the current intra / `I_PCM` path
+- limited non-reference inter-coded `B_L0_16x16` support on the current
+  single-list B path
 - IDR + non-IDR encoded stream output
 - `16x16` macroblock raster-order processing
 - up to four forward reference pictures for P-slice motion search
@@ -205,6 +209,8 @@ Implemented now relative to the chosen `x264` baseline:
 - CAVLC entropy path owned by RTL
 - I-picture and P-picture coding
 - non-reference `B`-picture syntax on the current intra / `I_PCM` path
+- limited non-reference `B_L0_16x16` inter coding on the current single-list B
+  path
 - full `Intra_4x4` directional luma mode coverage
 - `Intra_16x16` luma prediction and syntax support
 - current IDR-path `Intra_16x16` macroblock coding through the RTL byte stream
@@ -334,6 +340,12 @@ Measured validation points:
   `B`-slice `I_PCM` path at `320x176`, `484,677` cycles, `169,893` bytes,
   packaged MP4 output, exact decoded-YUV match, and `trace_headers`
   confirmation of `nal_ref_idc = 0` and `slice_type = 1` on the second picture
+- `bslice_inter_320x176_2f`: strict FFmpeg-decodable two-frame validation with
+  frame `0` on the IDR `I_PCM` path and frame `1` on the non-reference
+  inter-coded `B_L0_16x16` path at `320x176`, `10,048,976` cycles, `85,388`
+  bytes total, exact decoded-YUV match, `trace_headers` confirmation of
+  `nal_ref_idc = 0` and `slice_type = 1` on the second picture, and a `425`
+  byte second-slice payload with `ENABLE_P_IPCM=0`
 - `32x16_2f_444_ipcm_scripted`: strict staged validation through
   `scripts/validate_clip.py` with `--enable-idr-ipcm 1 --enable-p-ipcm 1`
   at `32x16`, `8-bit 4:4:4`, packaged MP4 output, and JSON summary in
@@ -453,7 +465,8 @@ H.264 encoder yet:
 
 - CABAC context modelling, syntax binarization, and final bitstream-path
   integration
-- no inter-coded `B` / `BREF` picture support yet
+- no broader `B` / `BREF` picture support beyond the current limited
+  non-reference `B_L0_16x16` path
 - weighted bipred / `B`-picture weighted prediction
 - direct motion-vector prediction modes
 - reference-picture management beyond the current four-reference P-slice subset
@@ -468,8 +481,8 @@ Still missing relative to the chosen `x264` software baseline:
 
 - final CABAC slice integration instead of the current standalone arithmetic
   core only
-- inter-coded `B` / `BREF` picture handling and the associated reference
-  management
+- broader inter-coded `B` / `BREF` picture handling and the associated
+  reference management
 - reference-picture management beyond the current four-reference P-slice subset
 - weighted bipred support beyond the current weighted P path
 - direct prediction modes
