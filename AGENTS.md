@@ -301,7 +301,8 @@ The testbench must not:
   - Docker one-frame smoke run producing RTL-generated `.h264` and `.mp4`
   - FFmpeg-decodable RTL-generated `.h264`
   - MP4 remux of the RTL-generated stream
-  - Reproducible smoke matrix for fast parser/profile sanity on generated tiny inputs
+  - Reproducible smoke matrix for fast strict-decode/profile sanity on
+    generated tiny `I_PCM` inputs
   - Multi-frame validation at `320x176`
   - Multi-frame validation at `1280x720`
   - PSNR / SSIM comparison scripts
@@ -316,8 +317,8 @@ The testbench must not:
 
 - Use `scripts/regress_smoke_matrix.py` to keep the current smoke matrix
   reproducible, including simulator logs and cycle counts
-  - Treat it as a fast parser/profile sanity matrix, not the final strict
-    decode-quality gate
+  - Treat it as a fast strict-decode/profile sanity matrix on tiny `I_PCM`
+    cases, not the final decode-quality gate
   - It now emits both `.build.log` and `.sim.log` artifacts per case
 
 - Use `scripts/validate_clip.py` for staged multi-frame validation, PSNR / SSIM,

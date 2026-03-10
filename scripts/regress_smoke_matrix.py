@@ -18,6 +18,18 @@ DEFAULT_HEIGHT = 16
 DEFAULT_FRAMES = 2
 DEFAULT_TIMEOUT = 20_000_000
 SIM_SUMMARY_RE = re.compile(r"\[TB\]\s+(?P<frames>\d+)\s+frames encoded,\s+(?P<cycles>\d+)\s+cycles,\s+(?P<bytes>\d+)\s+bytes")
+DECODE_ERROR_PATTERNS = (
+    "error while decoding",
+    "mb_type ",
+    "cbp too large",
+    "top block unavailable",
+    "corrupted macroblock",
+    "negative number of zero coeffs",
+    "sub_mb_type",
+    "corrupt decoded frame",
+    "error processing packet in decoder",
+    "decoder thread returned error",
+)
 
 
 @dataclass(frozen=True)
@@ -47,10 +59,50 @@ class SmokeCase:
 
 
 CASES = [
-    SmokeCase("smoke_8b_420", 8, 1, "smoke_32x16_2f.yuv", "smoke_32x16_2f.h264"),
-    SmokeCase("smoke_8b_422", 8, 2, "smoke_32x16_2f_422.yuv", "smoke_32x16_2f_422.h264"),
-    SmokeCase("smoke_10b_420", 10, 1, "smoke_32x16_2f_10b.yuv", "smoke_32x16_2f_10b.h264"),
-    SmokeCase("smoke_10b_422", 10, 2, "smoke_32x16_2f_10b_422.yuv", "smoke_32x16_2f_10b_422.h264"),
+    SmokeCase(
+        "smoke_8b_420",
+        8,
+        1,
+        "smoke_32x16_2f.yuv",
+        "smoke_32x16_2f.h264",
+        enable_idr_ipcm=1,
+        enable_p_ipcm=1,
+        ipcm_sad_threshold=0,
+        inter_sad_threshold=0,
+    ),
+    SmokeCase(
+        "smoke_8b_422",
+        8,
+        2,
+        "smoke_32x16_2f_422.yuv",
+        "smoke_32x16_2f_422.h264",
+        enable_idr_ipcm=1,
+        enable_p_ipcm=1,
+        ipcm_sad_threshold=0,
+        inter_sad_threshold=0,
+    ),
+    SmokeCase(
+        "smoke_10b_420",
+        10,
+        1,
+        "smoke_32x16_2f_10b.yuv",
+        "smoke_32x16_2f_10b.h264",
+        enable_idr_ipcm=1,
+        enable_p_ipcm=1,
+        ipcm_sad_threshold=0,
+        inter_sad_threshold=0,
+    ),
+    SmokeCase(
+        "smoke_10b_422",
+        10,
+        2,
+        "smoke_32x16_2f_10b_422.yuv",
+        "smoke_32x16_2f_10b_422.h264",
+        enable_idr_ipcm=1,
+        enable_p_ipcm=1,
+        ipcm_sad_threshold=0,
+        inter_sad_threshold=0,
+    ),
     SmokeCase(
         "smoke_8b_444_ipcm",
         8,
@@ -165,10 +217,22 @@ def ffprobe_stream(path: Path) -> dict[str, str]:
     return streams[0] if streams else {}
 
 
+def extract_decode_errors(stderr: str) -> list[str]:
+    hits: list[str] = []
+    for line in stderr.splitlines():
+        lowered = line.lower()
+        if any(pattern in lowered for pattern in DECODE_ERROR_PATTERNS):
+            hits.append(line.strip())
+    return hits
+
+
 def decode_check(path: Path) -> None:
-    # The tiny generated smoke cases are kept as a fast bitstream/parser sanity
-    # check. Strict decoder-quality gating lives in validate_clip.py.
-    run_cmd(["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"])
+    # The tiny generated smoke cases are kept as a fast parser/profile sanity
+    # check, but they still need strict decoder-error gating.
+    proc = run_cmd(["ffmpeg", "-v", "error", "-i", str(path), "-f", "null", "-"], capture=True)
+    decode_errors = extract_decode_errors(proc.stderr)
+    if decode_errors:
+        raise RuntimeError("FFmpeg decoder reported H.264 errors:\n" + "\n".join(decode_errors[:16]))
 
 
 def parse_sim_summary(sim_log: str) -> dict[str, int]:

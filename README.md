@@ -271,7 +271,8 @@ Verified validation/features around the current encoder flow:
 - FFmpeg-decodable RTL-generated `.h264`
 - MP4 remux of the RTL-generated stream
 - Docker one-frame smoke run producing RTL-generated `.h264` and `.mp4`
-- reproducible smoke matrix for fast parser/profile sanity on generated tiny inputs
+- reproducible smoke matrix for fast strict-decode/profile sanity on generated
+  tiny `I_PCM` inputs
 - multi-frame validation at `320x176`
 - multi-frame validation at `1280x720`
 - PSNR / SSIM comparison scripts
@@ -543,9 +544,9 @@ python3 scripts/package_mp4.py output.h264 output.mp4 --fps 24 --width 320 --hei
 - `./run.sh` downloads the sample clip, extracts raw YUV, builds the simulator,
   runs the encoder, and packages MP4 output
 - `./docker_run.sh` runs the one-frame Docker smoke path
-- `python3 scripts/regress_smoke_matrix.py` runs the current fast parser/profile
-  smoke regression matrix on generated tiny inputs and now emits paired
-  `.build.log` / `.sim.log` artifacts per case
+- `python3 scripts/regress_smoke_matrix.py` runs the current fast
+  strict-decode/profile smoke regression matrix on generated tiny `I_PCM`
+  inputs and emits paired `.build.log` / `.sim.log` artifacts per case
 - `python3 scripts/validate_clip.py` runs staged multi-frame validation with
   a clean staged rebuild, strict decode checking, paired `.build.log` /
   `.sim.log` artifacts, MP4 output, and comparison metrics
