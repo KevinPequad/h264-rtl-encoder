@@ -11,7 +11,8 @@ module h264_bitstream #(
     parameter MB_COLS = 20,
     parameter MB_ROWS = 11,
     parameter BIT_DEPTH = 8,
-    parameter CHROMA_FORMAT_IDC = 1
+    parameter CHROMA_FORMAT_IDC = 1,
+    parameter FRAME_RATE = 24
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -161,6 +162,45 @@ module h264_bitstream #(
     wire [7:0] sps_constraint_flags = (use_high_profile || use_main_profile) ? 8'h00 : 8'hC0;
     wire [3:0] sps_id_and_chroma_bits = (CHROMA_FORMAT_IDC == 2) ? 4'b1011 : 4'b1010;
     wire [5:0] pic_order_cnt_lsb = {frame_num, 1'b0};
+    localparam integer FRAME_MB_COUNT = MB_COLS * MB_ROWS;
+    localparam integer FRAME_MBPS = FRAME_MB_COUNT * FRAME_RATE;
+    localparam [31:0] VUI_NUM_UNITS_IN_TICK = 32'd1;
+    localparam [31:0] VUI_TIME_SCALE = FRAME_RATE * 2;
+
+    function [7:0] select_level_idc;
+        input integer frame_mbs;
+        input integer frame_mbps;
+        begin
+            if (frame_mbs <= 99 && frame_mbps <= 1485)
+                select_level_idc = 8'h0A; // Level 1.0
+            else if (frame_mbs <= 396 && frame_mbps <= 3000)
+                select_level_idc = 8'h0B; // Level 1.1
+            else if (frame_mbs <= 396 && frame_mbps <= 6000)
+                select_level_idc = 8'h0C; // Level 1.2
+            else if (frame_mbs <= 396 && frame_mbps <= 11880)
+                select_level_idc = 8'h0D; // Level 1.3 / 2.0 class by MBPS+FS
+            else if (frame_mbs <= 792 && frame_mbps <= 19800)
+                select_level_idc = 8'h15; // Level 2.1
+            else if (frame_mbs <= 1620 && frame_mbps <= 20250)
+                select_level_idc = 8'h16; // Level 2.2
+            else if (frame_mbs <= 1620 && frame_mbps <= 40500)
+                select_level_idc = 8'h1E; // Level 3.0
+            else if (frame_mbs <= 3600 && frame_mbps <= 108000)
+                select_level_idc = 8'h1F; // Level 3.1
+            else if (frame_mbs <= 5120 && frame_mbps <= 216000)
+                select_level_idc = 8'h20; // Level 3.2
+            else if (frame_mbs <= 8192 && frame_mbps <= 245760)
+                select_level_idc = 8'h28; // Level 4.0 / 4.1 class by MBPS+FS
+            else if (frame_mbs <= 8704 && frame_mbps <= 522240)
+                select_level_idc = 8'h2A; // Level 4.2
+            else if (frame_mbs <= 22080 && frame_mbps <= 589824)
+                select_level_idc = 8'h32; // Level 5.0
+            else if (frame_mbs <= 36864 && frame_mbps <= 983040)
+                select_level_idc = 8'h33; // Level 5.1
+            else
+                select_level_idc = 8'h34; // Level 5.2
+        end
+    endfunction
 
     // Skip emulation prevention during start code output
     reg        skip_ep;
@@ -373,13 +413,10 @@ module h264_bitstream #(
                                 write_byte <= sps_constraint_flags;
                                 do_write<=1'b1; sub<=sub+6'd1;
                             end
-                            // level_idc: compute from resolution
-                            // Level 31 (0x1F) for up to 720p, Level 30 (0x1E) for <= QVGA
+                            // level_idc: choose the smallest level class that fits the
+                            // current frame macroblock count at the configured frame rate.
                             6'd7:  begin
-                                if (MB_COLS * MB_ROWS > 396)
-                                    write_byte <= 8'h1F;  // level 3.1: up to 3600 MBs (1280x720)
-                                else
-                                    write_byte <= 8'h1E;  // level 3.0: up to 396 MBs
+                                write_byte <= select_level_idc(FRAME_MB_COUNT, FRAME_MBPS);
                                 do_write <= 1'b1;
                                 sub <= sub + 6'd1;
                             end
@@ -429,34 +466,56 @@ module h264_bitstream #(
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
                                 sub <= sub + 6'd1;
                             end
-                            // frame_mbs_only=1, direct_8x8_inference (1 if level>=30),
-                            // frame_cropping=0, vui_present=0
-                            // = 1,1,0,0 = 4 bits: 1100
+                            // frame_mbs_only=1, direct_8x8_inference=1,
+                            // frame_cropping=0, vui_present=1, then a minimal VUI:
+                            // aspect_ratio=0, overscan=0, video_signal=0, chroma_loc=0,
+                            // timing_info_present=1
                             6'd12: begin
-                                bit_buf <= bit_buf | ({4'b1100, 92'd0} >> bit_cnt[6:0]);
-                                bit_cnt <= bit_cnt + 7'd4;
+                                bit_buf <= bit_buf | ({9'b110100001, 87'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd9;
                                 sub <= sub + 6'd1;
                             end
-                            // RBSP trailing bits: stop bit '1' + alignment zeros
                             6'd13: begin
-                                bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
-                                bit_cnt <= bit_cnt + 7'd1;
-                                // Pad to byte boundary
+                                bit_buf <= bit_buf | ({VUI_NUM_UNITS_IN_TICK, 64'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd32;
                                 sub <= sub + 6'd1;
                             end
                             6'd14: begin
+                                state <= S_EMIT;
+                                return_state <= S_SPS;
+                                sub <= sub + 6'd1;
+                            end
+                            6'd15: begin
+                                bit_buf <= bit_buf | ({VUI_TIME_SCALE, 64'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd32;
+                                sub <= sub + 6'd1;
+                            end
+                            // fixed_frame_rate=1, nal_hrd=0, vcl_hrd=0,
+                            // pic_struct_present=0, bitstream_restriction=0
+                            6'd16: begin
+                                bit_buf <= bit_buf | ({5'b10000, 91'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd5;
+                                sub <= sub + 6'd1;
+                            end
+                            // RBSP trailing bits: stop bit '1' + alignment zeros
+                            6'd17: begin
+                                bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd1;
+                                sub <= sub + 6'd1;
+                            end
+                            6'd18: begin
                                 if (bit_cnt[2:0] != 3'd0)
                                     bit_cnt <= bit_cnt + 7'd1;
                                 else
                                     sub <= sub + 6'd1;
                             end
                             // Emit remaining bytes
-                            6'd15: begin
+                            6'd19: begin
                                 state <= S_EMIT;
                                 return_state <= S_SPS;
-                                sub <= sub + 6'd1;
+                                sub <= 6'd24;
                             end
-                            6'd16: begin cmd_done<=1'b1; busy<=1'b0; state<=S_IDLE; zero_cnt<=2'd0; end
+                            6'd24: begin cmd_done<=1'b1; busy<=1'b0; state<=S_IDLE; zero_cnt<=2'd0; end
 
                             // High 10 profile extra SPS fields (sub 20-25)
                             // Load UE(bit_depth_luma_minus8) into bit buffer
