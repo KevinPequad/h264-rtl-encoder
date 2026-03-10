@@ -40,6 +40,10 @@ class SmokeCase:
     chroma_offset_cb: int = 0
     chroma_weight_cr: int = 1
     chroma_offset_cr: int = 0
+    enable_idr_ipcm: int = 0
+    enable_p_ipcm: int = 0
+    ipcm_sad_threshold: int = 18000
+    inter_sad_threshold: int = 8000
 
 
 CASES = [
@@ -47,6 +51,28 @@ CASES = [
     SmokeCase("smoke_8b_422", 8, 2, "smoke_32x16_2f_422.yuv", "smoke_32x16_2f_422.h264"),
     SmokeCase("smoke_10b_420", 10, 1, "smoke_32x16_2f_10b.yuv", "smoke_32x16_2f_10b.h264"),
     SmokeCase("smoke_10b_422", 10, 2, "smoke_32x16_2f_10b_422.yuv", "smoke_32x16_2f_10b_422.h264"),
+    SmokeCase(
+        "smoke_8b_444_ipcm",
+        8,
+        3,
+        "smoke_32x16_2f_444.yuv",
+        "smoke_32x16_2f_444.h264",
+        enable_idr_ipcm=1,
+        enable_p_ipcm=1,
+        ipcm_sad_threshold=0,
+        inter_sad_threshold=0,
+    ),
+    SmokeCase(
+        "smoke_10b_444_ipcm",
+        10,
+        3,
+        "smoke_32x16_2f_10b_444.yuv",
+        "smoke_32x16_2f_10b_444.h264",
+        enable_idr_ipcm=1,
+        enable_p_ipcm=1,
+        ipcm_sad_threshold=0,
+        inter_sad_threshold=0,
+    ),
 ]
 
 
@@ -181,6 +207,10 @@ def main() -> int:
             bit_depth=case.bit_depth,
             chroma_format_idc=case.chroma_format_idc,
             weighted_pred_enable=case.weighted_pred_enable,
+            enable_idr_ipcm=case.enable_idr_ipcm,
+            enable_p_ipcm=case.enable_p_ipcm,
+            ipcm_sad_threshold=case.ipcm_sad_threshold,
+            inter_sad_threshold=case.inter_sad_threshold,
             luma_log2_weight_denom=case.luma_log2_weight_denom,
             luma_weight=case.luma_weight,
             luma_offset=case.luma_offset,

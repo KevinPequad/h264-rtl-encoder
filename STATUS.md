@@ -322,6 +322,10 @@ Measured validation points:
   frame `0` on the IDR `I_PCM` path and frame `1` on the P-slice `I_PCM` path
   at `32x16`, `10-bit 4:4:4`, `69,371` cycles, `3,901` bytes, and decoded YUV
   exactly matching both source frames byte-for-byte
+- `32x16_2f_444_ipcm_scripted`: strict staged validation through
+  `scripts/validate_clip.py` with `--enable-idr-ipcm 1 --enable-p-ipcm 1`
+  at `32x16`, `8-bit 4:4:4`, packaged MP4 output, and JSON summary in
+  `output/validation_32x16_2f_444_ipcm_scripted.json`
 - `320x176_4f_decodeonly`: strict FFmpeg-decodable multi-frame decode-only
   validation on the current tree, `92,028,425` cycles, `1,912` bytes, paired
   staged `.build.log` / `.sim.log`, JSON validation-mode recording, and
@@ -416,6 +420,10 @@ Current verified milestone outputs:
 - the current tree now also validates exact RTL-owned `4:4:4 I_PCM` output on
   the IDR path and current P-slice intra path at `32x16` for `8-bit` and
   `10-bit`, with SPS/profile signaling decoding as `High 4:4:4 Predictive`
+- `scripts/validate_clip.py` and `scripts/rtl_runner.py` now expose
+  `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
+  `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths
+  instead of relying on ad-hoc `make` commands
 - the `Intra_16x16` DC inverse path in `rtl/h264_luma_dc.v` now preserves the
   full Hadamard dynamic range instead of truncating the top bits before
   inverse scaling

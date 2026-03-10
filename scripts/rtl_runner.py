@@ -31,6 +31,10 @@ class BuildConfig:
     chroma_offset_cb: int = 0
     chroma_weight_cr: int = 1
     chroma_offset_cr: int = 0
+    enable_idr_ipcm: int = 0
+    enable_p_ipcm: int = 0
+    ipcm_sad_threshold: int = 18000
+    inter_sad_threshold: int = 8000
     idr_interval: int = 12
 
 
@@ -100,6 +104,10 @@ def build_sim(workspace: Path, config: BuildConfig, build_log_path: Path | None 
         f"CHROMA_OFFSET_CB={config.chroma_offset_cb}",
         f"CHROMA_WEIGHT_CR={config.chroma_weight_cr}",
         f"CHROMA_OFFSET_CR={config.chroma_offset_cr}",
+        f"ENABLE_IDR_IPCM={config.enable_idr_ipcm}",
+        f"ENABLE_P_IPCM={config.enable_p_ipcm}",
+        f"IPCM_SAD_THRESHOLD={config.ipcm_sad_threshold}",
+        f"INTER_SAD_THRESHOLD={config.inter_sad_threshold}",
     ]
     if config.extra_verilator_args:
         cmd.append(f"EXTRA_VERILATOR_ARGS={' '.join(config.extra_verilator_args)}")
