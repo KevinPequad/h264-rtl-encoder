@@ -216,6 +216,7 @@ The testbench must not:
   - CAVLC for chroma AC coefficients
   - I-frame support
   - P-frame support
+  - Non-reference `B`-slice support on the current intra / `I_PCM` path
   - IDR + non-IDR encoded stream output
   - `16x16` macroblock raster-order processing
   - Up to four forward reference pictures for P-slice motion search
@@ -286,6 +287,7 @@ The testbench must not:
   - SPS / PPS / slice-header / macroblock-header ownership in RTL
   - CAVLC entropy path owned by RTL
   - I-picture and P-picture coding
+  - Non-reference `B`-picture syntax on the current intra / `I_PCM` path
   - Full directional `Intra_4x4` luma mode coverage
   - `Intra_16x16` luma prediction and syntax support
   - Current IDR-path and P-slice intra-path `I_PCM` macroblock coding and
@@ -312,6 +314,8 @@ The testbench must not:
   - Simulator log and cycle-count capture for regressions
   - Runtime-configurable `idr_interval` support in the testbench and
     validation scripts
+  - Runtime-configurable `force_b_slice` support in the testbench and
+    validation scripts for the current non-reference `B`-slice path
   - RTL-owned `P_SKIP` skip-run generation validated on the current P-slice
     path
 
@@ -525,6 +529,11 @@ The testbench must not:
 - The current tree now also validates exact RTL-owned `4:4:4 I_PCM` output on
   the IDR path and current P-slice intra path at `32x16` for `8-bit` and
   `10-bit`, with SPS/profile signaling decoding as `High 4:4:4 Predictive`
+- The current tree now also validates a non-reference `B`-slice on the RTL byte
+  path at `320x176` with frame `0` on the IDR `I_PCM` path and frame `1` on
+  the non-reference `B`-slice `I_PCM` path, exact decoded-YUV match, and
+  `trace_headers` confirmation of `nal_ref_idc = 0` and `slice_type = 1` on
+  the second picture
 - `scripts/validate_clip.py` and `scripts/rtl_runner.py` now expose
   `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
   `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths
@@ -541,7 +550,7 @@ The testbench must not:
 - Important missing features, so this does not get confused with a full-standard
   H.264 encoder yet:
   - No CABAC syntax integration into the final RTL bitstream path yet
-  - No `B-frames`
+  - No inter-coded `B` / `BREF` picture support yet
   - No weighted bipred / `B`-picture weighted prediction
   - No direct motion-vector prediction modes
   - No reference management beyond the current four-reference P-slice subset

@@ -36,6 +36,7 @@ class BuildConfig:
     ipcm_sad_threshold: int = 18000
     inter_sad_threshold: int = 8000
     idr_interval: int = 12
+    force_b_slice: int = 0
 
 
 def repo_root() -> Path:
@@ -130,6 +131,7 @@ def run_sim(
     input_path: Path,
     output_path: Path,
     idr_interval: int = 12,
+    force_b_slice: int = 0,
     trace: bool = False,
     trace_file: Path | None = None,
     capture: bool = False,
@@ -143,6 +145,8 @@ def run_sim(
         f"+output={output_path}",
         f"+idr_interval={idr_interval}",
     ]
+    if force_b_slice:
+        cmd.append("+force_b_slice=1")
     if trace:
         cmd.append("+trace")
         if trace_file is not None:

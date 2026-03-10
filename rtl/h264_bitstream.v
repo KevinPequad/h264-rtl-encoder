@@ -37,8 +37,9 @@ module h264_bitstream #(
     /* verilator lint_on UNUSED */
     input  wire        mb_has_residual,
 
-    // P-frame support
+    // Slice-type support
     input  wire        is_p_slice,
+    input  wire        is_b_slice,
     input  wire [7:0]  frame_num,
     input  wire        is_inter_mb,
     input  wire        is_skip_mb,
@@ -127,6 +128,7 @@ module h264_bitstream #(
     wire use_main_profile = weighted_pred_enable && !use_high_profile;
     wire weighted_pred_flag = weighted_pred_enable;
     wire slice_multi_ref_enable = (slice_num_ref_idx_l0_active_minus1 != 2'd0);
+    wire slice_has_skip_run = is_p_slice || is_b_slice;
     localparam integer CHR_MB_WIDTH = (CHROMA_FORMAT_IDC == 3) ? 16 : 8;
     localparam integer CHR_MB_HEIGHT = (CHROMA_FORMAT_IDC == 1) ? 8 : 16;
     localparam integer CHR_MB_PIXELS = CHR_MB_WIDTH * CHR_MB_HEIGHT;
@@ -751,6 +753,8 @@ module h264_bitstream #(
                             6'd4: begin
                                 if (is_p_slice)
                                     write_byte <= 8'h41; // nal_ref_idc=2, nal_unit_type=1 (non-IDR)
+                                else if (is_b_slice)
+                                    write_byte <= 8'h01; // nal_ref_idc=0, nal_unit_type=1 (non-IDR B-slice)
                                 else
                                     write_byte <= 8'h65; // nal_ref_idc=3, nal_unit_type=5 (IDR)
                                 do_write <= 1'b1;
@@ -804,6 +808,15 @@ module h264_bitstream #(
                                         end
                                         sub <= sub + 6'd1;
                                     end
+                                end else if (is_b_slice) begin
+                                    // Non-reference B-slice header on the current intra/I_PCM-only B path:
+                                    // first_mb=UE(0), slice_type(B)=UE(1), pps_id=UE(0), frame_num(8),
+                                    // pic_order_cnt_lsb(9), direct_spatial_mv_pred_flag=1,
+                                    // num_ref_idx_active_override_flag=0, ref_pic_list_reordering_flag_l0=0,
+                                    // ref_pic_list_reordering_flag_l1=0, slice_qp_delta=SE(0), deblocking=UE(1)
+                                    bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, 5'b10001, 3'b010, 66'd0};
+                                    bit_cnt <= 7'd30;
+                                    sub <= sub + 6'd1;
                                 end else begin
                                     if (use_high_profile) begin
                                         // High-profile IDR: SPS has poc_type=0, need poc_lsb(9 bits)
@@ -915,17 +928,17 @@ module h264_bitstream #(
                     S_MB_HDR: begin
                         case (sub)
                             6'd0: begin
-                                if (is_p_slice && is_skip_mb) begin
+                                if (slice_has_skip_run && is_skip_mb) begin
                                     pending_skip_run <= pending_skip_run + 13'd1;
                                     cmd_done <= 1'b1;
                                     busy     <= 1'b0;
                                     state    <= S_IDLE;
-                                end else if (is_p_slice && pending_skip_run != 13'd0) begin
+                                end else if (slice_has_skip_run && pending_skip_run != 13'd0) begin
                                     bit_buf <= bit_buf | ({ue_big_bits, 71'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, ue_big_total_bits};
                                     pending_skip_run <= 13'd0;
                                     sub <= 6'd24;
-                                end else if (is_p_slice) begin
+                                end else if (slice_has_skip_run) begin
                                     bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + 7'd1;
                                     sub <= 6'd24;
