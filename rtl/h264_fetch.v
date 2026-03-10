@@ -6,8 +6,9 @@ module h264_fetch #(
     parameter FRAME_WIDTH = 320,
     parameter BIT_DEPTH   = 8,
     parameter CHROMA_FORMAT_IDC = 1,
-    parameter CHROMA_MB_HEIGHT = (CHROMA_FORMAT_IDC == 2) ? 16 : 8,
-    parameter CHROMA_MB_PIXELS = 8 * CHROMA_MB_HEIGHT
+    parameter CHROMA_MB_WIDTH  = (CHROMA_FORMAT_IDC == 3) ? 16 : 8,
+    parameter CHROMA_MB_HEIGHT = (CHROMA_FORMAT_IDC == 1) ? 8 : 16,
+    parameter CHROMA_MB_PIXELS = CHROMA_MB_WIDTH * CHROMA_MB_HEIGHT
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -51,9 +52,9 @@ module h264_fetch #(
     reg [3:0]  max_col;
 
     wire [RAW_ADDR_W-1:0] y_origin  = frame_base_y  + ({15'd0, mb_y} * 21'd16) * {10'd0, frame_width} + ({14'd0, mb_x} * 21'd16);
-    wire [10:0] ch_width  = frame_width >> 1;
-    wire [RAW_ADDR_W-1:0] cb_origin = frame_base_cb + ({15'd0, mb_y} * CHROMA_MB_HEIGHT) * {10'd0, ch_width} + ({14'd0, mb_x} * 21'd8);
-    wire [RAW_ADDR_W-1:0] cr_origin = frame_base_cr + ({15'd0, mb_y} * CHROMA_MB_HEIGHT) * {10'd0, ch_width} + ({14'd0, mb_x} * 21'd8);
+    wire [10:0] ch_width  = (CHROMA_FORMAT_IDC == 3) ? frame_width : (frame_width >> 1);
+    wire [RAW_ADDR_W-1:0] cb_origin = frame_base_cb + ({15'd0, mb_y} * CHROMA_MB_HEIGHT) * {10'd0, ch_width} + ({14'd0, mb_x} * CHROMA_MB_WIDTH);
+    wire [RAW_ADDR_W-1:0] cr_origin = frame_base_cr + ({15'd0, mb_y} * CHROMA_MB_HEIGHT) * {10'd0, ch_width} + ({14'd0, mb_x} * CHROMA_MB_WIDTH);
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -98,9 +99,9 @@ module h264_fetch #(
                     if (plane == 2'd0) begin
                         luma_flat[({row, col} * BIT_DEPTH) +: BIT_DEPTH] <= raw_mem_data;
                     end else if (plane == 2'd1) begin
-                        cb_flat[((row * 4'd8 + col[2:0]) * BIT_DEPTH) +: BIT_DEPTH] <= raw_mem_data;
+                        cb_flat[((row * CHROMA_MB_WIDTH + col) * BIT_DEPTH) +: BIT_DEPTH] <= raw_mem_data;
                     end else begin
-                        cr_flat[((row * 4'd8 + col[2:0]) * BIT_DEPTH) +: BIT_DEPTH] <= raw_mem_data;
+                        cr_flat[((row * CHROMA_MB_WIDTH + col) * BIT_DEPTH) +: BIT_DEPTH] <= raw_mem_data;
                     end
 
                     if (col == max_col) begin
@@ -113,7 +114,7 @@ module h264_fetch #(
                                 row_base    <= cb_origin;
                                 plane_width <= ch_width;
                                 max_row     <= CHROMA_MB_HEIGHT - 1;
-                                max_col     <= 4'd7;
+                                max_col     <= CHROMA_MB_WIDTH - 1;
                                 state       <= S_ADDR;
                             end else if (plane == 2'd1) begin
                                 plane       <= 2'd2;

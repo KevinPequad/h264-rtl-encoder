@@ -56,7 +56,12 @@ def clamp(value: int, lo: int, hi: int) -> int:
 
 def frame_sizes(width: int, height: int, chroma_format_idc: int) -> tuple[int, int, int]:
     luma = width * height
-    chroma = (width // 2) * (height if chroma_format_idc == 2 else height // 2)
+    if chroma_format_idc == 3:
+        chroma = width * height
+    elif chroma_format_idc == 2:
+        chroma = (width // 2) * height
+    else:
+        chroma = (width // 2) * (height // 2)
     return luma, chroma, chroma
 
 
@@ -95,8 +100,8 @@ def write_sample(out_f, value: int, bit_depth: int) -> None:
 
 def generate_smoke_input(path: Path, width: int, height: int, frames: int, bit_depth: int, chroma_format_idc: int) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    chroma_height = height if chroma_format_idc == 2 else height // 2
-    chroma_width = width // 2
+    chroma_height = height if chroma_format_idc in (2, 3) else height // 2
+    chroma_width = width if chroma_format_idc == 3 else width // 2
 
     with path.open("wb") as out_f:
         for frame_idx in range(frames):

@@ -205,6 +205,8 @@ Implemented now relative to the chosen `x264` baseline:
 - current IDR-path `Intra_16x16` macroblock coding through the RTL byte stream
 - current IDR-path and P-slice intra-path `I_PCM` macroblock coding through
   the RTL byte stream
+- exact `I_PCM` validation now also covers `4:4:4` on the current IDR and
+  P-slice intra path at `32x16` for both `8-bit` and `10-bit`
 - up-to-four-reference P-slice inter coding with integer-pel search and
   current quarter-pel luma refinement
 - zero-residual inter-MB handling and `P_SKIP` skip-run ownership on the RTL
@@ -218,6 +220,11 @@ Implemented now relative to the chosen `x264` baseline:
 - `8-bit 4:2:2`
 - `10-bit 4:2:0`
 - `10-bit 4:2:2`
+
+Current additional validated `I_PCM`-only coverage:
+
+- `8-bit 4:4:4`
+- `10-bit 4:4:4`
 
 ## Validated Capabilities
 
@@ -299,6 +306,22 @@ Measured validation points:
   validation with frame `0` on the IDR `I_PCM` path and frame `1` on the
   P-slice `I_PCM` path at `32x16`, `10-bit 4:2:2`, `62,973` cycles, `2,620`
   bytes, and decoded YUV exactly matching both source frames byte-for-byte
+- `ipcm_32x16_1f_444`: strict FFmpeg-decodable forced-`I_PCM` IDR validation at
+  `32x16`, `8-bit 4:4:4`, `5,065` cycles, `1,583` bytes, profile
+  `High 4:4:4 Predictive`, and decoded YUV exactly matching the source frame
+  byte-for-byte
+- `ipcm_p_32x16_2f_444`: strict FFmpeg-decodable two-frame validation with
+  frame `0` on the IDR `I_PCM` path and frame `1` on the P-slice `I_PCM` path
+  at `32x16`, `8-bit 4:4:4`, `64,387` cycles, `3,132` bytes, and decoded YUV
+  exactly matching both source frames byte-for-byte
+- `ipcm_32x16_1f_10b_444`: strict FFmpeg-decodable forced-`I_PCM` IDR
+  validation at `32x16`, `10-bit 4:4:4`, `11,723` cycles, `1,968` bytes,
+  profile `High 4:4:4 Predictive`, and decoded YUV exactly matching the source
+  frame byte-for-byte
+- `ipcm_p_32x16_2f_10b_444`: strict FFmpeg-decodable two-frame validation with
+  frame `0` on the IDR `I_PCM` path and frame `1` on the P-slice `I_PCM` path
+  at `32x16`, `10-bit 4:4:4`, `69,371` cycles, `3,901` bytes, and decoded YUV
+  exactly matching both source frames byte-for-byte
 - `320x176_4f_decodeonly`: strict FFmpeg-decodable multi-frame decode-only
   validation on the current tree, `92,028,425` cycles, `1,912` bytes, paired
   staged `.build.log` / `.sim.log`, JSON validation-mode recording, and
@@ -390,6 +413,9 @@ Current verified milestone outputs:
   `4:2:2`, and `tb/Makefile` exposes `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`,
   `IPCM_SAD_THRESHOLD`, and `INTER_SAD_THRESHOLD` so the path can be
   reproduced without raw `EXTRA_VERILATOR_ARGS`
+- the current tree now also validates exact RTL-owned `4:4:4 I_PCM` output on
+  the IDR path and current P-slice intra path at `32x16` for `8-bit` and
+  `10-bit`, with SPS/profile signaling decoding as `High 4:4:4 Predictive`
 - the `Intra_16x16` DC inverse path in `rtl/h264_luma_dc.v` now preserves the
   full Hadamard dynamic range instead of truncating the top bits before
   inverse scaling
@@ -414,7 +440,7 @@ H.264 encoder yet:
 - broader full-standard sub-pel motion handling beyond the current `16x16`
   quarter-pel luma path
 - broader inter partition coverage and `8x8dct`-class transform support
-- `4:4:4` chroma support
+- broader `4:4:4` chroma support beyond the current `I_PCM` path
 - full in-loop deblocking engine
 - full-standard profile / level / tool coverage
 
@@ -428,7 +454,7 @@ Still missing relative to the chosen `x264` software baseline:
 - direct prediction modes
 - broader sub-pel motion estimation / compensation and richer mode decision
 - broader partition / transform coverage including `8x8dct`-class tools
-- `I444` / `4:4:4` format coverage
+- broader `I444` / `4:4:4` format coverage beyond the current `I_PCM` path
 - in-loop deblocking
 - enough profile / level / tool coverage to stop calling the repo a subset
 

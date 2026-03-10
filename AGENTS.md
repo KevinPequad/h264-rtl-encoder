@@ -45,6 +45,19 @@ with visibly wrong output, poor quality, broken reconstruction state, or major
 feature gaps is not a valid place to stop. Keep going until the quality issue
 or missing feature is actually closed, or until a precise blocker is known.
 
+No passive handoff is allowed. Do not end work with only a checkpoint summary,
+a push notice, or a "current status" message if there is still actionable work
+available in the same session. After reporting progress, immediately continue
+into the next highest-priority implementation, validation, or debugging task.
+
+If a session stops, the stopping reason must be one of these and only these:
+- the encoder is actually complete
+- the user explicitly redirected the work
+- a concrete blocker exists and is written down with the exact failing point,
+  what was tried, and why the next safe step is blocked
+
+If none of those conditions is true, continue working by default.
+
 ## Goal
 
 The goal is to finish a full end-to-end H.264 encoder whose final output is:
@@ -165,6 +178,8 @@ The testbench must not:
    handoff
 9. Do not wait for a fresh "continue" prompt after a checkpoint; continue by
    default unless the user has redirected the work or a concrete blocker exists
+10. Never use a progress report, commit, push, milestone, or turn boundary as a
+    passive stopping point when more safe work remains in the current session
 
 ## Current Practical Notes
 
@@ -232,6 +247,8 @@ The testbench must not:
   - Current IDR-path and P-slice intra-path `I_PCM` macroblock coding through
     the RTL byte stream, with raw luma / Cb / Cr sample emission owned by the
     RTL writer
+  - Exact `I_PCM` validation now also covers `4:4:4` on the current IDR and
+    P-slice intra path at `32x16` for both `8-bit` and `10-bit`
   - Chroma intra prediction: DC-style path
   - `4x4` H.264 integer transform
   - Inverse transform path
@@ -252,6 +269,10 @@ The testbench must not:
   - `10-bit 4:2:0`
   - `10-bit 4:2:2`
 
+- Current additional validated `I_PCM`-only coverage:
+  - `8-bit 4:4:4`
+  - `10-bit 4:4:4`
+
 - Current software comparison baseline:
   - local path: `references/software/x264/`
   - upstream: `https://code.videolan.org/videolan/x264`
@@ -269,6 +290,8 @@ The testbench must not:
   - `Intra_16x16` luma prediction and syntax support
   - Current IDR-path and P-slice intra-path `I_PCM` macroblock coding and
     syntax support
+  - Exact `4:4:4 I_PCM` coverage on the current IDR and P-slice intra path at
+    `32x16` for `8-bit` and `10-bit`
   - Up-to-four-reference P-slice inter coding with integer-pel search and
     current quarter-pel luma refinement
   - Weighted P prediction and `pred_weight_table` signaling on the RTL path
@@ -433,6 +456,24 @@ The testbench must not:
     `10-bit 4:2:2`, `62,973` cycles, `2,620` bytes,
     `output/ipcm_p_32x16_2f_10b_422_latched.h264`, and decoded YUV matching
     both source frames byte-for-byte
+  - strict FFmpeg-decodable forced-`I_PCM` IDR validation at `32x16`,
+    `8-bit 4:4:4`, `5,065` cycles, `1,583` bytes,
+    `output/ipcm_32x16_1f_444.h264`, profile `High 4:4:4 Predictive`, and
+    decoded YUV matching the source frame byte-for-byte
+  - strict FFmpeg-decodable two-frame validation with frame `0` on the IDR
+    `I_PCM` path and frame `1` on the P-slice `I_PCM` path at `32x16`,
+    `8-bit 4:4:4`, `64,387` cycles, `3,132` bytes,
+    `output/ipcm_p_32x16_2f_444.h264`, and decoded YUV matching both source
+    frames byte-for-byte
+  - strict FFmpeg-decodable forced-`I_PCM` IDR validation at `32x16`,
+    `10-bit 4:4:4`, `11,723` cycles, `1,968` bytes,
+    `output/ipcm_32x16_1f_10b_444.h264`, profile `High 4:4:4 Predictive`, and
+    decoded YUV matching the source frame byte-for-byte
+  - strict FFmpeg-decodable two-frame validation with frame `0` on the IDR
+    `I_PCM` path and frame `1` on the P-slice `I_PCM` path at `32x16`,
+    `10-bit 4:4:4`, `69,371` cycles, `3,901` bytes,
+    `output/ipcm_p_32x16_2f_10b_444.h264`, and decoded YUV matching both source
+    frames byte-for-byte
 
 - A 720p chroma corruption bug was traced to raw input address overflow in the Cr plane fetch path and fixed by widening the raw input address width
 - A directional `Intra_4x4` top-right reference fetch bug was fixed in
@@ -476,6 +517,9 @@ The testbench must not:
   `4:2:2`, and `tb/Makefile` exposes `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`,
   `IPCM_SAD_THRESHOLD`, and `INTER_SAD_THRESHOLD` so the path can be
   reproduced without raw `EXTRA_VERILATOR_ARGS`
+- The current tree now also validates exact RTL-owned `4:4:4 I_PCM` output on
+  the IDR path and current P-slice intra path at `32x16` for `8-bit` and
+  `10-bit`, with SPS/profile signaling decoding as `High 4:4:4 Predictive`
 - The `Intra_16x16` DC inverse path in `h264_luma_dc.v` now preserves the full
   Hadamard dynamic range instead of truncating the top bits before inverse
   scaling
@@ -495,7 +539,7 @@ The testbench must not:
   - No broader full-standard sub-pel motion path beyond the current `16x16`
     quarter-pel luma / chroma fractional inter flow
   - No broader inter partition coverage or `8x8dct`-class transform support
-  - No `4:4:4` support
+  - No broader `4:4:4` support beyond the current `I_PCM` path
   - No full in-loop deblocking engine
   - No full-standard profile/tool coverage yet
 
@@ -507,7 +551,8 @@ The testbench must not:
   - Direct motion-vector prediction support
   - Broader sub-pel motion estimation / compensation support
   - Broader inter partition coverage and `8x8dct`-class transform coverage
-  - `4:4:4` support if the project is claiming full-standard feature coverage
+  - Broader `4:4:4` support beyond the current `I_PCM` path if the project is
+    claiming full-standard feature coverage
   - In-loop deblocking
   - Enough profile / level / tool coverage to stop calling the repo a subset
 

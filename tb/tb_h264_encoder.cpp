@@ -33,8 +33,8 @@ static constexpr int BD           = BIT_DEPTH;
 static constexpr int CHROMA_IDC   = CHROMA_FORMAT_IDC;
 static constexpr int BYTES_PER_PEL = (BD > 8) ? 2 : 1;
 static constexpr int LUMA_SIZE    = FRAME_WIDTH * FRAME_HEIGHT;
-static constexpr int CHROMA_WIDTH = FRAME_WIDTH / 2;
-static constexpr int CHROMA_HEIGHT = (CHROMA_IDC == 2) ? FRAME_HEIGHT : (FRAME_HEIGHT / 2);
+static constexpr int CHROMA_WIDTH = (CHROMA_IDC == 3) ? FRAME_WIDTH : (FRAME_WIDTH / 2);
+static constexpr int CHROMA_HEIGHT = (CHROMA_IDC == 1) ? (FRAME_HEIGHT / 2) : FRAME_HEIGHT;
 static constexpr int CHROMA_SIZE  = CHROMA_WIDTH * CHROMA_HEIGHT;
 static constexpr int FRAME_SIZE   = (LUMA_SIZE + 2 * CHROMA_SIZE) * BYTES_PER_PEL;
 static constexpr int CHROMA_MID   = 1 << (BD - 1);  // 128 for 8-bit, 512 for 10-bit

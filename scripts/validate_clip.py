@@ -36,10 +36,14 @@ def pix_fmt_for_config(bit_depth: int, chroma_format_idc: int) -> str:
         return "yuv420p"
     if bit_depth == 8 and chroma_format_idc == 2:
         return "yuv422p"
+    if bit_depth == 8 and chroma_format_idc == 3:
+        return "yuv444p"
     if bit_depth == 10 and chroma_format_idc == 1:
         return "yuv420p10le"
     if bit_depth == 10 and chroma_format_idc == 2:
         return "yuv422p10le"
+    if bit_depth == 10 and chroma_format_idc == 3:
+        return "yuv444p10le"
     raise ValueError(f"Unsupported pixel format for bit_depth={bit_depth} chroma_format_idc={chroma_format_idc}")
 
 
@@ -238,6 +242,8 @@ def encode_x264_reference(
         cmd.extend(["-profile:v", "baseline"])
     elif chroma_format_idc == 2:
         cmd.extend(["-profile:v", "high422"])
+    elif chroma_format_idc == 3:
+        cmd.extend(["-profile:v", "high444"])
     run_cmd(cmd + [str(output_mp4)])
 
 

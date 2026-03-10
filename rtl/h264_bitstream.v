@@ -53,8 +53,8 @@ module h264_bitstream #(
     input  wire [63:0] intra_pred_bits,
     input  wire [6:0]  intra_pred_count,
     input  wire [256*BIT_DEPTH-1:0] ipcm_luma_flat,
-    input  wire [((CHROMA_FORMAT_IDC == 2) ? 128 : 64)*BIT_DEPTH-1:0] ipcm_cb_flat,
-    input  wire [((CHROMA_FORMAT_IDC == 2) ? 128 : 64)*BIT_DEPTH-1:0] ipcm_cr_flat,
+    input  wire [(((CHROMA_FORMAT_IDC == 3) ? 256 : ((CHROMA_FORMAT_IDC == 2) ? 128 : 64))*BIT_DEPTH)-1:0] ipcm_cb_flat,
+    input  wire [(((CHROMA_FORMAT_IDC == 3) ? 256 : ((CHROMA_FORMAT_IDC == 2) ? 128 : 64))*BIT_DEPTH)-1:0] ipcm_cr_flat,
     input  wire        weighted_pred_enable,
     input  wire [3:0]  luma_log2_weight_denom,
     input  wire signed [8:0] luma_weight,
@@ -122,12 +122,14 @@ module h264_bitstream #(
     reg [5:0]  cavlc_buf_count;
 
     wire use_high_profile = (BIT_DEPTH > 8) || (CHROMA_FORMAT_IDC != 1);
+    wire use_high444_profile = (CHROMA_FORMAT_IDC == 3);
     wire use_high422_profile = (CHROMA_FORMAT_IDC == 2) || (BIT_DEPTH > 10);
     wire use_main_profile = weighted_pred_enable && !use_high_profile;
     wire weighted_pred_flag = weighted_pred_enable;
     wire slice_multi_ref_enable = (slice_num_ref_idx_l0_active_minus1 != 2'd0);
-    localparam integer CHR_MB_HEIGHT = (CHROMA_FORMAT_IDC == 2) ? 16 : 8;
-    localparam integer CHR_MB_PIXELS = 8 * CHR_MB_HEIGHT;
+    localparam integer CHR_MB_WIDTH = (CHROMA_FORMAT_IDC == 3) ? 16 : 8;
+    localparam integer CHR_MB_HEIGHT = (CHROMA_FORMAT_IDC == 1) ? 8 : 16;
+    localparam integer CHR_MB_PIXELS = CHR_MB_WIDTH * CHR_MB_HEIGHT;
     localparam integer IPCM_TOTAL_SAMPLES = 256 + 2*CHR_MB_PIXELS;
     reg [6:0]  slice_multi_ref_bits;
     reg [3:0]  slice_multi_ref_bits_len;
@@ -166,7 +168,8 @@ module h264_bitstream #(
     wire chroma_weight_non_default =
         (chroma_weight_cb != $signed(9'd1 << chroma_log2_weight_denom)) || (chroma_offset_cb != 9'sd0) ||
         (chroma_weight_cr != $signed(9'd1 << chroma_log2_weight_denom)) || (chroma_offset_cr != 9'sd0);
-    wire [7:0] sps_profile_idc = use_high422_profile ? 8'h7A :
+    wire [7:0] sps_profile_idc = use_high444_profile ? 8'hF4 :
+                                 use_high422_profile ? 8'h7A :
                                  use_high_profile   ? 8'h6E :
                                  use_main_profile   ? 8'h4D : 8'h42;
     wire [7:0] sps_constraint_flags = (use_high_profile || use_main_profile) ? 8'h00 : 8'hC0;
@@ -174,7 +177,11 @@ module h264_bitstream #(
     localparam integer LOG2_MAX_FRAME_NUM_MINUS4 = FRAME_NUM_BITS - 4;
     localparam integer POC_LSB_BITS = FRAME_NUM_BITS + 1;
     localparam integer LOG2_MAX_POC_LSB_MINUS4 = POC_LSB_BITS - 4;
-    wire [3:0] sps_id_and_chroma_bits = (CHROMA_FORMAT_IDC == 2) ? 4'b1011 : 4'b1010;
+    wire [6:0] sps_id_and_chroma_bits =
+        (CHROMA_FORMAT_IDC == 3) ? 7'b1001000 : // sps_id=UE(0)=1, chroma_format_idc=UE(3)=00100, separate_colour_plane_flag=0
+        (CHROMA_FORMAT_IDC == 2) ? 7'b1011000 : // sps_id=UE(0)=1, chroma_format_idc=UE(2)=011
+                                  7'b1010000 ; // sps_id=UE(0)=1, chroma_format_idc=UE(1)=010
+    wire [2:0] sps_id_and_chroma_len = (CHROMA_FORMAT_IDC == 3) ? 3'd7 : 3'd4;
     wire [POC_LSB_BITS-1:0] pic_order_cnt_lsb = {frame_num, 1'b0};
     localparam integer FRAME_MB_COUNT = MB_COLS * MB_ROWS;
     localparam integer FRAME_MBPS = FRAME_MB_COUNT * FRAME_RATE;
@@ -497,9 +504,9 @@ module h264_bitstream #(
                             // + gaps_in_frame_num=0
                             6'd8: begin
                                 if (use_high_profile) begin
-                                    // sps_id=UE(0)='1' + chroma_format_idc=UE(1 or 2)
-                                    bit_buf <= {sps_id_and_chroma_bits, 92'd0};
-                                    bit_cnt <= 7'd4;
+                                    // sps_id=UE(0) + chroma_format_idc=UE(...) and for 4:4:4 also separate_colour_plane_flag=0
+                                    bit_buf <= {sps_id_and_chroma_bits, 89'd0};
+                                    bit_cnt <= {4'd0, sps_id_and_chroma_len};
                                     // Set up UE for bit_depth_luma_minus8
                                     ue_input <= BIT_DEPTH - 8;
                                     sub <= 6'd20; // jump to High profile sub-states
