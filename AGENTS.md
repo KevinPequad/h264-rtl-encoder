@@ -207,6 +207,9 @@ The testbench must not:
   - `pic_order_cnt_lsb` signaling in RTL on IDR and non-IDR slice headers
   - 8-bit `frame_num` signaling and 9-bit `pic_order_cnt_lsb` signaling on
     IDR and non-IDR slice headers
+  - `pic_order_cnt_lsb` now comes from a dedicated RTL input instead of being
+    derived from `frame_num`, so reordered GOPs can keep display order and
+    reference numbering separate
   - Macroblock header generation in RTL
   - RBSP trailing bits in RTL
   - Emulation-prevention byte insertion in RTL
@@ -217,10 +220,17 @@ The testbench must not:
   - I-frame support
   - P-frame support
   - Non-reference `B`-slice support on the current intra / `I_PCM` path
-  - Limited non-reference inter-coded `B_L0_16x16` support on the current
-    single-list B path
-  - Limited reference-`B` / `BREF` support on the current single-list
-    `B_L0_16x16` path
+  - Limited non-reference inter-coded `B_L0_16x16` and `B_L1_16x16` support
+    on the current reordered single-list B path
+  - Limited reference-`B` / `BREF` support on the current reordered
+    single-list `B_L0_16x16` / `B_L1_16x16` path
+  - Reordered `B`-GOP scheduling support in the testbench / validation flow
+    for encode orders such as `0,2,1,4,3`, with non-reference `B` pictures
+    reusing the same `frame_num` as the surrounding reference pair while
+    carrying their own `pic_order_cnt_lsb`
+  - Current reordered B inter selection can choose past `List0` or future
+    `List1` prediction per macroblock, with `B_L1_16x16` emitted through the
+    RTL bitstream path when the future reference wins
   - IDR + non-IDR encoded stream output
   - `16x16` macroblock raster-order processing
   - Up to four forward reference pictures for P-slice motion search
@@ -292,10 +302,10 @@ The testbench must not:
   - CAVLC entropy path owned by RTL
   - I-picture and P-picture coding
   - Non-reference `B`-picture syntax on the current intra / `I_PCM` path
-  - Limited non-reference `B_L0_16x16` inter coding on the current single-list
-    B path
-  - Limited reference-`B` / `BREF` picture support on the current single-list
-    B path
+  - Limited non-reference `B_L0_16x16` and `B_L1_16x16` inter coding on the
+    current reordered single-list B path
+  - Limited reference-`B` / `BREF` picture support on the current reordered
+    single-list B path
   - Full directional `Intra_4x4` luma mode coverage
   - `Intra_16x16` luma prediction and syntax support
   - Current IDR-path and P-slice intra-path `I_PCM` macroblock coding and
@@ -326,6 +336,10 @@ The testbench must not:
     validation scripts for the current non-reference `B`-slice path
   - Runtime-configurable `force_bref_slice` support in the testbench and
     validation scripts for the current limited reference-`B` path
+  - Runtime-configurable `reorder_b_gop` support in the testbench and
+    validation scripts for reordered B-picture encode order
+  - Simulator-side per-frame `b_l1_mbs` logging so reordered B validation can
+    prove that the future-reference `List1` path was actually selected
   - RTL-owned `P_SKIP` skip-run generation validated on the current P-slice
     path
 
@@ -554,6 +568,14 @@ The testbench must not:
   frames `1` and `2` on the BREF inter path, exact decoded-YUV match, and
   `trace_headers` confirmation that both non-IDR B pictures use
   `nal_ref_idc = 2` with `slice_type = 1`
+- The current tree now also validates reordered B-picture GOPs at `320x176`,
+  including encode order `0,2,1` with the reference P picture carrying
+  `frame_num = 1`, `pic_order_cnt_lsb = 4` and the following non-reference B
+  picture carrying `frame_num = 1`, `pic_order_cnt_lsb = 2`, plus a longer
+  strict-decode run at encode order `0,2,1,4,3`
+- The current tree now also validates `B_L1_16x16` selection on reordered
+  B-picture GOPs, including a forced `32x16` case where simulator logging
+  reports `b_l1_mbs=2` on the B picture
 - `scripts/validate_clip.py` and `scripts/rtl_runner.py` now expose
   `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
   `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths
@@ -571,7 +593,7 @@ The testbench must not:
   H.264 encoder yet:
   - No CABAC syntax integration into the final RTL bitstream path yet
   - No broader `B` / `BREF` picture support beyond the current limited
-    single-list `B_L0_16x16` path
+    reordered single-list `B_L0_16x16` / `B_L1_16x16` path
   - No weighted bipred / `B`-picture weighted prediction
   - No direct motion-vector prediction modes
   - No reference management beyond the current four-reference P-slice subset

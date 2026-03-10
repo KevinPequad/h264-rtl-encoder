@@ -65,6 +65,7 @@ int main(int argc, char** argv) {
     int idr_interval = 12;
     bool force_b_slice = false;
     bool force_bref_slice = false;
+    bool reorder_b_gop = false;
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -75,6 +76,7 @@ int main(int argc, char** argv) {
         else if (arg.rfind("+idr_interval=", 0) == 0) idr_interval = std::atoi(arg.c_str() + 14);
         else if (arg.rfind("+force_b_slice=", 0) == 0) force_b_slice = std::atoi(arg.c_str() + 15) != 0;
         else if (arg.rfind("+force_bref_slice=", 0) == 0) force_bref_slice = std::atoi(arg.c_str() + 18) != 0;
+        else if (arg.rfind("+reorder_b_gop=", 0) == 0) reorder_b_gop = std::atoi(arg.c_str() + 15) != 0;
         else if (arg == "+trace") enable_trace = true;
         else if (arg.rfind("+trace_file=", 0) == 0) trace_file = arg.substr(12);
     }
@@ -117,13 +119,13 @@ int main(int argc, char** argv) {
 
     fprintf(stderr, "==========================================================\n");
     fprintf(stderr, "  H.264 RTL Encoder Testbench (%d-bit)\n", BD);
-    fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d  idr_interval=%d  force_b_slice=%d  force_bref_slice=%d\n",
-            num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC, idr_interval, force_b_slice ? 1 : 0, force_bref_slice ? 1 : 0);
+    fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d  idr_interval=%d  force_b_slice=%d  force_bref_slice=%d  reorder_b_gop=%d\n",
+            num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC, idr_interval, force_b_slice ? 1 : 0, force_bref_slice ? 1 : 0, reorder_b_gop ? 1 : 0);
     fprintf(stderr, "==========================================================\n");
 
     Vh264_encoder_top* dut = new Vh264_encoder_top;
     dut->clk = 0; dut->rst_n = 0; dut->start = 0;
-    dut->frame_num_in = 0; dut->is_idr_in = 0; dut->is_b_in = 0; dut->is_bref_in = 0; dut->ref_mem_rd_data = 0;
+    dut->frame_num_in = 0; dut->pic_order_cnt_lsb_in = 0; dut->is_idr_in = 0; dut->is_b_in = 0; dut->is_bref_in = 0; dut->ref_mem_rd_data = 0;
     dut->chr_cb_ref_rd_data = CHROMA_MID; dut->chr_cr_ref_rd_data = CHROMA_MID;
 
 #if VM_TRACE
@@ -144,6 +146,9 @@ int main(int argc, char** argv) {
     uint64_t cycle = 0;
     uint64_t trace_time = 0;
     int frame_idx = 0;
+    int active_display_idx = 0;
+    int active_frame_num = 0;
+    bool active_is_ref = false;
     uint32_t total_bs_bytes = 0;
     bool frame_active = false;
     auto dump_trace = [&]() {
@@ -160,27 +165,63 @@ int main(int argc, char** argv) {
         if (cycle == 10) dut->rst_n = 1;
     }
 
+    int last_ref_frame_num = 0;
+    int next_ref_frame_num = 1;
+
+    auto compute_reorder_display_idx = [&](int enc_idx) -> int {
+        if (!reorder_b_gop || enc_idx == 0)
+            return enc_idx;
+        int pair = (enc_idx - 1) / 2;
+        bool ref_slot = ((enc_idx - 1) & 1) == 0;
+        int candidate = ref_slot ? (2 + pair * 2) : (1 + pair * 2);
+        return (candidate < num_frames) ? candidate : enc_idx;
+    };
+
+    auto is_reorder_ref_slot = [&](int enc_idx) -> bool {
+        if (!reorder_b_gop || enc_idx == 0)
+            return false;
+        int pair = (enc_idx - 1) / 2;
+        return (((enc_idx - 1) & 1) == 0) && ((2 + pair * 2) < num_frames);
+    };
+
+    auto is_reorder_b_slot = [&](int enc_idx) -> bool {
+        if (!reorder_b_gop || enc_idx == 0)
+            return false;
+        int pair = (enc_idx - 1) / 2;
+        return (((enc_idx - 1) & 1) == 1) && ((2 + pair * 2) < num_frames) && ((1 + pair * 2) < num_frames);
+    };
+
     while (!got_sigint && cycle < timeout_cycles && frame_idx < num_frames) {
         if (!frame_active) {
             dut->start = 1;
-            bool is_idr = (idr_interval <= 0) ? (frame_idx == 0) : ((frame_idx % idr_interval) == 0);
-            bool is_b = !is_idr && force_b_slice;
-            bool is_bref = is_b && force_bref_slice;
-            int frame_num = (idr_interval <= 0) ? frame_idx : (frame_idx % idr_interval);
+            const int display_idx = compute_reorder_display_idx(frame_idx);
+            const bool reorder_ref_slot = is_reorder_ref_slot(frame_idx);
+            const bool reorder_b_slot = is_reorder_b_slot(frame_idx);
+            const bool is_idr = reorder_b_gop ? (display_idx == 0)
+                                              : ((idr_interval <= 0) ? (frame_idx == 0) : ((frame_idx % idr_interval) == 0));
+            const bool is_b = !is_idr && (reorder_b_slot || (force_b_slice && !reorder_ref_slot));
+            const bool is_bref = !is_idr && (reorder_ref_slot ? force_bref_slice : (is_b && force_bref_slice));
+            const bool is_ref_picture = is_idr || !is_b || is_bref;
+            const int frame_num = is_idr ? 0 : (is_ref_picture ? next_ref_frame_num : last_ref_frame_num);
             dut->frame_num_in = frame_num & 0xFF;
+            dut->pic_order_cnt_lsb_in = (display_idx * 2) & 0x1FF;
             dut->is_idr_in = is_idr ? 1 : 0;
             dut->is_b_in = is_b ? 1 : 0;
             dut->is_bref_in = is_bref ? 1 : 0;
+            active_display_idx = display_idx;
+            active_frame_num = frame_num & 0xFF;
+            active_is_ref = is_ref_picture;
             frame_active = true;
-            fprintf(stderr, "[TB] Frame %d (%s) start @ cycle %llu\n",
-                    frame_idx, is_idr ? "IDR" : (is_bref ? "BREF" : (is_b ? "B" : "P")), (unsigned long long)cycle);
+            fprintf(stderr, "[TB] Enc %d -> Disp %d (%s) frame_num=%d poc_lsb=%d start @ cycle %llu\n",
+                    frame_idx, display_idx, is_idr ? "IDR" : (is_bref ? "BREF" : (is_b ? "B" : "P")),
+                    active_frame_num, (display_idx * 2) & 0x1FF, (unsigned long long)cycle);
         }
 
         dut->clk = 1;
 
         { // Raw pixel memory read
             int pixels_per_frame = LUMA_SIZE + 2 * CHROMA_SIZE;
-            size_t base = (size_t)frame_idx * pixels_per_frame;
+            size_t base = (size_t)active_display_idx * pixels_per_frame;
             uint32_t addr = dut->raw_mem_addr;
             if (base + addr < raw_pixel_mem.size())
                 dut->raw_mem_data = raw_pixel_mem[base + addr];
@@ -242,8 +283,8 @@ int main(int argc, char** argv) {
 
         if (dut->done) {
             total_bs_bytes = dut->bs_bytes_written;
-            fprintf(stderr, "[TB] Frame %d done @ cycle %llu -- bs_bytes=%u\n",
-                    frame_idx, (unsigned long long)cycle, total_bs_bytes);
+            fprintf(stderr, "[TB] Enc %d -> Disp %d done @ cycle %llu -- bs_bytes=%u\n",
+                    frame_idx, active_display_idx, (unsigned long long)cycle, total_bs_bytes);
 
             {
                 uint32_t bank = dut->ref_wr_bank_sel & 0x7;
@@ -273,6 +314,10 @@ int main(int argc, char** argv) {
                 }
             }
 
+            if (active_is_ref) {
+                last_ref_frame_num = active_frame_num;
+                next_ref_frame_num = (active_frame_num + 1) & 0xFF;
+            }
             frame_idx++;
             frame_active = false;
         }

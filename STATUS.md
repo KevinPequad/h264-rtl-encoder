@@ -149,6 +149,9 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - `pic_order_cnt_lsb` signaling in RTL on IDR and non-IDR slice headers
 - 8-bit `frame_num` signaling and 9-bit `pic_order_cnt_lsb` signaling on
   IDR and non-IDR slice headers
+- `pic_order_cnt_lsb` now comes from a dedicated RTL input instead of being
+  derived from `frame_num`, so reordered GOPs can keep display order and
+  reference numbering separate
 - macroblock header generation in RTL
 - RBSP trailing bits in RTL
 - emulation-prevention byte insertion in RTL
@@ -159,10 +162,17 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - I-frame support
 - P-frame support
 - non-reference `B`-slice support on the current intra / `I_PCM` path
-- limited non-reference inter-coded `B_L0_16x16` support on the current
-  single-list B path
-- limited reference-`B` / `BREF` support on the current single-list
-  `B_L0_16x16` path
+- limited non-reference inter-coded `B_L0_16x16` and `B_L1_16x16` support on
+  the current reordered single-list B path
+- limited reference-`B` / `BREF` support on the current reordered single-list
+  `B_L0_16x16` / `B_L1_16x16` path
+- reordered `B`-GOP scheduling support in the testbench / validation flow for
+  encode orders such as `0,2,1,4,3`, with non-reference `B` pictures reusing
+  the same `frame_num` as the surrounding reference pair while carrying their
+  own `pic_order_cnt_lsb`
+- current reordered B inter selection can choose past `List0` or future
+  `List1` prediction per macroblock, with `B_L1_16x16` emitted through the RTL
+  bitstream path when the future reference wins
 - IDR + non-IDR encoded stream output
 - `16x16` macroblock raster-order processing
 - up to four forward reference pictures for P-slice motion search
@@ -213,10 +223,10 @@ Implemented now relative to the chosen `x264` baseline:
 - CAVLC entropy path owned by RTL
 - I-picture and P-picture coding
 - non-reference `B`-picture syntax on the current intra / `I_PCM` path
-- limited non-reference `B_L0_16x16` inter coding on the current single-list B
-  path
-- limited reference-`B` / `BREF` picture support on the current single-list B
-  path
+- limited non-reference `B_L0_16x16` and `B_L1_16x16` inter coding on the
+  current reordered single-list B path
+- limited reference-`B` / `BREF` picture support on the current reordered
+  single-list B path
 - full `Intra_4x4` directional luma mode coverage
 - `Intra_16x16` luma prediction and syntax support
 - current IDR-path `Intra_16x16` macroblock coding through the RTL byte stream
@@ -265,6 +275,10 @@ Verified validation and tooling coverage around the encoder flow:
   scripts for the current non-reference `B`-slice path
 - runtime-configurable `force_bref_slice` support in the testbench and
   validation scripts for the current limited reference-`B` path
+- runtime-configurable `reorder_b_gop` support in the testbench and validation
+  scripts for reordered B-picture encode order
+- simulator-side per-frame `b_l1_mbs` logging so reordered B validation can
+  prove that the future-reference `List1` path was actually selected
 - fast strict-decode-only validation mode in `validate_clip.py` for longer
   regression runs that do not need metrics or x264 comparison
 - RTL-owned `P_SKIP` skip-run generation validated on the current P-slice path
@@ -360,6 +374,27 @@ Measured validation points:
   `85,799` bytes total, exact decoded-YUV match, and `trace_headers`
   confirmation that both non-IDR B pictures use `nal_ref_idc = 2` with
   `slice_type = 1`
+- `reorderbgop_320x176_3f`: strict FFmpeg-decodable reordered B-GOP validation
+  at `320x176`, encode order `0,2,1`, `20,392,794` cycles, RTL PSNR avg
+  `30.444086`, RTL SSIM all `0.774761`, with the reference P picture carrying
+  `frame_num = 1`, `pic_order_cnt_lsb = 4` and the following non-reference B
+  picture carrying `frame_num = 1`, `pic_order_cnt_lsb = 2`,
+  `output/validation_reorderbgop_320x176_3f.h264`, and
+  `output/validation_reorderbgop_320x176_3f.mp4`
+- `reorderbgop_320x176_5f`: strict FFmpeg-decodable reordered B-GOP validation
+  at `320x176`, encode order `0,2,1,4,3`, `62,543,870` cycles, decode-only
+  strict check closed cleanly, `output/validation_reorderbgop_320x176_5f.h264`,
+  and `output/validation_reorderbgop_320x176_5f.mp4`
+- `bl1_320x176_3f`: strict FFmpeg-decodable reordered B-GOP validation at
+  `320x176`, encode order `0,2,1`, `37,760,283` cycles, `3,797` bytes, RTL
+  PSNR avg `30.444086`, RTL SSIM all `0.774761`,
+  `output/validation_bl1_320x176_3f.h264`, and
+  `output/validation_bl1_320x176_3f.mp4`
+- `bl1_force_32x16_3f`: strict FFmpeg-decodable forced-`B_L1_16x16`
+  reordered-B validation at `32x16`, `3` frames, `129,691` cycles, `98` bytes,
+  `output/validation_bl1_force_32x16_3f.h264`, and
+  `output/validation_bl1_force_32x16_3f.mp4`, with simulator logging showing
+  `b_l1_mbs=2` on the B picture
 - `32x16_2f_444_ipcm_scripted`: strict staged validation through
   `scripts/validate_clip.py` with `--enable-idr-ipcm 1 --enable-p-ipcm 1`
   at `32x16`, `8-bit 4:4:4`, packaged MP4 output, and JSON summary in
@@ -480,7 +515,7 @@ H.264 encoder yet:
 - CABAC context modelling, syntax binarization, and final bitstream-path
   integration
 - no broader `B` / `BREF` picture support beyond the current limited
-  single-list `B_L0_16x16` path
+  reordered single-list `B_L0_16x16` / `B_L1_16x16` path
 - weighted bipred / `B`-picture weighted prediction
 - direct motion-vector prediction modes
 - reference-picture management beyond the current four-reference P-slice subset
