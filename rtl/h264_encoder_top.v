@@ -1189,7 +1189,10 @@ pred_buf = {(256*BD){1'b0}};
                         current_write_bank <= next_write_bank;
                         ref_wr_bank_sel <= next_write_bank;
                         ref_rd_bank_sel <= newest_ref_bank;
-                        slice_num_ref_idx_l0_active_minus1 <= (valid_ref_count == 3'd0) ? 2'd0 : (valid_ref_count[1:0] - 2'd1);
+                        if (is_b_in)
+                            slice_num_ref_idx_l0_active_minus1 <= 2'd0;
+                        else
+                            slice_num_ref_idx_l0_active_minus1 <= (valid_ref_count == 3'd0) ? 2'd0 : (valid_ref_count[1:0] - 2'd1);
                         top_state <= TS_WRITE_SLICE; // P-frame: skip SPS/PPS
                     end
                 end
@@ -1217,7 +1220,7 @@ pred_buf = {(256*BD){1'b0}};
                     top_state <= TS_WAIT_FETCH;
                 end
                 TS_WAIT_FETCH: if (fetch_done) begin
-                    if (is_p_frame) begin
+                    if (is_p_frame || is_b_frame) begin
                         me_search_pass <= 2'd0;
                         ref_rd_bank_sel <= newest_ref_bank;
                         top_state <= TS_ME_START;
@@ -1236,7 +1239,7 @@ pred_buf = {(256*BD){1'b0}};
                     top_state <= TS_WAIT_ME;
                 end
                 TS_WAIT_ME: if (me_done) begin
-                    if ((valid_ref_count >= 3'd2) && (me_search_pass == 2'd0)) begin
+                    if (is_p_frame && (valid_ref_count >= 3'd2) && (me_search_pass == 2'd0)) begin
                         me_pass0_mvx <= me_mvx_w;
                         me_pass0_mvy <= me_mvy_w;
                         me_pass0_sad <= me_sad_w;
@@ -1245,7 +1248,7 @@ pred_buf = {(256*BD){1'b0}};
                         me_search_pass <= 2'd1;
                         ref_rd_bank_sel <= older_ref_bank;
                         top_state <= TS_ME_START;
-                    end else if ((valid_ref_count >= 3'd3) && (me_search_pass == 2'd1)) begin
+                    end else if (is_p_frame && (valid_ref_count >= 3'd3) && (me_search_pass == 2'd1)) begin
                         if (me_sad_w < me_pass0_sad) begin
                             me_pass0_mvx <= me_mvx_w;
                             me_pass0_mvy <= me_mvy_w;
@@ -1256,7 +1259,7 @@ pred_buf = {(256*BD){1'b0}};
                         me_search_pass <= 2'd2;
                         ref_rd_bank_sel <= oldest_ref_bank;
                         top_state <= TS_ME_START;
-                    end else if ((valid_ref_count >= 3'd4) && (me_search_pass == 2'd2)) begin
+                    end else if (is_p_frame && (valid_ref_count >= 3'd4) && (me_search_pass == 2'd2)) begin
                         if (me_sad_w < me_pass0_sad) begin
                             me_pass0_mvx <= me_mvx_w;
                             me_pass0_mvy <= me_mvy_w;
@@ -1505,7 +1508,7 @@ pred_buf = {(256*BD){1'b0}};
                                 pskip_y = pskip_med_y;
                             end
                         end
-                        pskip_syntax_eligible_reg <= !use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
+                        pskip_syntax_eligible_reg <= is_p_frame && !use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
                                                      ($signed((me_fullpel_mvx <<< 2) + best_dx_i) == pskip_x) &&
                                                      ($signed((me_fullpel_mvy <<< 2) + best_dy_i) == pskip_y);
                         /* verilator lint_off WIDTH */
@@ -1530,7 +1533,7 @@ pred_buf = {(256*BD){1'b0}};
                         if (best_sad_i < INTER_SAD_THRESHOLD) begin
                             use_intra16_mb_reg <= 1'b0;
                             use_ipcm_mb_reg <= 1'b0;
-                            if (!use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
+                            if (is_p_frame && !use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
                                 pskip_luma_exact &&
                                 ($signed((me_fullpel_mvx <<< 2) + best_dx_i) == pskip_x) &&
                                 ($signed((me_fullpel_mvy <<< 2) + best_dy_i) == pskip_y)) begin

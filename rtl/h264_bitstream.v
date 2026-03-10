@@ -948,10 +948,16 @@ module h264_bitstream #(
                             end
                             6'd24: begin
                                 if (is_inter_mb) begin
-                                    // Inter path: non-skipped P_L0_16x16 uses mb_type=UE(0)='1'
-                                    bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
-                                    bit_cnt <= bit_cnt + 7'd1;
-                                    sub <= 6'd10;  // jump to inter path
+                                    if (is_b_slice) begin
+                                        // Current B inter path uses B_L0_16x16, which is mb_type=1.
+                                        ue_input <= 9'd1;
+                                        sub <= 6'd22;
+                                    end else begin
+                                        // Current P inter path uses P_L0_16x16, which is mb_type=0.
+                                        bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
+                                        bit_cnt <= bit_cnt + 7'd1;
+                                        sub <= 6'd10;  // jump to inter path
+                                    end
                                 end else begin
                                     ue_input <= {4'd0, intra_mb_type_code_num};
                                     sub <= is_p_slice ? 6'd20 : 6'd21;
@@ -999,6 +1005,11 @@ module h264_bitstream #(
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
                                 sub <= is_ipcm_mb ? 6'd25 : 6'd1;
+                            end
+                            6'd22: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                sub <= 6'd10;
                             end
 
                             // ===== Inter MB path (sub 10+) =====
