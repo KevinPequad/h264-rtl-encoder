@@ -199,8 +199,12 @@ int main(int argc, char** argv) {
             const bool reorder_b_slot = is_reorder_b_slot(frame_idx);
             const bool is_idr = reorder_b_gop ? (display_idx == 0)
                                               : ((idr_interval <= 0) ? (frame_idx == 0) : ((frame_idx % idr_interval) == 0));
-            const bool is_b = !is_idr && (reorder_b_slot || (force_b_slice && !reorder_ref_slot));
-            const bool is_bref = !is_idr && (reorder_ref_slot ? force_bref_slice : (is_b && force_bref_slice));
+            const bool force_any_b = force_b_slice || force_bref_slice;
+            const bool is_b = !is_idr &&
+                              (reorder_b_slot ||
+                               (reorder_b_gop && force_bref_slice && reorder_ref_slot) ||
+                               (force_any_b && !reorder_ref_slot));
+            const bool is_bref = !is_idr && is_b && force_bref_slice;
             const bool is_ref_picture = is_idr || !is_b || is_bref;
             const int frame_num = is_idr ? 0 : (is_ref_picture ? next_ref_frame_num : last_ref_frame_num);
             dut->frame_num_in = frame_num & 0xFF;
