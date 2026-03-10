@@ -182,6 +182,14 @@ The testbench must not:
   - Inter/intra macroblock decisioning for P-frames
   - Slice-level active reference override and per-macroblock `ref_idx_l0`
     syntax
+  - Deferred inter-macroblock header emission so zero-residual inter MBs can
+    legally choose `cbp=0` or `P_SKIP` before any residual syntax is released
+  - `mb_skip_run` accumulation and flush in RTL for P-slices
+  - Zero-residual inter MB FIFO discard in RTL when no residual syntax should
+    be emitted
+  - Zero-residual `P_SKIP` selection in RTL when the chosen inter MB is
+    `ref_idx_l0 = 0` and its motion vector matches the inferred `P_SKIP`
+    predictor
   - Motion-vector-difference syntax for supported P macroblocks
   - Integer-pel motion estimation
   - Fixed search range motion estimation
@@ -248,6 +256,8 @@ The testbench must not:
   - Simulator log and cycle-count capture for regressions
   - Runtime-configurable `idr_interval` support in the testbench and
     validation scripts
+  - RTL-owned `P_SKIP` skip-run generation validated on the current P-slice
+    path
 
 - Use `scripts/regress_smoke_matrix.py` to keep the current smoke matrix
   reproducible, including simulator logs and cycle counts
@@ -330,6 +340,11 @@ The testbench must not:
     Main-profile stream, RTL PSNR avg `25.806041`, RTL SSIM all `0.333568`,
     `output/validation_320x176_4f_weightedp.h264`, and
     `output/validation_320x176_4f_weightedp.mp4`
+  - deferred-inter-header / zero-residual-`P_SKIP` validation at `320x176`,
+    `4` frames, strict FFmpeg-decodable, `92,028,425` cycles, `1,912` bytes,
+    RTL PSNR avg `43.883472`, RTL SSIM all `0.995357`,
+    `output/validation_pskip3_320x176_4f.h264`, and
+    `output/validation_pskip3_320x176_4f.mp4`
   - two-reference P-slice validation at `320x176`, `4` frames,
     `50,611,399` cycles, strict FFmpeg-decodable,
     `output/validation_multiref_320x176_4f.h264`, and
@@ -361,6 +376,8 @@ The testbench must not:
   emits 8-bit `frame_num` values in slice headers
 - The testbench and `validate_clip.py` now accept a runtime `idr_interval`;
   `1` forces every frame to IDR, and `0` means only the first frame is IDR
+- Deferred inter headers and FIFO discard now prevent illegal zero-residual
+  CAVLC payloads from leaking after `cbp=0` or `P_SKIP`
 
 - Important missing features, so this does not get confused with a full-standard
   H.264 encoder yet:

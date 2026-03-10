@@ -24,6 +24,7 @@ module h264_bitstream #(
     input  wire        cmd_write_mb_header,
     input  wire        cmd_write_trailing,
     input  wire        cmd_flush,
+    input  wire        cmd_clear_fifo,
 
     // Bits from CAVLC encoder
     input  wire        cavlc_valid,
@@ -40,6 +41,7 @@ module h264_bitstream #(
     input  wire        is_p_slice,
     input  wire [7:0]  frame_num,
     input  wire        is_inter_mb,
+    input  wire        is_skip_mb,
     input  wire [1:0]  mb_ref_idx_l0,
     input  wire signed [8:0] mvd_x,
     input  wire signed [8:0] mvd_y,
@@ -258,6 +260,52 @@ module h264_bitstream #(
     wire [9:0] se_codenum = (se_input == 9'sd0) ? 10'd0 :
                             (se_input[8])        ? {se_abs, 1'b0} :       // negative: 2*|v|
                                                    {1'b0, se_abs, 1'b0} - 10'd1; // positive: 2*v-1
+
+    // Larger UE(v) helper for mb_skip_run. This must cover at least the macroblock
+    // count of the validated 720p target and wider local smoke resolutions.
+    wire [12:0] ue_big_input = pending_skip_run;
+    wire [13:0] ue_big_code1 = {1'b0, ue_big_input} + 14'd1;
+    reg [4:0] ue_big_msb;
+    always @(*) begin
+        casez (ue_big_code1)
+            14'b1?????????????: ue_big_msb = 5'd13;
+            14'b01????????????: ue_big_msb = 5'd12;
+            14'b001???????????: ue_big_msb = 5'd11;
+            14'b0001??????????: ue_big_msb = 5'd10;
+            14'b00001?????????: ue_big_msb = 5'd9;
+            14'b000001????????: ue_big_msb = 5'd8;
+            14'b0000001???????: ue_big_msb = 5'd7;
+            14'b00000001??????: ue_big_msb = 5'd6;
+            14'b000000001?????: ue_big_msb = 5'd5;
+            14'b0000000001????: ue_big_msb = 5'd4;
+            14'b00000000001???: ue_big_msb = 5'd3;
+            14'b000000000001??: ue_big_msb = 5'd2;
+            14'b0000000000001?: ue_big_msb = 5'd1;
+            default:            ue_big_msb = 5'd0;
+        endcase
+    end
+    reg [12:0] pending_skip_run;
+    wire [5:0] ue_big_total_bits = {ue_big_msb, 1'b0} + 6'd1;
+    reg [24:0] ue_big_bits;
+    always @(*) begin
+        case (ue_big_msb)
+            5'd0:  ue_big_bits = {ue_big_code1[0], 24'd0};
+            5'd1:  ue_big_bits = {1'b0, ue_big_code1[1:0], 22'd0};
+            5'd2:  ue_big_bits = {2'b0, ue_big_code1[2:0], 20'd0};
+            5'd3:  ue_big_bits = {3'b0, ue_big_code1[3:0], 18'd0};
+            5'd4:  ue_big_bits = {4'b0, ue_big_code1[4:0], 16'd0};
+            5'd5:  ue_big_bits = {5'b0, ue_big_code1[5:0], 14'd0};
+            5'd6:  ue_big_bits = {6'b0, ue_big_code1[6:0], 12'd0};
+            5'd7:  ue_big_bits = {7'b0, ue_big_code1[7:0], 10'd0};
+            5'd8:  ue_big_bits = {8'b0, ue_big_code1[8:0], 8'd0};
+            5'd9:  ue_big_bits = {9'b0, ue_big_code1[9:0], 6'd0};
+            5'd10: ue_big_bits = {10'b0, ue_big_code1[10:0], 4'd0};
+            5'd11: ue_big_bits = {11'b0, ue_big_code1[11:0], 2'd0};
+            5'd12: ue_big_bits = {12'b0, ue_big_code1[12:0]};
+            5'd13: ue_big_bits = 25'd0;
+            default: ue_big_bits = {1'b1, 24'd0};
+        endcase
+    end
     wire [10:0] se_code1 = se_codenum + 11'd1;  // codeNum + 1
     wire [9:0]  mvd_x_codenum_w = (mvd_x == 9'sd0) ? 10'd0 :
                                   (mvd_x[8])        ? ({(~mvd_x + 9'd1), 1'b0}) :
@@ -330,6 +378,7 @@ module h264_bitstream #(
             skip_ep          <= 1'b0;
             se_input         <= 8'sd0;
             ue_input         <= 10'd0;
+            pending_skip_run <= 13'd0;
         end else begin
             bs_mem_wr <= 1'b0;
             cmd_done  <= 1'b0;
@@ -361,7 +410,11 @@ module h264_bitstream #(
                 case (state)
                     S_IDLE: begin
                         busy <= (!hold_fifo_drain && !fifo_empty) || (bit_cnt >= 7'd8) || do_write;
-                        if (cmd_write_sps) begin
+                        if (cmd_clear_fifo) begin
+                            fifo_rd_ptr <= fifo_wr_ptr;
+                            cmd_done <= 1'b1;
+                            busy <= 1'b0;
+                        end else if (cmd_write_sps) begin
                             state <= S_SPS; sub <= 6'd0; busy <= 1'b1;
                         end else if (cmd_write_pps) begin
                             state <= S_PPS; sub <= 6'd0; busy <= 1'b1;
@@ -846,21 +899,33 @@ module h264_bitstream #(
                     S_MB_HDR: begin
                         case (sub)
                             6'd0: begin
+                                if (is_p_slice && is_skip_mb) begin
+                                    pending_skip_run <= pending_skip_run + 13'd1;
+                                    cmd_done <= 1'b1;
+                                    busy     <= 1'b0;
+                                    state    <= S_IDLE;
+                                end else if (is_p_slice && pending_skip_run != 13'd0) begin
+                                    bit_buf <= bit_buf | ({ue_big_bits, 71'd0} >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, ue_big_total_bits};
+                                    pending_skip_run <= 13'd0;
+                                    sub <= 6'd24;
+                                end else if (is_p_slice) begin
+                                    bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + 7'd1;
+                                    sub <= 6'd24;
+                                end else begin
+                                    sub <= 6'd24;
+                                end
+                            end
+                            6'd24: begin
                                 if (is_inter_mb) begin
-                                    // Inter path: mb_skip_run=UE(0)='1' + P_L0_16x16=UE(0)='1' (2 bits)
-                                    bit_buf <= bit_buf | ({2'b11, 94'd0} >> bit_cnt[6:0]);
-                                    bit_cnt <= bit_cnt + 7'd2;
+                                    // Inter path: non-skipped P_L0_16x16 uses mb_type=UE(0)='1'
+                                    bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + 7'd1;
                                     sub <= 6'd10;  // jump to inter path
                                 end else begin
-                                    if (is_p_slice) begin
-                                        bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
-                                        bit_cnt <= bit_cnt + 7'd1;
-                                        ue_input <= {4'd0, intra_mb_type_code_num};
-                                        sub <= 6'd20;
-                                    end else begin
-                                        ue_input <= {4'd0, intra_mb_type_code_num};
-                                        sub <= 6'd21;
-                                    end
+                                    ue_input <= {4'd0, intra_mb_type_code_num};
+                                    sub <= is_p_slice ? 6'd20 : 6'd21;
                                 end
                             end
                             6'd1: begin
@@ -994,23 +1059,38 @@ module h264_bitstream #(
                     S_TRAIL: begin
                         case (sub)
                             6'd0: begin
+                                if (is_p_slice && pending_skip_run != 13'd0) begin
+                                    bit_buf <= bit_buf | ({ue_big_bits, 71'd0} >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, ue_big_total_bits};
+                                    pending_skip_run <= 13'd0;
+                                    sub <= 6'd1;
+                                end else begin
+                                    sub <= 6'd2;
+                                end
+                            end
+                            6'd1: begin
+                                state <= S_EMIT;
+                                return_state <= S_TRAIL;
+                                sub <= 6'd2;
+                            end
+                            6'd2: begin
                                 bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + 7'd1;
                                 sub <= sub + 6'd1;
                             end
-                            6'd1: begin
+                            6'd3: begin
                                 if (bit_cnt[2:0] != 3'd0) begin
                                     bit_cnt <= bit_cnt + 7'd1;
                                 end else begin
                                     sub <= sub + 6'd1;
                                 end
                             end
-                            6'd2: begin
+                            6'd4: begin
                                 state <= S_EMIT;
                                 return_state <= S_TRAIL;
                                 sub <= sub + 6'd1;
                             end
-                            6'd3: begin
+                            6'd5: begin
                                 cmd_done <= 1'b1;
                                 busy     <= 1'b0;
                                 state    <= S_IDLE;

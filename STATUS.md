@@ -14,6 +14,8 @@ Current state:
 - the strict current-tree `320x176` validation path now passes after extending
   the P-slice path to four forward refs and re-closing decode on that banked
   path
+- the current P-slice path now supports zero-residual inter-MB header deferral
+  and RTL-owned `P_SKIP` skip-run generation
 - the repository is still not complete as a full H.264 standard encoder
 
 Completion is still blocked by major missing features including CABAC syntax
@@ -156,6 +158,14 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - slice-level active reference override and per-macroblock `ref_idx_l0` syntax
 - standards-correct `TE(v)` coding for `ref_idx_l0` in the two-reference
   P-slice case, with `UE(v)` fallback when three references are active
+- deferred inter-macroblock header emission so zero-residual inter MBs can
+  legally choose `cbp=0` or `P_SKIP` before any residual syntax is released
+- `mb_skip_run` accumulation and flush in RTL for P-slices
+- zero-residual inter MB FIFO discard in RTL when no residual syntax should be
+  emitted
+- zero-residual `P_SKIP` selection in RTL when the chosen inter MB is
+  `ref_idx_l0 = 0` and its motion vector matches the inferred `P_SKIP`
+  predictor
 - motion-vector-difference syntax for supported P macroblocks
 - integer-pel motion estimation
 - fixed search range motion estimation
@@ -192,6 +202,8 @@ Implemented now relative to the chosen `x264` baseline:
 - `Intra_16x16` luma prediction and syntax support
 - up-to-four-reference P-slice inter coding with integer-pel search and
   current quarter-pel luma refinement
+- zero-residual inter-MB handling and `P_SKIP` skip-run ownership on the RTL
+  path
 - weighted P prediction and `pred_weight_table` signaling on the RTL path
 - `8-bit` and `10-bit` support for `4:2:0` and `4:2:2`
 
@@ -220,6 +232,7 @@ Verified validation and tooling coverage around the encoder flow:
 - simulator log and cycle-count capture for regressions
 - runtime-configurable `idr_interval` support in the testbench and validation
   scripts
+- RTL-owned `P_SKIP` skip-run generation validated on the current P-slice path
 
 Measured validation points:
 
@@ -265,6 +278,11 @@ Measured validation points:
 - `320x176_4f_weightedp`: strict FFmpeg-decodable weighted-P validation on the
   RTL path, Main profile stream, RTL PSNR avg `25.806041`, RTL SSIM all
   `0.333568`
+- `320x176_4f_pskip3`: strict FFmpeg-decodable deferred-inter-header /
+  zero-residual-`P_SKIP` validation on the RTL path, `92,028,425` cycles,
+  `1,912` bytes, RTL PSNR avg `43.883472`, RTL SSIM all `0.995357`, and
+  simulator-reported `P_SKIP` counts of `123`, `152`, and `134` across the
+  three validated P-frames
 - `320x176_4f_multiref`: earlier strict FFmpeg-decodable two-reference P-slice
   validation on the RTL path, `50,611,399` cycles, SPS
   `max_num_ref_frames = 2`, later P-slices with
@@ -307,6 +325,9 @@ Current verified milestone outputs:
   emits 8-bit `frame_num` values in slice headers
 - the testbench and `validate_clip.py` now accept a runtime `idr_interval`;
   `1` forces every frame to IDR, and `0` means only the first frame is IDR
+- deferred inter headers and FIFO discard now prevent illegal zero-residual
+  CAVLC payloads from leaking after `cbp=0` or `P_SKIP`, which is what made
+  the earlier zero-residual inter-header attempt invalid
 
 ## Not Done Yet
 
