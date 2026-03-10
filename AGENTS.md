@@ -474,6 +474,10 @@ The testbench must not:
     `10-bit 4:4:4`, `69,371` cycles, `3,901` bytes,
     `output/ipcm_p_32x16_2f_10b_444.h264`, and decoded YUV matching both source
     frames byte-for-byte
+  - strict staged validation through `scripts/validate_clip.py` with
+    `--enable-idr-ipcm 1 --enable-p-ipcm 1` at `32x16`, `8-bit 4:4:4`,
+    packaged MP4 output, and JSON summary in
+    `output/validation_32x16_2f_444_ipcm_scripted.json`
 
 - A 720p chroma corruption bug was traced to raw input address overflow in the Cr plane fetch path and fixed by widening the raw input address width
 - A directional `Intra_4x4` top-right reference fetch bug was fixed in
@@ -520,6 +524,10 @@ The testbench must not:
 - The current tree now also validates exact RTL-owned `4:4:4 I_PCM` output on
   the IDR path and current P-slice intra path at `32x16` for `8-bit` and
   `10-bit`, with SPS/profile signaling decoding as `High 4:4:4 Predictive`
+- `scripts/validate_clip.py` and `scripts/rtl_runner.py` now expose
+  `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
+  `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths
+  instead of relying on ad-hoc `make` commands
 - The `Intra_16x16` DC inverse path in `h264_luma_dc.v` now preserves the full
   Hadamard dynamic range instead of truncating the top bits before inverse
   scaling
