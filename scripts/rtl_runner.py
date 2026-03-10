@@ -31,6 +31,7 @@ class BuildConfig:
     chroma_offset_cb: int = 0
     chroma_weight_cr: int = 1
     chroma_offset_cr: int = 0
+    idr_interval: int = 12
 
 
 def repo_root() -> Path:
@@ -120,6 +121,7 @@ def run_sim(
     timeout: int,
     input_path: Path,
     output_path: Path,
+    idr_interval: int = 12,
     trace: bool = False,
     trace_file: Path | None = None,
     capture: bool = False,
@@ -131,6 +133,7 @@ def run_sim(
         f"+timeout={timeout}",
         f"+input={input_path}",
         f"+output={output_path}",
+        f"+idr_interval={idr_interval}",
     ]
     if trace:
         cmd.append("+trace")

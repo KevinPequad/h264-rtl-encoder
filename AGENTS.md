@@ -246,6 +246,8 @@ The testbench must not:
   - Side-by-side decoded-vs-source image generation
   - Staged clean-build log capture for reproducible validation runs
   - Simulator log and cycle-count capture for regressions
+  - Runtime-configurable `idr_interval` support in the testbench and
+    validation scripts
 
 - Use `scripts/regress_smoke_matrix.py` to keep the current smoke matrix
   reproducible, including simulator logs and cycle counts
@@ -295,6 +297,9 @@ The testbench must not:
     `output/validation_frame_num8_320x176_4f.h264`, and later P-slices with
     8-bit `frame_num` values `0..3` and 9-bit `pic_order_cnt_lsb` values
     `0`, `2`, `4`, and `6`
+  - all-IDR validation at `320x176`, `4` frames, `2,930,968` cycles,
+    strict FFmpeg-decodable, `output/validation_idr1_320x176_4f.h264`, and
+    four SPS/PPS/IDR groups produced by runtime `idr_interval = 1`
   - strict current-tree validation at `320x176`, `24` frames,
     `640,575,297` cycles, RTL PSNR avg `43.767484`, RTL SSIM all `0.989193`,
     `output/validation_tefix_320x176_24f.h264`, and
@@ -354,6 +359,8 @@ The testbench must not:
   IDR / P slice headers emit `pic_order_cnt_lsb`
 - The current RTL path now advertises `log2_max_frame_num_minus4 = 4` and
   emits 8-bit `frame_num` values in slice headers
+- The testbench and `validate_clip.py` now accept a runtime `idr_interval`;
+  `1` forces every frame to IDR, and `0` means only the first frame is IDR
 
 - Important missing features, so this does not get confused with a full-standard
   H.264 encoder yet:

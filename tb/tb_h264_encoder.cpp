@@ -62,6 +62,7 @@ int main(int argc, char** argv) {
     std::string trace_file = "output/trace.vcd";
     uint64_t timeout_cycles = 50000000;
     bool enable_trace = false;
+    int idr_interval = 12;
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -69,6 +70,7 @@ int main(int argc, char** argv) {
         else if (arg.rfind("+input=", 0) == 0) input_file = arg.substr(7);
         else if (arg.rfind("+output=", 0) == 0) output_file = arg.substr(8);
         else if (arg.rfind("+timeout=", 0) == 0) timeout_cycles = std::strtoull(arg.c_str() + 9, nullptr, 10);
+        else if (arg.rfind("+idr_interval=", 0) == 0) idr_interval = std::atoi(arg.c_str() + 14);
         else if (arg == "+trace") enable_trace = true;
         else if (arg.rfind("+trace_file=", 0) == 0) trace_file = arg.substr(12);
     }
@@ -111,8 +113,8 @@ int main(int argc, char** argv) {
 
     fprintf(stderr, "==========================================================\n");
     fprintf(stderr, "  H.264 RTL Encoder Testbench (%d-bit)\n", BD);
-    fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d\n",
-            num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC);
+    fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d  idr_interval=%d\n",
+            num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC, idr_interval);
     fprintf(stderr, "==========================================================\n");
 
     Vh264_encoder_top* dut = new Vh264_encoder_top;
@@ -157,9 +159,9 @@ int main(int argc, char** argv) {
     while (!got_sigint && cycle < timeout_cycles && frame_idx < num_frames) {
         if (!frame_active) {
             dut->start = 1;
-            int idr_interval = 12; // IDR every 12 frames
-            bool is_idr = (frame_idx % idr_interval == 0);
-            dut->frame_num_in = (frame_idx % idr_interval) & 0xFF;
+            bool is_idr = (idr_interval <= 0) ? (frame_idx == 0) : ((frame_idx % idr_interval) == 0);
+            int frame_num = (idr_interval <= 0) ? frame_idx : (frame_idx % idr_interval);
+            dut->frame_num_in = frame_num & 0xFF;
             dut->is_idr_in = is_idr ? 1 : 0;
             frame_active = true;
             fprintf(stderr, "[TB] Frame %d (%s) start @ cycle %llu\n",
