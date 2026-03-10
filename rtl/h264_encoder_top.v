@@ -15,6 +15,8 @@ module h264_encoder_top #(
     parameter MB_ROWS      = FRAME_HEIGHT / 16,
     parameter ENABLE_IDR_IPCM = 0,
     parameter IPCM_SAD_THRESHOLD = 18000,
+    parameter ENABLE_P_IPCM = 0,
+    parameter INTER_SAD_THRESHOLD = 8000,
     parameter WEIGHTED_PRED_ENABLE = 0,
     parameter LUMA_LOG2_WEIGHT_DENOM = 0,
     parameter integer LUMA_WEIGHT = 1,
@@ -90,7 +92,6 @@ module h264_encoder_top #(
     localparam integer DEFAULT_CHROMA_WEIGHT = (1 << CHROMA_LOG2_WEIGHT_DENOM);
 
     // SAD threshold: if ME SAD > this, use intra instead of inter for this MB
-    localparam [17:0] INTRA_SAD_THRESHOLD = 18'd8000;
     localparam        ENABLE_IDR_INTRA16 = 1'b1;
 
     // ====================================================================
@@ -1396,7 +1397,7 @@ pred_buf = {(256*BD){1'b0}};
                         me_best_mvy <= (me_fullpel_mvy <<< 2) + best_dy_i;
                         me_best_sad <= best_sad_i;
                         inter_pred_buf <= best_pred_buf_i;
-                        is_inter_mb_reg <= (best_sad_i < INTRA_SAD_THRESHOLD);
+                        is_inter_mb_reg <= (best_sad_i < INTER_SAD_THRESHOLD);
 
                         a_avail = (mb_x > 7'd0);
                         b_avail = (mb_y > 6'd0);
@@ -1501,12 +1502,13 @@ pred_buf = {(256*BD){1'b0}};
                                 $signed(bx), $signed(by), b_match,
                                 $signed(cx), $signed(cy), c_match,
                                 match_cnt, $signed(med_x), $signed(med_y),
-                                best_sad_i, (best_sad_i < INTRA_SAD_THRESHOLD));
+                                best_sad_i, (best_sad_i < INTER_SAD_THRESHOLD));
                         end
                         /* verilator lint_on WIDTH */
 
-                        if (best_sad_i < INTRA_SAD_THRESHOLD) begin
+                        if (best_sad_i < INTER_SAD_THRESHOLD) begin
                             use_intra16_mb_reg <= 1'b0;
+                            use_ipcm_mb_reg <= 1'b0;
                             if (!use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
                                 pskip_luma_exact &&
                                 ($signed((me_fullpel_mvx <<< 2) + best_dx_i) == pskip_x) &&
@@ -1528,6 +1530,7 @@ pred_buf = {(256*BD){1'b0}};
                             end
                         end else begin
                             use_intra16_mb_reg <= 1'b0;
+                            use_ipcm_mb_reg <= ((ENABLE_P_IPCM != 0) && (BIT_DEPTH == 8));
                             top_state <= TS_MB_HDR;
                         end
                     end
@@ -1540,7 +1543,7 @@ pred_buf = {(256*BD){1'b0}};
                     end else if (intra16_done) begin
                         intra16_pred_buf <= intra16_pred_w;
                         intra16_mode_mb <= intra16_mode_w;
-                        if ((ENABLE_IDR_IPCM != 0) && (BIT_DEPTH == 8) && (intra16_sad_w >= IPCM_SAD_THRESHOLD)) begin
+                        if ((ENABLE_IDR_IPCM != 0) && (intra16_sad_w >= IPCM_SAD_THRESHOLD)) begin
                             use_intra16_mb_reg <= 1'b0;
                             use_ipcm_mb_reg <= 1'b1;
                         end else begin

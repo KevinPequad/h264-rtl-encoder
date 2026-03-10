@@ -218,8 +218,8 @@ Implemented now relative to the chosen `x264` baseline:
 - I and P picture flow
 - full `Intra_4x4` directional luma mode coverage
 - `Intra_16x16` luma prediction and syntax support
-- `I_PCM` macroblock coding on the current IDR path, with raw-sample byte
-  emission owned by the RTL writer
+- `I_PCM` macroblock coding on the current IDR path and current P-slice intra
+  path, with raw-sample byte emission owned by the RTL writer
 - up-to-four-reference P-slice inter flow with integer-pel search and current
   quarter-pel luma refinement
 - zero-residual inter-MB handling and `P_SKIP` skip-run ownership on the RTL
@@ -320,6 +320,10 @@ Measured validation points:
   at `32x16`, `8-bit 4:2:2`, `3,651` cycles, `1,071` bytes, High 4:2:2
   profile MP4 output, and decoded YUV exactly matching the source frame
   byte-for-byte
+- `ipcm_p_32x16_2f`: strict FFmpeg-decodable two-frame validation with frame
+  `0` on the IDR `I_PCM` path and frame `1` on the P-slice `I_PCM` path,
+  `59,889` cycles, `1,595` bytes, packaged MP4 output, and decoded YUV exactly
+  matching both source frames byte-for-byte
 - `320x176_4f_decodeonly`: strict FFmpeg-decodable multi-frame decode-only
   validation on the current tree, `92,028,425` cycles, `1,912` bytes, paired
   staged `.build.log` / `.sim.log`, JSON validation-mode recording, and
@@ -396,6 +400,13 @@ Recent correctness fix:
   byte-aligns with `pcm_alignment_zero_bit`, emits raw luma / Cb / Cr samples
   through the RTL byte path itself, and decodes back to an exact byte-for-byte
   match on the validated `320x176 4:2:0` and `32x16 4:2:2` all-IDR cases
+- the current tree also supports `I_PCM` on the P-slice intra path for
+  `8-bit` builds, and the checked-in `tb/Makefile` now exposes
+  `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
+  `INTER_SAD_THRESHOLD` so the path can be reproduced without raw
+  `EXTRA_VERILATOR_ARGS`
+- `I_PCM` is still only implemented on the current `8-bit` RTL path; `10-bit`
+  `I_PCM` is not closed yet
 - the `Intra_16x16` DC inverse path in `h264_luma_dc.v` now preserves the full
   Hadamard dynamic range instead of truncating the top bits before inverse
   scaling
