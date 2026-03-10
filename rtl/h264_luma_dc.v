@@ -46,8 +46,8 @@ module h264_luma_dc #(
     endfunction
 
     function signed [15:0] scale_dc;
-        input signed [17:0] val;
-        reg signed [21:0] product;
+        input signed [CW+3:0] val;
+        reg signed [CW+19:0] product;
         begin
             product = val * LEVEL_SCALE_DC;
             scale_dc = (product + 22'sd2) >>> 2;
@@ -123,22 +123,22 @@ module h264_luma_dc #(
                         dc_out_flat[14*16 +: 16] <= fwd_quant(h32);
                         dc_out_flat[15*16 +: 16] <= fwd_quant(h33);
                     end else begin
-                        dc_out_flat[0*16 +: 16] <= scale_dc(h00[17:0]);
-                        dc_out_flat[1*16 +: 16] <= scale_dc(h01[17:0]);
-                        dc_out_flat[2*16 +: 16] <= scale_dc(h02[17:0]);
-                        dc_out_flat[3*16 +: 16] <= scale_dc(h03[17:0]);
-                        dc_out_flat[4*16 +: 16] <= scale_dc(h10[17:0]);
-                        dc_out_flat[5*16 +: 16] <= scale_dc(h11[17:0]);
-                        dc_out_flat[6*16 +: 16] <= scale_dc(h12[17:0]);
-                        dc_out_flat[7*16 +: 16] <= scale_dc(h13[17:0]);
-                        dc_out_flat[8*16 +: 16] <= scale_dc(h20[17:0]);
-                        dc_out_flat[9*16 +: 16] <= scale_dc(h21[17:0]);
-                        dc_out_flat[10*16 +: 16] <= scale_dc(h22[17:0]);
-                        dc_out_flat[11*16 +: 16] <= scale_dc(h23[17:0]);
-                        dc_out_flat[12*16 +: 16] <= scale_dc(h30[17:0]);
-                        dc_out_flat[13*16 +: 16] <= scale_dc(h31[17:0]);
-                        dc_out_flat[14*16 +: 16] <= scale_dc(h32[17:0]);
-                        dc_out_flat[15*16 +: 16] <= scale_dc(h33[17:0]);
+                        dc_out_flat[0*16 +: 16] <= scale_dc(h00);
+                        dc_out_flat[1*16 +: 16] <= scale_dc(h01);
+                        dc_out_flat[2*16 +: 16] <= scale_dc(h02);
+                        dc_out_flat[3*16 +: 16] <= scale_dc(h03);
+                        dc_out_flat[4*16 +: 16] <= scale_dc(h10);
+                        dc_out_flat[5*16 +: 16] <= scale_dc(h11);
+                        dc_out_flat[6*16 +: 16] <= scale_dc(h12);
+                        dc_out_flat[7*16 +: 16] <= scale_dc(h13);
+                        dc_out_flat[8*16 +: 16] <= scale_dc(h20);
+                        dc_out_flat[9*16 +: 16] <= scale_dc(h21);
+                        dc_out_flat[10*16 +: 16] <= scale_dc(h22);
+                        dc_out_flat[11*16 +: 16] <= scale_dc(h23);
+                        dc_out_flat[12*16 +: 16] <= scale_dc(h30);
+                        dc_out_flat[13*16 +: 16] <= scale_dc(h31);
+                        dc_out_flat[14*16 +: 16] <= scale_dc(h32);
+                        dc_out_flat[15*16 +: 16] <= scale_dc(h33);
                     end
                     state <= S_DONE;
                 end
