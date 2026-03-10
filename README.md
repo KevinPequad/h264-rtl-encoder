@@ -137,6 +137,8 @@ Current implemented features:
 - SPS generation in RTL
 - SPS `level_idc` selection in RTL from frame macroblock count and target frame
   rate
+- SPS `pic_order_cnt_type = 0` signaling in RTL with
+  `log2_max_pic_order_cnt_lsb_minus4 = 2`
 - SPS VUI timing signaling in RTL with `num_units_in_tick`,
   `time_scale`, and `fixed_frame_rate_flag`
 - SPS VUI bitstream-restriction signaling in RTL for the current no-reorder,
@@ -144,6 +146,7 @@ Current implemented features:
 - PPS generation in RTL
 - IDR slice header generation in RTL
 - non-IDR slice header generation in RTL
+- `pic_order_cnt_lsb` signaling in RTL on IDR and non-IDR slice headers
 - macroblock header generation in RTL
 - RBSP trailing bits in RTL
 - emulation-prevention byte insertion in RTL
@@ -263,6 +266,14 @@ Measured validation points:
   `bitstream_restriction_flag = 1`,
   `motion_vectors_over_pic_boundaries_flag = 1`,
   `max_num_reorder_frames = 0`, and `max_dec_frame_buffering = 4`
+- `320x176_1f_poc0`: strict FFmpeg-decodable one-frame SPS/POC smoke,
+  `732,751` cycles, `trace_headers` confirming
+  `pic_order_cnt_type = 0`,
+  `log2_max_pic_order_cnt_lsb_minus4 = 2`, and
+  IDR-slice `pic_order_cnt_lsb`
+- `320x176_4f_poc0`: strict FFmpeg-decodable four-frame SPS/POC validation,
+  `92,027,075` cycles, later P-slices with `pic_order_cnt_lsb` values
+  `2`, `4`, and `6`, and active-ref override signaling still decoding cleanly
 - `320x176_24f_tefix`: strict FFmpeg-decodable multi-frame validation on the
   current tree, `640,575,297` cycles, RTL PSNR avg `43.767484`, RTL SSIM all
   `0.989193`
@@ -314,6 +325,8 @@ Recent correctness fix:
 - SPS VUI timing fields are now emitted from RTL for the configured frame rate
 - SPS VUI bitstream-restriction fields now describe the current no-reorder,
   four-reference subset
+- baseline/main SPS now uses `pic_order_cnt_type = 0`, and the current RTL
+  IDR / P slice headers emit `pic_order_cnt_lsb`
 
 Recent intra prediction expansion:
 
