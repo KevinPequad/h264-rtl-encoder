@@ -112,6 +112,8 @@ The testbench must not:
 - Use all available host threads by default for build and simulation-related work unless a debugging task clearly needs fewer
 - On this machine, that means **24 threads**
 - Default to multithreaded builds and simulation orchestration with all **24 threads**
+- After RTL source edits, prefer a clean rebuild before trusting validation
+  results so stale Verilated outputs do not mask the new logic
 - Be wary of simulation times
 - Start with the smallest valid case that can prove the issue
 - Do not jump to long or high-resolution runs until the smaller case is decoded and visually sane
@@ -153,6 +155,8 @@ The testbench must not:
     frame rate
   - SPS VUI timing signaling in RTL with `num_units_in_tick`,
     `time_scale`, and `fixed_frame_rate_flag`
+  - SPS VUI bitstream-restriction signaling in RTL for the current no-reorder,
+    four-reference subset
   - PPS generation in RTL
   - IDR slice header generation in RTL
   - Non-IDR slice header generation in RTL
@@ -262,6 +266,12 @@ The testbench must not:
     strict FFmpeg-decodable, `output/vui_320x176_1f.h264`, and metadata
     behavior matching a one-frame `x264` elementary stream at the same
     settings
+  - one-frame SPS/VUI restriction smoke at `320x176`, `1` frame, `732,753`
+    cycles, strict FFmpeg-decodable, `output/vui_restrict_320x176_1f.h264`,
+    and `trace_headers` confirmation of
+    `bitstream_restriction_flag = 1`,
+    `motion_vectors_over_pic_boundaries_flag = 1`,
+    `max_num_reorder_frames = 0`, and `max_dec_frame_buffering = 4`
   - strict current-tree validation at `320x176`, `24` frames,
     `640,575,297` cycles, RTL PSNR avg `43.767484`, RTL SSIM all `0.989193`,
     `output/validation_tefix_320x176_24f.h264`, and
@@ -315,6 +325,8 @@ The testbench must not:
 - SPS `level_idc` must track frame size and configured frame rate instead of a
   fixed 720p/else split; the current tree now does that
 - SPS VUI timing fields are now emitted from RTL for the configured frame rate
+- SPS VUI bitstream-restriction fields now describe the current no-reorder,
+  four-reference subset
 
 - Important missing features, so this does not get confused with a full-standard
   H.264 encoder yet:
