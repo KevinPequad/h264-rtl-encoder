@@ -128,6 +128,8 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
   rate
 - SPS VUI timing signaling in RTL with `num_units_in_tick`,
   `time_scale`, and `fixed_frame_rate_flag`
+- SPS VUI bitstream-restriction signaling in RTL for the current no-reorder,
+  four-reference subset
 - PPS generation in RTL
 - IDR slice header generation in RTL
 - non-IDR slice header generation in RTL
@@ -215,6 +217,11 @@ Measured validation points:
 - `320x176_1f_vui`: strict FFmpeg-decodable one-frame SPS/VUI timing smoke,
   `732,748` cycles, FFmpeg `level=12`, and raw-stream timing metadata behavior
   matching a one-frame `x264` elementary stream at the same settings
+- `320x176_1f_vui_restrict`: strict FFmpeg-decodable one-frame SPS/VUI
+  restriction smoke, `732,753` cycles, `trace_headers` confirming
+  `bitstream_restriction_flag = 1`,
+  `motion_vectors_over_pic_boundaries_flag = 1`,
+  `max_num_reorder_frames = 0`, and `max_dec_frame_buffering = 4`
 - `320x176_10f_tefix`: strict FFmpeg-decodable current-tree validation,
   `253,064,186` cycles, RTL PSNR avg `45.745576`, RTL SSIM all `0.994893`
 - `320x176_24f_tefix`: strict FFmpeg-decodable current-tree validation,
@@ -270,6 +277,8 @@ Current verified milestone outputs:
 - SPS `level_idc` is now selected from frame size and configured frame rate
   instead of the earlier hardcoded split
 - SPS VUI timing fields are now emitted from RTL for the configured frame rate
+- SPS VUI bitstream-restriction fields now describe the current no-reorder,
+  four-reference subset
 
 ## Not Done Yet
 

@@ -166,6 +166,7 @@ module h264_bitstream #(
     localparam integer FRAME_MBPS = FRAME_MB_COUNT * FRAME_RATE;
     localparam [31:0] VUI_NUM_UNITS_IN_TICK = 32'd1;
     localparam [31:0] VUI_TIME_SCALE = FRAME_RATE * 2;
+    localparam [9:0]  VUI_LOG2_MAX_MV_LENGTH = 10'd6;
 
     function [7:0] select_level_idc;
         input integer frame_mbs;
@@ -491,31 +492,57 @@ module h264_bitstream #(
                                 sub <= sub + 6'd1;
                             end
                             // fixed_frame_rate=1, nal_hrd=0, vcl_hrd=0,
-                            // pic_struct_present=0, bitstream_restriction=0
+                            // pic_struct_present=0, bitstream_restriction=1,
+                            // motion_vectors_over_pic_boundaries=1,
+                            // max_bytes_per_pic_denom=UE(0), max_bits_per_mb_denom=UE(0)
                             6'd16: begin
-                                bit_buf <= bit_buf | ({5'b10000, 91'd0} >> bit_cnt[6:0]);
-                                bit_cnt <= bit_cnt + 7'd5;
+                                bit_buf <= bit_buf | ({8'b10001111, 88'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd8;
+                                ue_input <= VUI_LOG2_MAX_MV_LENGTH;
                                 sub <= sub + 6'd1;
                             end
-                            // RBSP trailing bits: stop bit '1' + alignment zeros
                             6'd17: begin
-                                bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
-                                bit_cnt <= bit_cnt + 7'd1;
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= VUI_LOG2_MAX_MV_LENGTH;
                                 sub <= sub + 6'd1;
                             end
                             6'd18: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= 10'd0; // num_reorder_frames
+                                sub <= sub + 6'd1;
+                            end
+                            6'd19: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= 10'd4; // max_dec_frame_buffering for the current four-ref subset
+                                sub <= 6'd24;
+                            end
+                            6'd24: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                sub <= 6'd25;
+                            end
+                            // RBSP trailing bits: stop bit '1' + alignment zeros
+                            6'd25: begin
+                                bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd1;
+                                sub <= 6'd26;
+                            end
+                            6'd26: begin
                                 if (bit_cnt[2:0] != 3'd0)
                                     bit_cnt <= bit_cnt + 7'd1;
                                 else
-                                    sub <= sub + 6'd1;
+                                    sub <= 6'd27;
                             end
                             // Emit remaining bytes
-                            6'd19: begin
+                            6'd27: begin
                                 state <= S_EMIT;
                                 return_state <= S_SPS;
-                                sub <= 6'd24;
+                                sub <= 6'd28;
                             end
-                            6'd24: begin cmd_done<=1'b1; busy<=1'b0; state<=S_IDLE; zero_cnt<=2'd0; end
+                            6'd28: begin cmd_done<=1'b1; busy<=1'b0; state<=S_IDLE; zero_cnt<=2'd0; end
 
                             // High 10 profile extra SPS fields (sub 20-25)
                             // Load UE(bit_depth_luma_minus8) into bit buffer
