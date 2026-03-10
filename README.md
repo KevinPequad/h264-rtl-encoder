@@ -19,6 +19,7 @@ Implemented and validated now:
   signaling across the active-reference count
 - zero-residual inter-macroblock handling with deferred inter headers
 - RTL-owned `P_SKIP` skip-run generation on the current P-slice path
+- limited non-reference `B`-slice support on the current intra / `I_PCM` path
 - full directional `Intra_4x4` mode support in RTL
 - `Intra_16x16` luma prediction and syntax support in RTL
 - current IDR path now routes through RTL `Intra_16x16` macroblock coding
@@ -32,7 +33,8 @@ Still missing before full-standard completion, using the current `x264`
 software encoder as the implementation baseline:
 
 - CABAC syntax integration into the final RTL bitstream path
-- `B-frames`
+- inter-coded `B` / `BREF` picture support and the associated reference
+  management
 - weighted bipred and direct-mode handling
 - broader standards-complete sub-pel motion handling across richer inter modes
 - broader inter partition and transform coverage including `8x8dct`-class tools
@@ -164,6 +166,7 @@ Current implemented features:
 - CAVLC for chroma AC coefficients
 - I-frame support
 - P-frame support
+- non-reference `B`-slice support on the current intra / `I_PCM` path
 - IDR + non-IDR encoded stream output
 - `16x16` macroblock raster-order processing
 - up to four forward reference pictures for P-slice motion search
@@ -216,6 +219,7 @@ Implemented now relative to the chosen `x264` baseline:
 - parameter-set and slice-header ownership in RTL
 - CAVLC-based coefficient coding in RTL
 - I and P picture flow
+- non-reference `B`-picture syntax on the current intra / `I_PCM` path
 - full `Intra_4x4` directional luma mode coverage
 - `Intra_16x16` luma prediction and syntax support
 - `I_PCM` macroblock coding on the current IDR path and current P-slice intra
@@ -246,7 +250,7 @@ Current additional validated `I_PCM`-only coverage:
 Important non-completion gaps:
 
 - `CABAC` arithmetic coding is not yet wired into the final slice syntax path
-- `B-frames` are not implemented
+- inter-coded `B` / `BREF` picture handling is not implemented
 - weighted bipred / `B`-picture weighted prediction is not implemented
 - direct motion-vector prediction modes are not implemented
 - reference-picture management beyond the current four-reference P-slice subset
@@ -282,6 +286,8 @@ Verified validation/features around the current encoder flow:
 - simulator log and cycle-count capture for regressions
 - runtime-configurable `idr_interval` support in the testbench and validation
   scripts
+- runtime-configurable `force_b_slice` support in the testbench and validation
+  scripts for the current non-reference `B`-slice path
 - fast strict-decode-only validation mode in `validate_clip.py` for longer
   regressions that do not need metrics or x264 comparison
 - RTL-owned `P_SKIP` skip-run generation validated on the current P-slice path
@@ -363,6 +369,11 @@ Measured validation points:
   frame `0` on the IDR `I_PCM` path and frame `1` on the P-slice `I_PCM` path
   at `32x16`, `10-bit 4:4:4`, `69,371` cycles, `3,901` bytes, and decoded YUV
   exactly matching both source frames byte-for-byte
+- `bslice_ipcm_320x176_2f`: strict FFmpeg-decodable two-frame validation with
+  frame `0` on the IDR `I_PCM` path and frame `1` on the non-reference
+  `B`-slice `I_PCM` path at `320x176`, `484,677` cycles, `169,893` bytes,
+  packaged MP4 output, exact decoded-YUV match, and `trace_headers`
+  confirmation of `nal_ref_idc = 0` and `slice_type = 1` on the second picture
 - `32x16_2f_444_ipcm_scripted`: strict staged validation through
   `scripts/validate_clip.py` with `--enable-idr-ipcm 1 --enable-p-ipcm 1`
   at `32x16`, `8-bit 4:4:4`, packaged MP4 output, and JSON summary in

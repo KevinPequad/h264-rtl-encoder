@@ -274,6 +274,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", type=Path, default=root / "data" / "raw_frames.yuv")
     parser.add_argument("--label", default="320x176_24f")
     parser.add_argument("--idr-interval", type=int, default=12)
+    parser.add_argument("--force-b-slice", action="store_true")
     parser.add_argument("--decode-only", action="store_true")
     parser.add_argument("--skip-metrics", action="store_true")
     parser.add_argument("--skip-x264", action="store_true")
@@ -327,6 +328,7 @@ def main() -> int:
         chroma_weight_cr=args.chroma_weight_cr,
         chroma_offset_cr=args.chroma_offset_cr,
         idr_interval=args.idr_interval,
+        force_b_slice=1 if args.force_b_slice else 0,
     )
     sim_bin = build_sim(workspace, config, build_log_path=build_log_path)
     sim_proc = run_sim(
@@ -336,6 +338,7 @@ def main() -> int:
         input_path,
         rtl_h264,
         idr_interval=args.idr_interval,
+        force_b_slice=1 if args.force_b_slice else 0,
         capture=True,
     )
     sim_log = (sim_proc.stdout or "") + (sim_proc.stderr or "")
