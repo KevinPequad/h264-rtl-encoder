@@ -237,17 +237,21 @@ The testbench must not:
   - PSNR / SSIM comparison scripts
   - x264 reference comparison scripts
   - Side-by-side decoded-vs-source image generation
+  - Staged clean-build log capture for reproducible validation runs
   - Simulator log and cycle-count capture for regressions
 
 - Use `scripts/regress_smoke_matrix.py` to keep the current smoke matrix
   reproducible, including simulator logs and cycle counts
   - Treat it as a fast parser/profile sanity matrix, not the final strict
     decode-quality gate
+  - It now emits both `.build.log` and `.sim.log` artifacts per case
 
 - Use `scripts/validate_clip.py` for staged multi-frame validation, PSNR / SSIM,
   side-by-side comparison output, MP4 packaging, and x264 reference checks
   - Treat this as the stricter decode/metrics path; it now uses strict FFmpeg
     decode checking
+  - It now forces a clean staged rebuild and emits both `.build.log` and
+    `.sim.log` artifacts
 
 - Verified smoke runs exist for:
   - `8-bit 4:2:0`

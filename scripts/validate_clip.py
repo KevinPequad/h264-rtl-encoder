@@ -282,6 +282,7 @@ def main() -> int:
     x264_mp4 = output_dir / f"validation_{args.label}_x264.mp4"
     summary_json = output_dir / f"validation_{args.label}.json"
     sim_log_path = output_dir / f"validation_{args.label}.sim.log"
+    build_log_path = output_dir / f"validation_{args.label}.build.log"
     pix_fmt = pix_fmt_for_config(args.bit_depth, args.chroma_format_idc)
 
     workspace = stage_workspace(f"h264_validate_{args.label}_")
@@ -301,7 +302,7 @@ def main() -> int:
         chroma_weight_cr=args.chroma_weight_cr,
         chroma_offset_cr=args.chroma_offset_cr,
     )
-    sim_bin = build_sim(workspace, config)
+    sim_bin = build_sim(workspace, config, build_log_path=build_log_path)
     sim_proc = run_sim(sim_bin, args.frames, args.timeout, input_path, rtl_h264, capture=True)
     sim_log = (sim_proc.stdout or "") + (sim_proc.stderr or "")
     sim_log_path.write_text(sim_log, encoding="utf-8")
@@ -356,6 +357,7 @@ def main() -> int:
         "rtl_h264": str(rtl_h264),
         "rtl_mp4": str(rtl_mp4),
         "compare_png": str(compare_png),
+        "build_log": str(build_log_path),
         "sim_log": str(sim_log_path),
         "sim_summary": sim_summary,
         "x264_reference_mp4": str(x264_mp4) if ref_psnr is not None else None,

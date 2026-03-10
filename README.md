@@ -246,6 +246,7 @@ Verified validation/features around the current encoder flow:
 - PSNR / SSIM comparison scripts
 - x264 reference comparison scripts
 - side-by-side decoded-vs-source image generation
+- staged clean-build log capture for reproducible validation runs
 - simulator log and cycle-count capture for regressions
 
 Measured validation points:
@@ -390,9 +391,11 @@ python3 scripts/package_mp4.py output.h264 output.mp4 --fps 24 --width 320 --hei
   runs the encoder, and packages MP4 output
 - `./docker_run.sh` runs the one-frame Docker smoke path
 - `python3 scripts/regress_smoke_matrix.py` runs the current fast parser/profile
-  smoke regression matrix on generated tiny inputs
+  smoke regression matrix on generated tiny inputs and now emits paired
+  `.build.log` / `.sim.log` artifacts per case
 - `python3 scripts/validate_clip.py` runs staged multi-frame validation with
-  strict decode checking, logs, MP4 output, and comparison metrics
+  a clean staged rebuild, strict decode checking, paired `.build.log` /
+  `.sim.log` artifacts, MP4 output, and comparison metrics
 
 ### Quick Start
 
