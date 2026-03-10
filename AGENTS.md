@@ -149,6 +149,10 @@ The testbench must not:
   in `h264_encoder_top.v` and bitstream writer in `h264_bitstream.v`:
   - End-to-end RTL-owned H.264 Annex B byte-stream generation
   - SPS generation in RTL
+  - SPS `level_idc` selection in RTL from frame macroblock count and target
+    frame rate
+  - SPS VUI timing signaling in RTL with `num_units_in_tick`,
+    `time_scale`, and `fixed_frame_rate_flag`
   - PPS generation in RTL
   - IDR slice header generation in RTL
   - Non-IDR slice header generation in RTL
@@ -254,6 +258,10 @@ The testbench must not:
     `253,064,186` cycles, RTL PSNR avg `45.745576`, RTL SSIM all `0.994893`,
     `output/validation_tefix_320x176_10f.h264`, and
     `output/validation_tefix_320x176_10f.mp4`
+  - one-frame SPS/VUI timing smoke at `320x176`, `1` frame, `732,748` cycles,
+    strict FFmpeg-decodable, `output/vui_320x176_1f.h264`, and metadata
+    behavior matching a one-frame `x264` elementary stream at the same
+    settings
   - strict current-tree validation at `320x176`, `24` frames,
     `640,575,297` cycles, RTL PSNR avg `43.767484`, RTL SSIM all `0.989193`,
     `output/validation_tefix_320x176_24f.h264`, and
@@ -304,6 +312,9 @@ The testbench must not:
   can emit `num_ref_idx_l0_active_minus1 = 3`
 - The current inter path already performs quarter-pel luma refinement and
   chroma fractional interpolation after the integer-pel ME pass
+- SPS `level_idc` must track frame size and configured frame rate instead of a
+  fixed 720p/else split; the current tree now does that
+- SPS VUI timing fields are now emitted from RTL for the configured frame rate
 
 - Important missing features, so this does not get confused with a full-standard
   H.264 encoder yet:

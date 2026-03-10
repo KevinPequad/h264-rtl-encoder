@@ -124,6 +124,10 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 
 - end-to-end RTL-owned H.264 Annex B byte-stream generation
 - SPS generation in RTL
+- SPS `level_idc` selection in RTL from frame macroblock count and target frame
+  rate
+- SPS VUI timing signaling in RTL with `num_units_in_tick`,
+  `time_scale`, and `fixed_frame_rate_flag`
 - PPS generation in RTL
 - IDR slice header generation in RTL
 - non-IDR slice header generation in RTL
@@ -208,6 +212,9 @@ Verified validation and tooling coverage around the encoder flow:
 Measured validation points:
 
 - `docker_320x176_1f`: `816,975` cycles
+- `320x176_1f_vui`: strict FFmpeg-decodable one-frame SPS/VUI timing smoke,
+  `732,748` cycles, FFmpeg `level=12`, and raw-stream timing metadata behavior
+  matching a one-frame `x264` elementary stream at the same settings
 - `320x176_10f_tefix`: strict FFmpeg-decodable current-tree validation,
   `253,064,186` cycles, RTL PSNR avg `45.745576`, RTL SSIM all `0.994893`
 - `320x176_24f_tefix`: strict FFmpeg-decodable current-tree validation,
@@ -260,6 +267,9 @@ Current verified milestone outputs:
   can emit `num_ref_idx_l0_active_minus1 = 3`
 - the current inter path already performs quarter-pel luma refinement and
   chroma fractional interpolation after the integer-pel ME pass
+- SPS `level_idc` is now selected from frame size and configured frame rate
+  instead of the earlier hardcoded split
+- SPS VUI timing fields are now emitted from RTL for the configured frame rate
 
 ## Not Done Yet
 

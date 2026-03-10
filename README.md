@@ -135,6 +135,10 @@ Current implemented features:
 
 - end-to-end RTL-owned H.264 Annex B byte-stream generation
 - SPS generation in RTL
+- SPS `level_idc` selection in RTL from frame macroblock count and target frame
+  rate
+- SPS VUI timing signaling in RTL with `num_units_in_tick`,
+  `time_scale`, and `fixed_frame_rate_flag`
 - PPS generation in RTL
 - IDR slice header generation in RTL
 - non-IDR slice header generation in RTL
@@ -248,6 +252,9 @@ Measured validation points:
 - `320x176_10f_tefix`: strict FFmpeg-decodable multi-frame validation on the
   current tree, `253,064,186` cycles, RTL PSNR avg `45.745576`, RTL SSIM all
   `0.994893`
+- `320x176_1f_vui`: strict FFmpeg-decodable one-frame SPS/VUI timing smoke,
+  `732,748` cycles, FFmpeg `level=12`, and raw-stream timing metadata behavior
+  matching a one-frame `x264` elementary stream at the same settings
 - `320x176_24f_tefix`: strict FFmpeg-decodable multi-frame validation on the
   current tree, `640,575,297` cycles, RTL PSNR avg `43.767484`, RTL SSIM all
   `0.989193`
@@ -294,6 +301,9 @@ Recent correctness fix:
   can emit `num_ref_idx_l0_active_minus1 = 3`
 - the current inter path already performs quarter-pel luma refinement and
   chroma fractional interpolation after the integer-pel motion-estimation pass
+- SPS `level_idc` is now selected from frame size and configured frame rate
+  instead of the earlier small hardcoded level split
+- SPS VUI timing fields are now emitted from RTL for the configured frame rate
 
 Recent intra prediction expansion:
 
