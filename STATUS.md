@@ -209,6 +209,7 @@ Verified validation and tooling coverage around the encoder flow:
 - PSNR / SSIM comparison scripts
 - x264 reference comparison scripts
 - side-by-side decoded-vs-source image generation
+- staged clean-build log capture for reproducible validation runs
 - simulator log and cycle-count capture for regressions
 
 Measured validation points:

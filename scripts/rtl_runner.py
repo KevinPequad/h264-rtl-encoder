@@ -53,6 +53,10 @@ def run_cmd(cmd: list[str], cwd: Path | None = None, capture: bool = False) -> s
     return subprocess.run(cmd, **kwargs)
 
 
+def format_cmd(cmd: list[str]) -> str:
+    return " ".join(cmd)
+
+
 def stage_workspace(prefix: str) -> Path:
     root = repo_root()
     workspace = Path(tempfile.mkdtemp(prefix=prefix))
@@ -65,8 +69,18 @@ def stage_workspace(prefix: str) -> Path:
     return workspace
 
 
-def build_sim(workspace: Path, config: BuildConfig) -> Path:
+def build_sim(workspace: Path, config: BuildConfig, build_log_path: Path | None = None) -> Path:
     tb_dir = workspace / "tb"
+    build_logs: list[str] = []
+
+    clean_cmd = ["make", "clean"]
+    clean_proc = run_cmd(clean_cmd, cwd=tb_dir, capture=True)
+    build_logs.append(f"$ {format_cmd(clean_cmd)}\n")
+    if clean_proc.stdout:
+        build_logs.append(clean_proc.stdout)
+    if clean_proc.stderr:
+        build_logs.append(clean_proc.stderr)
+
     cmd = [
         "make",
         f"-j{config.jobs}",
@@ -88,7 +102,15 @@ def build_sim(workspace: Path, config: BuildConfig) -> Path:
     ]
     if config.extra_verilator_args:
         cmd.append(f"EXTRA_VERILATOR_ARGS={' '.join(config.extra_verilator_args)}")
-    run_cmd(cmd, cwd=tb_dir)
+    build_proc = run_cmd(cmd, cwd=tb_dir, capture=True)
+    build_logs.append(f"$ {format_cmd(cmd)}\n")
+    if build_proc.stdout:
+        build_logs.append(build_proc.stdout)
+    if build_proc.stderr:
+        build_logs.append(build_proc.stderr)
+    if build_log_path is not None:
+        build_log_path.parent.mkdir(parents=True, exist_ok=True)
+        build_log_path.write_text("".join(build_logs), encoding="utf-8")
     return tb_dir / "Vh264_encoder_top"
 
 

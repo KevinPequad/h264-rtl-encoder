@@ -166,6 +166,7 @@ def main() -> int:
         input_path = data_dir / case.input_file
         output_path = output_dir / case.output_file
         log_path = output_dir / f"{case.name}.sim.log"
+        build_log_path = output_dir / f"{case.name}.build.log"
         generate_smoke_input(input_path, case.width, case.height, case.frames, case.bit_depth, case.chroma_format_idc)
 
         workspace = stage_workspace(f"h264_{case.name}_")
@@ -184,7 +185,7 @@ def main() -> int:
             chroma_weight_cr=case.chroma_weight_cr,
             chroma_offset_cr=case.chroma_offset_cr,
         )
-        sim_bin = build_sim(workspace, config)
+        sim_bin = build_sim(workspace, config, build_log_path=build_log_path)
         sim_proc = run_sim(sim_bin, case.frames, case.timeout, input_path, output_path, capture=True)
         sim_log = (sim_proc.stdout or "") + (sim_proc.stderr or "")
         log_path.write_text(sim_log, encoding="utf-8")
@@ -197,6 +198,7 @@ def main() -> int:
             "config": asdict(config),
             "input": str(input_path),
             "output": str(output_path),
+            "build_log": str(build_log_path),
             "sim_log": str(log_path),
             "sim_summary": sim_summary,
             "stream": stream,
