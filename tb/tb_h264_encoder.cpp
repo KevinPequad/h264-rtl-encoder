@@ -159,7 +159,7 @@ int main(int argc, char** argv) {
             dut->start = 1;
             int idr_interval = 12; // IDR every 12 frames
             bool is_idr = (frame_idx % idr_interval == 0);
-            dut->frame_num_in = (frame_idx % idr_interval) & 0xF;
+            dut->frame_num_in = (frame_idx % idr_interval) & 0xFF;
             dut->is_idr_in = is_idr ? 1 : 0;
             frame_active = true;
             fprintf(stderr, "[TB] Frame %d (%s) start @ cycle %llu\n",

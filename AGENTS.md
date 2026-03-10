@@ -154,7 +154,9 @@ The testbench must not:
   - SPS `level_idc` selection in RTL from frame macroblock count and target
     frame rate
   - SPS `pic_order_cnt_type = 0` signaling in RTL with
-    `log2_max_pic_order_cnt_lsb_minus4 = 2`
+    `log2_max_pic_order_cnt_lsb_minus4 = 5`
+  - SPS `log2_max_frame_num_minus4 = 4` signaling in RTL for an 8-bit
+    `frame_num` field
   - SPS VUI timing signaling in RTL with `num_units_in_tick`,
     `time_scale`, and `fixed_frame_rate_flag`
   - SPS VUI bitstream-restriction signaling in RTL for the current no-reorder,
@@ -163,6 +165,8 @@ The testbench must not:
   - IDR slice header generation in RTL
   - Non-IDR slice header generation in RTL
   - `pic_order_cnt_lsb` signaling in RTL on IDR and non-IDR slice headers
+  - 8-bit `frame_num` signaling and 9-bit `pic_order_cnt_lsb` signaling on
+    IDR and non-IDR slice headers
   - Macroblock header generation in RTL
   - RBSP trailing bits in RTL
   - Emulation-prevention byte insertion in RTL
@@ -279,16 +283,18 @@ The testbench must not:
     `bitstream_restriction_flag = 1`,
     `motion_vectors_over_pic_boundaries_flag = 1`,
     `max_num_reorder_frames = 0`, and `max_dec_frame_buffering = 4`
-  - one-frame SPS/POC smoke at `320x176`, `1` frame, `732,751` cycles,
-    strict FFmpeg-decodable, `output/validation_poc0_ue_320x176_1f.h264`,
-    and `trace_headers` confirmation of
-    `pic_order_cnt_type = 0`,
-    `log2_max_pic_order_cnt_lsb_minus4 = 2`, and
-    IDR-slice `pic_order_cnt_lsb`
-  - four-frame SPS/POC validation at `320x176`, `4` frames, `92,027,075`
+  - one-frame SPS/frame-number smoke at `320x176`, `1` frame, `732,751`
     cycles, strict FFmpeg-decodable,
-    `output/validation_poc0_ue_320x176_4f.h264`, and later P-slices with
-    `pic_order_cnt_lsb = 2`, `4`, and `6`
+    `output/validation_frame_num8_320x176_1f.h264`, and `trace_headers`
+    confirmation of
+    `pic_order_cnt_type = 0`,
+    `log2_max_frame_num_minus4 = 4`, and
+    `log2_max_pic_order_cnt_lsb_minus4 = 5`
+  - four-frame SPS/frame-number validation at `320x176`, `4` frames,
+    `92,027,135` cycles, strict FFmpeg-decodable,
+    `output/validation_frame_num8_320x176_4f.h264`, and later P-slices with
+    8-bit `frame_num` values `0..3` and 9-bit `pic_order_cnt_lsb` values
+    `0`, `2`, `4`, and `6`
   - strict current-tree validation at `320x176`, `24` frames,
     `640,575,297` cycles, RTL PSNR avg `43.767484`, RTL SSIM all `0.989193`,
     `output/validation_tefix_320x176_24f.h264`, and
@@ -346,6 +352,8 @@ The testbench must not:
   four-reference subset
 - Baseline/Main SPS now uses `pic_order_cnt_type = 0`, and the current RTL
   IDR / P slice headers emit `pic_order_cnt_lsb`
+- The current RTL path now advertises `log2_max_frame_num_minus4 = 4` and
+  emits 8-bit `frame_num` values in slice headers
 
 - Important missing features, so this does not get confused with a full-standard
   H.264 encoder yet:

@@ -127,7 +127,9 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - SPS `level_idc` selection in RTL from frame macroblock count and target frame
   rate
 - SPS `pic_order_cnt_type = 0` signaling in RTL with
-  `log2_max_pic_order_cnt_lsb_minus4 = 2`
+  `log2_max_pic_order_cnt_lsb_minus4 = 5`
+- SPS `log2_max_frame_num_minus4 = 4` signaling in RTL for an 8-bit
+  `frame_num` field
 - SPS VUI timing signaling in RTL with `num_units_in_tick`,
   `time_scale`, and `fixed_frame_rate_flag`
 - SPS VUI bitstream-restriction signaling in RTL for the current no-reorder,
@@ -136,6 +138,8 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - IDR slice header generation in RTL
 - non-IDR slice header generation in RTL
 - `pic_order_cnt_lsb` signaling in RTL on IDR and non-IDR slice headers
+- 8-bit `frame_num` signaling and 9-bit `pic_order_cnt_lsb` signaling on
+  IDR and non-IDR slice headers
 - macroblock header generation in RTL
 - RBSP trailing bits in RTL
 - emulation-prevention byte insertion in RTL
@@ -226,14 +230,15 @@ Measured validation points:
   `bitstream_restriction_flag = 1`,
   `motion_vectors_over_pic_boundaries_flag = 1`,
   `max_num_reorder_frames = 0`, and `max_dec_frame_buffering = 4`
-- `320x176_1f_poc0`: strict FFmpeg-decodable one-frame SPS/POC smoke,
-  `732,751` cycles, `trace_headers` confirming
+- `320x176_1f_frame_num8`: strict FFmpeg-decodable one-frame SPS/frame-number
+  smoke, `732,751` cycles, `trace_headers` confirming
   `pic_order_cnt_type = 0`,
-  `log2_max_pic_order_cnt_lsb_minus4 = 2`, and
-  IDR-slice `pic_order_cnt_lsb`
-- `320x176_4f_poc0`: strict FFmpeg-decodable four-frame SPS/POC validation,
-  `92,027,075` cycles, later P-slices with `pic_order_cnt_lsb` values
-  `2`, `4`, and `6`, and active-ref override signaling still decoding cleanly
+  `log2_max_frame_num_minus4 = 4`, and
+  `log2_max_pic_order_cnt_lsb_minus4 = 5`
+- `320x176_4f_frame_num8`: strict FFmpeg-decodable four-frame SPS/frame-number
+  validation, `92,027,135` cycles, `trace_headers` confirming
+  8-bit `frame_num` values `0..3` and 9-bit `pic_order_cnt_lsb` values
+  `0`, `2`, `4`, and `6`
 - `320x176_10f_tefix`: strict FFmpeg-decodable current-tree validation,
   `253,064,186` cycles, RTL PSNR avg `45.745576`, RTL SSIM all `0.994893`
 - `320x176_24f_tefix`: strict FFmpeg-decodable current-tree validation,
@@ -293,6 +298,8 @@ Current verified milestone outputs:
   four-reference subset
 - baseline/main SPS now uses `pic_order_cnt_type = 0`, and the current RTL
   IDR / P slice headers emit `pic_order_cnt_lsb`
+- the current RTL path now advertises `log2_max_frame_num_minus4 = 4` and
+  emits 8-bit `frame_num` values in slice headers
 
 ## Not Done Yet
 
