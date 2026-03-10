@@ -218,8 +218,9 @@ The testbench must not:
     `Plane` mode search
   - Current IDR-path `Intra_16x16` macroblock coding through the RTL byte
     stream
-  - Current IDR-path `I_PCM` macroblock coding through the RTL byte stream,
-    with raw luma / Cb / Cr sample emission owned by the RTL writer
+  - Current IDR-path and P-slice intra-path `I_PCM` macroblock coding through
+    the RTL byte stream, with raw luma / Cb / Cr sample emission owned by the
+    RTL writer
   - Chroma intra prediction: DC-style path
   - `4x4` H.264 integer transform
   - Inverse transform path
@@ -255,7 +256,8 @@ The testbench must not:
   - I-picture and P-picture coding
   - Full directional `Intra_4x4` luma mode coverage
   - `Intra_16x16` luma prediction and syntax support
-  - Current IDR-path `I_PCM` macroblock coding and syntax support
+  - Current IDR-path and P-slice intra-path `I_PCM` macroblock coding and
+    syntax support
   - Up-to-four-reference P-slice inter coding with integer-pel search and
     current quarter-pel luma refinement
   - Weighted P prediction and `pred_weight_table` signaling on the RTL path
@@ -397,6 +399,11 @@ The testbench must not:
     `8-bit 4:2:2`, `3,651` cycles, `1,071` bytes,
     `output/ipcm_32x16_1f_422.h264`, `output/ipcm_32x16_1f_422.mp4`, and
     decoded YUV matching the source frame byte-for-byte
+  - strict FFmpeg-decodable two-frame validation with frame `0` on the IDR
+    `I_PCM` path and frame `1` on the P-slice `I_PCM` path at `32x16`,
+    `59,889` cycles, `1,595` bytes, `output/ipcm_p_32x16_2f.h264`,
+    `output/ipcm_p_32x16_2f.mp4`, and decoded YUV matching both source frames
+    byte-for-byte
 
 - A 720p chroma corruption bug was traced to raw input address overflow in the Cr plane fetch path and fixed by widening the raw input address width
 - A directional `Intra_4x4` top-right reference fetch bug was fixed in
@@ -431,6 +438,12 @@ The testbench must not:
   byte-aligns with `pcm_alignment_zero_bit`, emits raw luma / Cb / Cr samples
   through the RTL byte path itself, and decodes back to an exact byte-for-byte
   match on the validated `320x176 4:2:0` and `32x16 4:2:2` all-IDR cases
+- The current tree also supports `I_PCM` on the P-slice intra path for
+  `8-bit` builds, and `tb/Makefile` now exposes `ENABLE_IDR_IPCM`,
+  `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and `INTER_SAD_THRESHOLD` so the path
+  can be reproduced without raw `EXTRA_VERILATOR_ARGS`
+- `I_PCM` is still only implemented on the current `8-bit` RTL path; `10-bit`
+  `I_PCM` is not closed yet
 - The `Intra_16x16` DC inverse path in `h264_luma_dc.v` now preserves the full
   Hadamard dynamic range instead of truncating the top bits before inverse
   scaling
