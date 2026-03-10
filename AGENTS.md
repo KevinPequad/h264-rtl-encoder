@@ -393,6 +393,10 @@ The testbench must not:
     `320x176`, `4` frames, `969,524` cycles, `339,852` bytes,
     `output/ipcm_320x176_4f.h264`, `output/ipcm_320x176_4f.mp4`, and decoded
     YUV matching the first four source frames byte-for-byte
+  - strict FFmpeg-decodable forced-`I_PCM` IDR validation at `32x16`,
+    `8-bit 4:2:2`, `3,651` cycles, `1,071` bytes,
+    `output/ipcm_32x16_1f_422.h264`, `output/ipcm_32x16_1f_422.mp4`, and
+    decoded YUV matching the source frame byte-for-byte
 
 - A 720p chroma corruption bug was traced to raw input address overflow in the Cr plane fetch path and fixed by widening the raw input address width
 - A directional `Intra_4x4` top-right reference fetch bug was fixed in
@@ -426,7 +430,7 @@ The testbench must not:
 - The current RTL writer now supports `I_PCM` macroblocks on the IDR path,
   byte-aligns with `pcm_alignment_zero_bit`, emits raw luma / Cb / Cr samples
   through the RTL byte path itself, and decodes back to an exact byte-for-byte
-  match on the validated `320x176` all-IDR cases
+  match on the validated `320x176 4:2:0` and `32x16 4:2:2` all-IDR cases
 - The `Intra_16x16` DC inverse path in `h264_luma_dc.v` now preserves the full
   Hadamard dynamic range instead of truncating the top bits before inverse
   scaling
