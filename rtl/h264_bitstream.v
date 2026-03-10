@@ -438,13 +438,8 @@ module h264_bitstream #(
                                     ue_input <= BIT_DEPTH - 8;
                                     sub <= 6'd20; // jump to High profile sub-states
                                 end else begin
-                                    // Baseline: all-in-one
-                                    // sps_id + log2_max_frame_num + poc_type + max_ref + gaps
-                                    // 1+1+3+5+1 = 11 bits: 11011001010
-                                    bit_buf <= {11'b11011001010, 85'd0};
-                                    bit_cnt <= 7'd11;
-                                    ue_input <= MB_COLS - 1;
-                                    sub <= sub + 6'd1;
+                                    ue_input <= 10'd0; // seq_parameter_set_id
+                                    sub <= 6'd30;
                                 end
                             end
                             // Load UE(pic_width_in_mbs_minus1) into bit buffer
@@ -580,6 +575,38 @@ module h264_bitstream #(
                                 sub <= 6'd9;
                             end
 
+                            // Baseline/Main SPS extra fields, using the shared UE encoder
+                            6'd30: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= 10'd0; // log2_max_frame_num_minus4
+                                sub <= 6'd31;
+                            end
+                            6'd31: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= 10'd0; // pic_order_cnt_type = 0
+                                sub <= 6'd32;
+                            end
+                            6'd32: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= 10'd2; // log2_max_pic_order_cnt_lsb_minus4
+                                sub <= 6'd33;
+                            end
+                            6'd33: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= 10'd4; // max_num_ref_frames
+                                sub <= 6'd34;
+                            end
+                            6'd34: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits} + 7'd1; // gaps_in_frame_num_allowed_flag = 0
+                                ue_input <= MB_COLS - 1;
+                                sub <= 6'd9;
+                            end
+
                             default: state <= S_IDLE;
                         endcase
                     end
@@ -670,11 +697,11 @@ module h264_bitstream #(
                                             end
                                         end else begin
                                             if (slice_multi_ref_enable) begin
-                                                bit_buf <= {3'b111, frame_num, slice_multi_ref_bits, 82'd0};
-                                                bit_cnt <= 7'd7 + {3'd0, slice_multi_ref_bits_len};
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits, 76'd0};
+                                                bit_cnt <= 7'd13 + {3'd0, slice_multi_ref_bits_len};
                                             end else begin
-                                                bit_buf <= {3'b111, frame_num, 2'b00, 87'd0};
-                                                bit_cnt <= 7'd9;
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 2'b00, 81'd0};
+                                                bit_cnt <= 7'd15;
                                             end
                                         end
                                         ue_input <= {6'd0, luma_log2_weight_denom};
@@ -693,13 +720,13 @@ module h264_bitstream #(
                                                 bit_cnt <= 7'd20;
                                             end
                                         end else begin
-                                            // Baseline/Main P-slice with poc_type=2, no poc_lsb
+                                            // Baseline/Main P-slice: SPS now uses poc_type=0, so emit poc_lsb(6 bits)
                                             if (slice_multi_ref_enable) begin
-                                                bit_buf <= {3'b111, frame_num, slice_multi_ref_bits_qp, 77'd0};
-                                                bit_cnt <= 7'd7 + {3'd0, slice_multi_ref_bits_qp_len};
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits_qp, 71'd0};
+                                                bit_cnt <= 7'd13 + {3'd0, slice_multi_ref_bits_qp_len};
                                             end else begin
-                                                bit_buf <= {3'b111, frame_num, 4'b0001, 3'b010, 82'd0};
-                                                bit_cnt <= 7'd14;
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, 3'b010, 76'd0};
+                                                bit_cnt <= 7'd20;
                                             end
                                         end
                                         sub <= sub + 6'd1;
@@ -714,9 +741,9 @@ module h264_bitstream #(
                                         bit_buf <= {1'b1, 3'b011, 1'b1, frame_num, 1'b1, pic_order_cnt_lsb, 2'b00, 1'b1, 3'b010, 74'd0};
                                         bit_cnt <= 7'd22;
                                     end else begin
-                                        // Baseline IDR I-slice: SPS has poc_type=2, no poc_lsb
-                                        bit_buf <= {16'b1011100001001010, 80'd0};
-                                        bit_cnt <= 7'd16;
+                                        // Baseline/Main IDR: SPS now uses poc_type=0, so emit poc_lsb(6 bits)
+                                        bit_buf <= {1'b1, 3'b011, 1'b1, frame_num, 1'b1, pic_order_cnt_lsb, 2'b00, 1'b1, 3'b010, 74'd0};
+                                        bit_cnt <= 7'd22;
                                     end
                                     sub <= sub + 6'd1;
                                 end
