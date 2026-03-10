@@ -31,6 +31,15 @@ After pushing or validating a checkpoint, immediately continue to the next
 highest-priority implementation or correctness task in the same session unless
 there is a concrete blocker.
 
+Do not wait for the user to say "continue" after a push, a checkpoint, a
+validation pass, a milestone, or a status update. If the user has not changed
+the goal or redirected the work, continue immediately on the next highest-
+priority unfinished codec task.
+
+A turn boundary, a status message, a commit, a push, or a final-looking summary
+is not itself a valid reason to pause. Only actual completion, an explicit user
+redirect, or a concrete technical blocker is a valid stopping condition.
+
 Do not treat "it decodes" as equivalent to "it is correct." A decodable stream
 with visibly wrong output, poor quality, broken reconstruction state, or major
 feature gaps is not a valid place to stop. Keep going until the quality issue
@@ -154,6 +163,8 @@ The testbench must not:
 8. After any push or validated checkpoint, immediately pick up the next
    highest-priority unfinished codec task instead of pausing for a status-only
    handoff
+9. Do not wait for a fresh "continue" prompt after a checkpoint; continue by
+   default unless the user has redirected the work or a concrete blocker exists
 
 ## Current Practical Notes
 
@@ -404,6 +415,24 @@ The testbench must not:
     `59,889` cycles, `1,595` bytes, `output/ipcm_p_32x16_2f.h264`,
     `output/ipcm_p_32x16_2f.mp4`, and decoded YUV matching both source frames
     byte-for-byte
+  - strict FFmpeg-decodable forced-`I_PCM` IDR validation at `32x16`,
+    `10-bit 4:2:0`, `5,965` cycles, `1,007` bytes,
+    `output/ipcm_32x16_1f_10b_latched.h264`, and decoded YUV matching the
+    source frame byte-for-byte
+  - strict FFmpeg-decodable forced-`I_PCM` IDR validation at `32x16`,
+    `10-bit 4:2:2`, `7,885` cycles, `1,327` bytes,
+    `output/ipcm_32x16_1f_10b_422_latched.h264`, and decoded YUV matching the
+    source frame byte-for-byte
+  - strict FFmpeg-decodable two-frame validation with frame `0` on the IDR
+    `I_PCM` path and frame `1` on the P-slice `I_PCM` path at `32x16`,
+    `10-bit 4:2:0`, `59,645` cycles, `1,980` bytes,
+    `output/ipcm_p_32x16_2f_10b_latched.h264`, and decoded YUV matching both
+    source frames byte-for-byte
+  - strict FFmpeg-decodable two-frame validation with frame `0` on the IDR
+    `I_PCM` path and frame `1` on the P-slice `I_PCM` path at `32x16`,
+    `10-bit 4:2:2`, `62,973` cycles, `2,620` bytes,
+    `output/ipcm_p_32x16_2f_10b_422_latched.h264`, and decoded YUV matching
+    both source frames byte-for-byte
 
 - A 720p chroma corruption bug was traced to raw input address overflow in the Cr plane fetch path and fixed by widening the raw input address width
 - A directional `Intra_4x4` top-right reference fetch bug was fixed in
@@ -438,12 +467,15 @@ The testbench must not:
   byte-aligns with `pcm_alignment_zero_bit`, emits raw luma / Cb / Cr samples
   through the RTL byte path itself, and decodes back to an exact byte-for-byte
   match on the validated `320x176 4:2:0` and `32x16 4:2:2` all-IDR cases
-- The current tree also supports `I_PCM` on the P-slice intra path for
-  `8-bit` builds, and `tb/Makefile` now exposes `ENABLE_IDR_IPCM`,
-  `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and `INTER_SAD_THRESHOLD` so the path
-  can be reproduced without raw `EXTRA_VERILATOR_ARGS`
-- `I_PCM` is still only implemented on the current `8-bit` RTL path; `10-bit`
-  `I_PCM` is not closed yet
+- The `I_PCM` source path is now latched in `rtl/h264_encoder_top.v` before the
+  bitstream emit begins, which closes the earlier corruption where the live
+  fetch bus could be overwritten by the next macroblock during `10-bit` sample
+  emission
+- The current tree now supports `I_PCM` on the IDR path and the current
+  P-slice intra path for `8-bit` and `10-bit` builds in both `4:2:0` and
+  `4:2:2`, and `tb/Makefile` exposes `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`,
+  `IPCM_SAD_THRESHOLD`, and `INTER_SAD_THRESHOLD` so the path can be
+  reproduced without raw `EXTRA_VERILATOR_ARGS`
 - The `Intra_16x16` DC inverse path in `h264_luma_dc.v` now preserves the full
   Hadamard dynamic range instead of truncating the top bits before inverse
   scaling

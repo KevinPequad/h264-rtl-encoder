@@ -1071,25 +1071,49 @@ module h264_bitstream #(
                                     return_state <= S_MB_HDR;
                                     sub <= 6'd26;
                                 end else begin
+                                    bit_buf <= 96'd0;
                                     sub <= 6'd30;
                                 end
                             end
                             6'd30: begin : ipcm_emit_byte
                                 reg [9:0] ipcm_idx_i;
                                 reg [7:0] ipcm_byte_i;
+                                reg [BIT_DEPTH-1:0] ipcm_sample_i;
                                 ipcm_idx_i = ipcm_sample_idx;
                                 if (ipcm_idx_i < IPCM_TOTAL_SAMPLES[9:0]) begin
-                                    if (ipcm_idx_i < 10'd256)
-                                        ipcm_byte_i = ipcm_luma_flat[ipcm_idx_i*BIT_DEPTH +: 8];
-                                    else if (ipcm_idx_i < (10'd256 + CHR_MB_PIXELS[9:0]))
-                                        ipcm_byte_i = ipcm_cb_flat[(ipcm_idx_i - 10'd256)*BIT_DEPTH +: 8];
-                                    else
-                                        ipcm_byte_i = ipcm_cr_flat[(ipcm_idx_i - 10'd256 - CHR_MB_PIXELS[9:0])*BIT_DEPTH +: 8];
-                                    write_byte <= ipcm_byte_i;
-                                    do_write <= 1'b1;
-                                    ipcm_sample_idx <= ipcm_sample_idx + 10'd1;
+                                    if (BIT_DEPTH == 8) begin
+                                        if (ipcm_idx_i < 10'd256)
+                                            ipcm_byte_i = ipcm_luma_flat[ipcm_idx_i*BIT_DEPTH +: 8];
+                                        else if (ipcm_idx_i < (10'd256 + CHR_MB_PIXELS[9:0]))
+                                            ipcm_byte_i = ipcm_cb_flat[(ipcm_idx_i - 10'd256)*BIT_DEPTH +: 8];
+                                        else
+                                            ipcm_byte_i = ipcm_cr_flat[(ipcm_idx_i - 10'd256 - CHR_MB_PIXELS[9:0])*BIT_DEPTH +: 8];
+                                        write_byte <= ipcm_byte_i;
+                                        do_write <= 1'b1;
+                                        ipcm_sample_idx <= ipcm_sample_idx + 10'd1;
+                                    end else begin
+                                        if (ipcm_idx_i < 10'd256)
+                                            ipcm_sample_i = ipcm_luma_flat[ipcm_idx_i*BIT_DEPTH +: BIT_DEPTH];
+                                        else if (ipcm_idx_i < (10'd256 + CHR_MB_PIXELS[9:0]))
+                                            ipcm_sample_i = ipcm_cb_flat[(ipcm_idx_i - 10'd256)*BIT_DEPTH +: BIT_DEPTH];
+                                        else
+                                            ipcm_sample_i = ipcm_cr_flat[(ipcm_idx_i - 10'd256 - CHR_MB_PIXELS[9:0])*BIT_DEPTH +: BIT_DEPTH];
+                                        bit_buf <= bit_buf | (({ipcm_sample_i, {(96-BIT_DEPTH){1'b0}}} >> bit_cnt[6:0]));
+                                        bit_cnt <= bit_cnt + BIT_DEPTH[6:0];
+                                        ipcm_sample_idx <= ipcm_sample_idx + 10'd1;
+                                        sub <= 6'd31;
+                                    end
                                 end else begin
                                     sub <= 6'd4;
+                                end
+                            end
+                            6'd31: begin
+                                if (bit_cnt >= 7'd8) begin
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                    sub <= 6'd31;
+                                end else begin
+                                    sub <= 6'd30;
                                 end
                             end
 
