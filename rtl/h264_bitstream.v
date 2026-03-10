@@ -40,6 +40,7 @@ module h264_bitstream #(
     // Slice-type support
     input  wire        is_p_slice,
     input  wire        is_b_slice,
+    input  wire        is_b_ref_slice,
     input  wire [7:0]  frame_num,
     input  wire        is_inter_mb,
     input  wire        is_skip_mb,
@@ -753,6 +754,8 @@ module h264_bitstream #(
                             6'd4: begin
                                 if (is_p_slice)
                                     write_byte <= 8'h41; // nal_ref_idc=2, nal_unit_type=1 (non-IDR)
+                                else if (is_b_slice && is_b_ref_slice)
+                                    write_byte <= 8'h41; // nal_ref_idc=2, nal_unit_type=1 (reference B-slice)
                                 else if (is_b_slice)
                                     write_byte <= 8'h01; // nal_ref_idc=0, nal_unit_type=1 (non-IDR B-slice)
                                 else
@@ -813,9 +816,15 @@ module h264_bitstream #(
                                     // first_mb=UE(0), slice_type(B)=UE(1), pps_id=UE(0), frame_num(8),
                                     // pic_order_cnt_lsb(9), direct_spatial_mv_pred_flag=1,
                                     // num_ref_idx_active_override_flag=0, ref_pic_list_reordering_flag_l0=0,
-                                    // ref_pic_list_reordering_flag_l1=0, slice_qp_delta=SE(0), deblocking=UE(1)
-                                    bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, 5'b10001, 3'b010, 66'd0};
-                                    bit_cnt <= 7'd30;
+                                    // ref_pic_list_reordering_flag_l1=0, optional adaptive_ref_pic_marking_mode_flag,
+                                    // slice_qp_delta=SE(0), deblocking=UE(1)
+                                    if (is_b_ref_slice) begin
+                                        bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, 6'b100001, 3'b010, 65'd0};
+                                        bit_cnt <= 7'd31;
+                                    end else begin
+                                        bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, 5'b10001, 3'b010, 66'd0};
+                                        bit_cnt <= 7'd30;
+                                    end
                                     sub <= sub + 6'd1;
                                 end else begin
                                     if (use_high_profile) begin

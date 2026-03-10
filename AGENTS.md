@@ -219,6 +219,8 @@ The testbench must not:
   - Non-reference `B`-slice support on the current intra / `I_PCM` path
   - Limited non-reference inter-coded `B_L0_16x16` support on the current
     single-list B path
+  - Limited reference-`B` / `BREF` support on the current single-list
+    `B_L0_16x16` path
   - IDR + non-IDR encoded stream output
   - `16x16` macroblock raster-order processing
   - Up to four forward reference pictures for P-slice motion search
@@ -292,6 +294,8 @@ The testbench must not:
   - Non-reference `B`-picture syntax on the current intra / `I_PCM` path
   - Limited non-reference `B_L0_16x16` inter coding on the current single-list
     B path
+  - Limited reference-`B` / `BREF` picture support on the current single-list
+    B path
   - Full directional `Intra_4x4` luma mode coverage
   - `Intra_16x16` luma prediction and syntax support
   - Current IDR-path and P-slice intra-path `I_PCM` macroblock coding and
@@ -320,6 +324,8 @@ The testbench must not:
     validation scripts
   - Runtime-configurable `force_b_slice` support in the testbench and
     validation scripts for the current non-reference `B`-slice path
+  - Runtime-configurable `force_bref_slice` support in the testbench and
+    validation scripts for the current limited reference-`B` path
   - RTL-owned `P_SKIP` skip-run generation validated on the current P-slice
     path
 
@@ -543,6 +549,11 @@ The testbench must not:
   frame `1` on the B inter path, exact decoded-YUV match, `trace_headers`
   confirmation of `nal_ref_idc = 0` and `slice_type = 1` on the second
   picture, and a `425` byte second-slice payload with `ENABLE_P_IPCM=0`
+- The current tree now also validates a limited reference-`B` / `BREF`
+  `B_L0_16x16` path at `320x176` with frame `0` on the IDR `I_PCM` path and
+  frames `1` and `2` on the BREF inter path, exact decoded-YUV match, and
+  `trace_headers` confirmation that both non-IDR B pictures use
+  `nal_ref_idc = 2` with `slice_type = 1`
 - `scripts/validate_clip.py` and `scripts/rtl_runner.py` now expose
   `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
   `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths
@@ -560,7 +571,7 @@ The testbench must not:
   H.264 encoder yet:
   - No CABAC syntax integration into the final RTL bitstream path yet
   - No broader `B` / `BREF` picture support beyond the current limited
-    non-reference `B_L0_16x16` path
+    single-list `B_L0_16x16` path
   - No weighted bipred / `B`-picture weighted prediction
   - No direct motion-vector prediction modes
   - No reference management beyond the current four-reference P-slice subset

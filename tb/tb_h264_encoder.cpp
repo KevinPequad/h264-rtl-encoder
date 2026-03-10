@@ -64,6 +64,7 @@ int main(int argc, char** argv) {
     bool enable_trace = false;
     int idr_interval = 12;
     bool force_b_slice = false;
+    bool force_bref_slice = false;
 
     for (int i = 1; i < argc; i++) {
         std::string arg = argv[i];
@@ -73,6 +74,7 @@ int main(int argc, char** argv) {
         else if (arg.rfind("+timeout=", 0) == 0) timeout_cycles = std::strtoull(arg.c_str() + 9, nullptr, 10);
         else if (arg.rfind("+idr_interval=", 0) == 0) idr_interval = std::atoi(arg.c_str() + 14);
         else if (arg.rfind("+force_b_slice=", 0) == 0) force_b_slice = std::atoi(arg.c_str() + 15) != 0;
+        else if (arg.rfind("+force_bref_slice=", 0) == 0) force_bref_slice = std::atoi(arg.c_str() + 18) != 0;
         else if (arg == "+trace") enable_trace = true;
         else if (arg.rfind("+trace_file=", 0) == 0) trace_file = arg.substr(12);
     }
@@ -115,13 +117,13 @@ int main(int argc, char** argv) {
 
     fprintf(stderr, "==========================================================\n");
     fprintf(stderr, "  H.264 RTL Encoder Testbench (%d-bit)\n", BD);
-    fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d  idr_interval=%d  force_b_slice=%d\n",
-            num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC, idr_interval, force_b_slice ? 1 : 0);
+    fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d  idr_interval=%d  force_b_slice=%d  force_bref_slice=%d\n",
+            num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC, idr_interval, force_b_slice ? 1 : 0, force_bref_slice ? 1 : 0);
     fprintf(stderr, "==========================================================\n");
 
     Vh264_encoder_top* dut = new Vh264_encoder_top;
     dut->clk = 0; dut->rst_n = 0; dut->start = 0;
-    dut->frame_num_in = 0; dut->is_idr_in = 0; dut->is_b_in = 0; dut->ref_mem_rd_data = 0;
+    dut->frame_num_in = 0; dut->is_idr_in = 0; dut->is_b_in = 0; dut->is_bref_in = 0; dut->ref_mem_rd_data = 0;
     dut->chr_cb_ref_rd_data = CHROMA_MID; dut->chr_cr_ref_rd_data = CHROMA_MID;
 
 #if VM_TRACE
@@ -163,13 +165,15 @@ int main(int argc, char** argv) {
             dut->start = 1;
             bool is_idr = (idr_interval <= 0) ? (frame_idx == 0) : ((frame_idx % idr_interval) == 0);
             bool is_b = !is_idr && force_b_slice;
+            bool is_bref = is_b && force_bref_slice;
             int frame_num = (idr_interval <= 0) ? frame_idx : (frame_idx % idr_interval);
             dut->frame_num_in = frame_num & 0xFF;
             dut->is_idr_in = is_idr ? 1 : 0;
             dut->is_b_in = is_b ? 1 : 0;
+            dut->is_bref_in = is_bref ? 1 : 0;
             frame_active = true;
             fprintf(stderr, "[TB] Frame %d (%s) start @ cycle %llu\n",
-                    frame_idx, is_idr ? "IDR" : (is_b ? "B" : "P"), (unsigned long long)cycle);
+                    frame_idx, is_idr ? "IDR" : (is_bref ? "BREF" : (is_b ? "B" : "P")), (unsigned long long)cycle);
         }
 
         dut->clk = 1;

@@ -20,6 +20,8 @@ Current state:
   intra / `I_PCM` macroblocks
 - the current tree now also supports limited non-reference inter-coded
   `B_L0_16x16` macroblocks on a single-list B path
+- the current tree now also supports limited reference-`B` / `BREF`
+  `B_L0_16x16` pictures on that single-list B path
 - the repository is still not complete as a full H.264 standard encoder
 
 Completion is still blocked by major missing features including CABAC syntax
@@ -159,6 +161,8 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - non-reference `B`-slice support on the current intra / `I_PCM` path
 - limited non-reference inter-coded `B_L0_16x16` support on the current
   single-list B path
+- limited reference-`B` / `BREF` support on the current single-list
+  `B_L0_16x16` path
 - IDR + non-IDR encoded stream output
 - `16x16` macroblock raster-order processing
 - up to four forward reference pictures for P-slice motion search
@@ -211,6 +215,8 @@ Implemented now relative to the chosen `x264` baseline:
 - non-reference `B`-picture syntax on the current intra / `I_PCM` path
 - limited non-reference `B_L0_16x16` inter coding on the current single-list B
   path
+- limited reference-`B` / `BREF` picture support on the current single-list B
+  path
 - full `Intra_4x4` directional luma mode coverage
 - `Intra_16x16` luma prediction and syntax support
 - current IDR-path `Intra_16x16` macroblock coding through the RTL byte stream
@@ -257,6 +263,8 @@ Verified validation and tooling coverage around the encoder flow:
   scripts
 - runtime-configurable `force_b_slice` support in the testbench and validation
   scripts for the current non-reference `B`-slice path
+- runtime-configurable `force_bref_slice` support in the testbench and
+  validation scripts for the current limited reference-`B` path
 - fast strict-decode-only validation mode in `validate_clip.py` for longer
   regression runs that do not need metrics or x264 comparison
 - RTL-owned `P_SKIP` skip-run generation validated on the current P-slice path
@@ -346,6 +354,12 @@ Measured validation points:
   bytes total, exact decoded-YUV match, `trace_headers` confirmation of
   `nal_ref_idc = 0` and `slice_type = 1` on the second picture, and a `425`
   byte second-slice payload with `ENABLE_P_IPCM=0`
+- `bref_inter_320x176_3f`: strict FFmpeg-decodable three-frame validation with
+  frame `0` on the IDR `I_PCM` path and frames `1` and `2` on the reference-`B`
+  / `BREF` inter-coded `B_L0_16x16` path at `320x176`, `19,820,383` cycles,
+  `85,799` bytes total, exact decoded-YUV match, and `trace_headers`
+  confirmation that both non-IDR B pictures use `nal_ref_idc = 2` with
+  `slice_type = 1`
 - `32x16_2f_444_ipcm_scripted`: strict staged validation through
   `scripts/validate_clip.py` with `--enable-idr-ipcm 1 --enable-p-ipcm 1`
   at `32x16`, `8-bit 4:4:4`, packaged MP4 output, and JSON summary in
@@ -466,7 +480,7 @@ H.264 encoder yet:
 - CABAC context modelling, syntax binarization, and final bitstream-path
   integration
 - no broader `B` / `BREF` picture support beyond the current limited
-  non-reference `B_L0_16x16` path
+  single-list `B_L0_16x16` path
 - weighted bipred / `B`-picture weighted prediction
 - direct motion-vector prediction modes
 - reference-picture management beyond the current four-reference P-slice subset

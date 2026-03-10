@@ -39,6 +39,9 @@ module h264_encoder_top #(
     // B-slice flag for non-IDR pictures. Current RTL support is limited to
     // intra/I_PCM coding on this path, so inter B tools remain future work.
     input  wire        is_b_in,
+    // Reference-B flag for non-IDR B pictures. The current RTL path supports a
+    // limited single-list BREF mode that can be inserted into the ref bank.
+    input  wire        is_bref_in,
 
     // Raw frame memory read port (YUV420 planar)
     output wire [20:0] raw_mem_addr,
@@ -152,7 +155,8 @@ module h264_encoder_top #(
     // P-frame registers
     // ====================================================================
     reg        is_p_frame;         // 1 if current frame is P-frame
-    reg        is_b_frame;         // 1 if current frame is a non-reference B-slice
+    reg        is_b_frame;         // 1 if current frame is any B-slice
+    reg        is_b_ref_frame;     // 1 if current frame is a reference B-slice
     reg        is_inter_mb_reg;    // 1 if current MB uses inter prediction
     reg        is_skip_mb_reg;     // 1 if current MB is emitted as P_SKIP
     reg        use_intra16_mb_reg; // 1 if current intra MB uses Intra_16x16
@@ -1066,7 +1070,7 @@ pred_buf = {(256*BD){1'b0}};
         .cmd_clear_fifo(bs_cmd_clear_fifo),
         .cavlc_valid(cavlc_bits_valid), .cavlc_bits(cavlc_bits), .cavlc_count(cavlc_count),
         .mb_qp_delta(8'd0), .mb_has_residual(mb_has_residual),
-        .is_p_slice(is_p_frame), .is_b_slice(is_b_frame), .frame_num(cur_frame_num),
+        .is_p_slice(is_p_frame), .is_b_slice(is_b_frame), .is_b_ref_slice(is_b_ref_frame), .frame_num(cur_frame_num),
         .is_inter_mb(is_inter_mb_reg), .is_skip_mb(is_skip_mb_reg),
         .mb_ref_idx_l0(mb_ref_idx_reg), .mvd_x(mvd_x_w), .mvd_y(mvd_y_w),
         .slice_num_ref_idx_l0_active_minus1(slice_num_ref_idx_l0_active_minus1),
@@ -1099,7 +1103,7 @@ pred_buf = {(256*BD){1'b0}};
             blk_state <= BS_PRED; blk_started <= 1'b0; iq_done_latched <= 1'b0;
             recon_buf <= {(256*BD){1'b0}}; top_ref_flat <= {(MB_COLS*16*BD){1'b0}}; left_ref_flat <= {(16*BD){1'b0}};
             top_pixels_flat <= {(16*BD){1'b0}}; left_pixels_flat <= {(16*BD){1'b0}}; flush_pending <= 1'b0; flush_accepted <= 1'b0;
-            is_p_frame <= 1'b0; is_b_frame <= 1'b0; is_inter_mb_reg <= 1'b0; is_skip_mb_reg <= 1'b0; use_intra16_mb_reg <= 1'b0; use_ipcm_mb_reg <= 1'b0; cur_frame_num <= 8'd0;
+            is_p_frame <= 1'b0; is_b_frame <= 1'b0; is_b_ref_frame <= 1'b0; is_inter_mb_reg <= 1'b0; is_skip_mb_reg <= 1'b0; use_intra16_mb_reg <= 1'b0; use_ipcm_mb_reg <= 1'b0; cur_frame_num <= 8'd0;
             me_best_mvx <= 8'sd0; me_best_mvy <= 8'sd0; me_best_sad <= 18'd0; me_fullpel_best_sad <= 18'd0;
             inter_pred_buf <= {(256*BD){1'b0}}; ref_wr_idx <= 9'd0;
             intra16_pred_buf <= {(256*BD){1'b0}}; intra16_mode_mb <= 2'd2;
@@ -1169,6 +1173,7 @@ pred_buf = {(256*BD){1'b0}};
                     cur_frame_num <= frame_num_in;
                     is_p_frame <= ~is_idr_in && !is_b_in;
                     is_b_frame <= ~is_idr_in && is_b_in;
+                    is_b_ref_frame <= ~is_idr_in && is_b_in && is_bref_in;
                     mb_x <= 7'd0; mb_y <= 6'd0; mb_count <= 12'd0;
                     me_search_pass <= 2'd0;
                     mb_ref_idx_reg <= 2'd0;
@@ -2773,6 +2778,13 @@ pred_buf = {(256*BD){1'b0}};
                              done <= 1'b1;
                              $display("[PSKIP] Frame %0d skip_mbs=%0d", cur_frame_num, frame_skip_mb_count);
                              if (is_p_frame) begin
+                                 ancient_ref_bank <= oldest_ref_bank;
+                                 oldest_ref_bank <= older_ref_bank;
+                                 older_ref_bank <= newest_ref_bank;
+                                 newest_ref_bank <= current_write_bank;
+                                 valid_ref_count <= (valid_ref_count < 3'd4) ? (valid_ref_count + 3'd1) : 3'd4;
+                                 next_write_bank <= pick_free_ref_bank(current_write_bank, newest_ref_bank, older_ref_bank, oldest_ref_bank);
+                             end else if (is_b_ref_frame) begin
                                  ancient_ref_bank <= oldest_ref_bank;
                                  oldest_ref_bank <= older_ref_bank;
                                  older_ref_bank <= newest_ref_bank;
