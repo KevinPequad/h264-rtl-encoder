@@ -263,6 +263,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--timeout", type=int, default=500_000_000)
     parser.add_argument("--input", type=Path, default=root / "data" / "raw_frames.yuv")
     parser.add_argument("--label", default="320x176_24f")
+    parser.add_argument("--idr-interval", type=int, default=12)
     return parser.parse_args()
 
 
@@ -301,9 +302,18 @@ def main() -> int:
         chroma_offset_cb=args.chroma_offset_cb,
         chroma_weight_cr=args.chroma_weight_cr,
         chroma_offset_cr=args.chroma_offset_cr,
+        idr_interval=args.idr_interval,
     )
     sim_bin = build_sim(workspace, config, build_log_path=build_log_path)
-    sim_proc = run_sim(sim_bin, args.frames, args.timeout, input_path, rtl_h264, capture=True)
+    sim_proc = run_sim(
+        sim_bin,
+        args.frames,
+        args.timeout,
+        input_path,
+        rtl_h264,
+        idr_interval=args.idr_interval,
+        capture=True,
+    )
     sim_log = (sim_proc.stdout or "") + (sim_proc.stderr or "")
     sim_log_path.write_text(sim_log, encoding="utf-8")
     sim_summary = parse_sim_summary(sim_log)
