@@ -264,6 +264,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--input", type=Path, default=root / "data" / "raw_frames.yuv")
     parser.add_argument("--label", default="320x176_24f")
     parser.add_argument("--idr-interval", type=int, default=12)
+    parser.add_argument("--decode-only", action="store_true")
+    parser.add_argument("--skip-metrics", action="store_true")
+    parser.add_argument("--skip-x264", action="store_true")
+    parser.add_argument("--skip-compare", action="store_true")
+    parser.add_argument("--skip-mp4", action="store_true")
     return parser.parse_args()
 
 
@@ -271,6 +276,11 @@ def main() -> int:
     args = parse_args()
     require_tool("ffmpeg")
     require_tool("make")
+
+    skip_metrics = args.skip_metrics or args.decode_only
+    skip_x264 = args.skip_x264 or args.decode_only
+    skip_compare = args.skip_compare or args.decode_only
+    skip_mp4 = args.skip_mp4
 
     root = repo_root()
     input_path = args.input if args.input.is_absolute() else (root / args.input).resolve()
@@ -327,12 +337,33 @@ def main() -> int:
             "FFmpeg decoder reported H.264 errors:\n" + "\n".join(decode_errors[:16])
         )
 
-    rtl_psnr = ffmpeg_metric(input_path, rtl_h264, args.width, args.height, args.fps, args.frames, pix_fmt, "psnr")
-    rtl_ssim = ffmpeg_metric(input_path, rtl_h264, args.width, args.height, args.fps, args.frames, pix_fmt, "ssim")
+    rtl_psnr = None
+    rtl_ssim = None
+    if not skip_metrics:
+        rtl_psnr = ffmpeg_metric(
+            input_path,
+            rtl_h264,
+            args.width,
+            args.height,
+            args.fps,
+            args.frames,
+            pix_fmt,
+            "psnr",
+        )
+        rtl_ssim = ffmpeg_metric(
+            input_path,
+            rtl_h264,
+            args.width,
+            args.height,
+            args.fps,
+            args.frames,
+            pix_fmt,
+            "ssim",
+        )
 
     ref_psnr = None
     ref_ssim = None
-    if args.bit_depth == 8:
+    if not skip_metrics and not skip_x264 and args.bit_depth == 8:
         encode_x264_reference(
             input_path,
             x264_mp4,
@@ -346,17 +377,19 @@ def main() -> int:
         ref_psnr = ffmpeg_metric(input_path, x264_mp4, args.width, args.height, args.fps, args.frames, pix_fmt, "psnr")
         ref_ssim = ffmpeg_metric(input_path, x264_mp4, args.width, args.height, args.fps, args.frames, pix_fmt, "ssim")
 
-    build_side_by_side(
-        input_path,
-        rtl_h264,
-        compare_png,
-        args.width,
-        args.height,
-        args.fps,
-        pix_fmt,
-        args.frames // 2,
-    )
-    package_mp4(rtl_h264, rtl_mp4, args.width, args.height, args.fps)
+    if not skip_compare:
+        build_side_by_side(
+            input_path,
+            rtl_h264,
+            compare_png,
+            args.width,
+            args.height,
+            args.fps,
+            pix_fmt,
+            args.frames // 2,
+        )
+    if not skip_mp4:
+        package_mp4(rtl_h264, rtl_mp4, args.width, args.height, args.fps)
 
     summary = {
         "config": asdict(config),
@@ -365,20 +398,38 @@ def main() -> int:
         "input": str(input_path),
         "pix_fmt": pix_fmt,
         "rtl_h264": str(rtl_h264),
-        "rtl_mp4": str(rtl_mp4),
-        "compare_png": str(compare_png),
+        "rtl_mp4": str(rtl_mp4) if not skip_mp4 else None,
+        "compare_png": str(compare_png) if not skip_compare else None,
         "build_log": str(build_log_path),
         "sim_log": str(sim_log_path),
         "sim_summary": sim_summary,
+        "decode_errors": decode_errors,
+        "validation_mode": {
+            "decode_only": args.decode_only,
+            "skip_metrics": skip_metrics,
+            "skip_x264": skip_x264,
+            "skip_compare": skip_compare,
+            "skip_mp4": skip_mp4,
+        },
         "x264_reference_mp4": str(x264_mp4) if ref_psnr is not None else None,
-        "rtl_metrics": {"psnr": rtl_psnr, "ssim": rtl_ssim},
+        "rtl_metrics": {"psnr": rtl_psnr, "ssim": rtl_ssim} if rtl_psnr is not None else None,
         "x264_metrics": {"psnr": ref_psnr, "ssim": ref_ssim} if ref_psnr is not None else None,
     }
     summary_json.write_text(json.dumps(sanitize_for_json(summary), indent=2), encoding="utf-8")
 
-    print(f"[PASS] RTL PSNR avg={rtl_psnr['average']:.4f} SSIM all={rtl_ssim['all']:.6f}")
+    print("[PASS] Strict FFmpeg decode check passed")
+    if rtl_psnr is not None and rtl_ssim is not None:
+        print(f"[PASS] RTL PSNR avg={rtl_psnr['average']:.4f} SSIM all={rtl_ssim['all']:.6f}")
+    else:
+        print("[PASS] RTL metrics skipped")
     if ref_psnr is not None and ref_ssim is not None:
         print(f"[PASS] x264 PSNR avg={ref_psnr['average']:.4f} SSIM all={ref_ssim['all']:.6f}")
+    elif skip_x264 or skip_metrics or args.bit_depth != 8:
+        print("[PASS] x264 reference step skipped")
+    if skip_compare:
+        print("[PASS] Side-by-side PNG skipped")
+    if skip_mp4:
+        print("[PASS] MP4 packaging skipped")
     print(f"[PASS] Wrote summary to {summary_json}")
     return 0
 
