@@ -73,16 +73,19 @@ module h264_encoder_top #(
     localparam [RAW_ADDR_W-1:0] FRAME_Y_BASE  = {RAW_ADDR_W{1'b0}};
     localparam [RAW_ADDR_W-1:0] FRAME_CB_BASE = FRAME_WIDTH * FRAME_HEIGHT;
     localparam [RAW_ADDR_W-1:0] FRAME_CR_BASE = FRAME_CB_BASE
-                                              + ((CHROMA_FORMAT_IDC == 2) ? (FRAME_WIDTH * FRAME_HEIGHT / 2)
-                                                                          : (FRAME_WIDTH * FRAME_HEIGHT / 4));
-    localparam CHR_WIDTH            = FRAME_WIDTH / 2;
-    localparam CHR_HEIGHT           = (CHROMA_FORMAT_IDC == 2) ? FRAME_HEIGHT : (FRAME_HEIGHT / 2);
-    localparam CHR_MB_HEIGHT        = (CHROMA_FORMAT_IDC == 2) ? 16 : 8;
-    localparam CHR_MB_PIXELS        = 8 * CHR_MB_HEIGHT;
+                                              + ((CHROMA_FORMAT_IDC == 3) ? (FRAME_WIDTH * FRAME_HEIGHT)
+                                                                          : (CHROMA_FORMAT_IDC == 2) ? (FRAME_WIDTH * FRAME_HEIGHT / 2)
+                                                                                                      : (FRAME_WIDTH * FRAME_HEIGHT / 4));
+    localparam CHR_WIDTH            = (CHROMA_FORMAT_IDC == 3) ? FRAME_WIDTH : (FRAME_WIDTH / 2);
+    localparam CHR_HEIGHT           = (CHROMA_FORMAT_IDC == 1) ? (FRAME_HEIGHT / 2) : FRAME_HEIGHT;
+    localparam CHR_MB_WIDTH         = (CHROMA_FORMAT_IDC == 3) ? 16 : 8;
+    localparam CHR_MB_HEIGHT        = (CHROMA_FORMAT_IDC == 1) ? 8 : 16;
+    localparam CHR_MB_PIXELS        = CHR_MB_WIDTH * CHR_MB_HEIGHT;
     localparam CHR_BLOCK_ROWS       = CHR_MB_HEIGHT / 4;
-    localparam CHR_BLOCKS_PER_PLANE = 2 * CHR_BLOCK_ROWS;
-    localparam CHR_RAW_ROWS_MAX     = (CHROMA_FORMAT_IDC == 2) ? 17 : 9;
-    localparam CHR_RAW_COLS_MAX     = 9;
+    localparam CHR_BLOCK_COLS       = CHR_MB_WIDTH / 4;
+    localparam CHR_BLOCKS_PER_PLANE = CHR_BLOCK_COLS * CHR_BLOCK_ROWS;
+    localparam CHR_RAW_ROWS_MAX     = (CHROMA_FORMAT_IDC == 1) ? 9 : 17;
+    localparam CHR_RAW_COLS_MAX     = (CHROMA_FORMAT_IDC == 3) ? 17 : 9;
     localparam CHR_RAW_SAMPLES      = CHR_RAW_ROWS_MAX * CHR_RAW_COLS_MAX;
     localparam LUMA_RAW_ROWS        = 21;
     localparam LUMA_RAW_COLS        = 21;
@@ -302,17 +305,17 @@ module h264_encoder_top #(
     reg  [16*BIT_DEPTH-1:0]  recon_top_row_buf_w;
     reg  [16*BIT_DEPTH-1:0]  recon_right_col_buf_w;
 
-    // Chroma reconstruction buffers (8x8 for 4:2:0, 8x16 for 4:2:2)
+    // Chroma reconstruction buffers (8x8 for 4:2:0, 8x16 for 4:2:2, 16x16 for 4:4:4)
     reg [CHR_MB_PIXELS*BIT_DEPTH-1:0] chr_recon_cb;
     reg [CHR_MB_PIXELS*BIT_DEPTH-1:0] chr_recon_cr;
     reg [256*BIT_DEPTH-1:0] intra16_pred_buf;
     reg [1:0]  intra16_mode_mb;
 
-    // Chroma MB-boundary neighbor storage for 8x8 DC prediction
-    // Top neighbors: bottom row (row 7) of above MB's chroma, per MB column
-    reg [8*BIT_DEPTH-1:0] top_chr_cb_nb [0:MB_COLS-1];
-    reg [8*BIT_DEPTH-1:0] top_chr_cr_nb [0:MB_COLS-1];
-    // Left neighbors: right column (col 7) of left MB's chroma
+    // Chroma MB-boundary neighbor storage for intra chroma prediction.
+    // Top neighbors: bottom row of above MB's chroma, per MB column.
+    reg [CHR_MB_WIDTH*BIT_DEPTH-1:0] top_chr_cb_nb [0:MB_COLS-1];
+    reg [CHR_MB_WIDTH*BIT_DEPTH-1:0] top_chr_cr_nb [0:MB_COLS-1];
+    // Left neighbors: right column of left MB's chroma.
     reg [CHR_MB_HEIGHT*BIT_DEPTH-1:0] left_chr_cb_nb;
     reg [CHR_MB_HEIGHT*BIT_DEPTH-1:0] left_chr_cr_nb;
     reg [15:0] frame_skip_mb_count;
@@ -582,16 +585,21 @@ wire is_luma = (sub_blk < 5'd16);
                                   chr_pred_mode ? chr_resid_4x4 : resid_4x4_w;
 
     integer idx_ei, idx_pi, idx_ir, idx_rb;
-    // Chroma pixel index helper: for 4:2:0 (8x8) use 6 bits, for 4:2:2 (8x16) use 7 bits
-    // Layout: {block_row, pixel_row[1:0], block_col, pixel_col[1:0]}
-    function automatic [6:0] chr_pix_idx;
+    // Chroma pixel index helper for 4:2:0, 4:2:2, and 4:4:4.
+    // The transformed chroma path still targets the current 4:2:0 / 4:2:2 flow;
+    // this helper is widened so the tree also compiles for 4:4:4 I_PCM work.
+    function automatic [7:0] chr_pix_idx;
         input [1:0] blk_r;
         input [3:0] pix;  // idx_ei or idx_pi: [3:2]=pixel_row, [1:0]=pixel_col
-        input [0:0] blk_c;
-        if (CHROMA_FORMAT_IDC == 2)
-            chr_pix_idx = {blk_r[1:0], pix[3:2], blk_c, pix[1:0]}; // 7 bits, 128 pixels
-        else
-            chr_pix_idx = {1'b0, blk_r[0], pix[3:2], blk_c, pix[1:0]}; // 6 bits, 64 pixels
+        input [1:0] blk_c;
+        begin
+            if (CHROMA_FORMAT_IDC == 3)
+                chr_pix_idx = {blk_r[1:0], pix[3:2], blk_c[1:0], pix[1:0]}; // 8 bits, 256 pixels
+            else if (CHROMA_FORMAT_IDC == 2)
+                chr_pix_idx = {1'b0, blk_r[1:0], pix[3:2], blk_c[0], pix[1:0]}; // 7 bits, 128 pixels
+            else
+                chr_pix_idx = {2'b00, blk_r[0], pix[3:2], blk_c[0], pix[1:0]}; // 6 bits, 64 pixels
+        end
     endfunction
 
     always @(*) begin
@@ -2008,22 +2016,21 @@ pred_buf = {(256*BD){1'b0}};
                         left_ref_idx <= 2'd0;
                         left_is_i16 <= use_intra16_mb_reg;
                     end
-                    // Store chroma neighbors for next MB's 8x8 DC prediction
-                    // Bottom row (row 7) → top neighbor for MB below
-                    // Right column (col 7) → left neighbor for MB to the right
-                    // 8x8 layout: pixel[row*8+col]
+                    // Store chroma neighbors for next MB's intra chroma prediction.
+                    // Bottom row → top neighbor for MB below.
+                    // Right column → left neighbor for MB to the right.
                     begin : chr_top_nb_save
                         integer nb_c;
-                        for (nb_c = 0; nb_c < 8; nb_c = nb_c + 1) begin
-                            top_chr_cb_nb[mb_x][nb_c*BD +: BD] <= chr_recon_cb[((CHR_MB_HEIGHT-1)*8+nb_c)*BD +: BD];
-                            top_chr_cr_nb[mb_x][nb_c*BD +: BD] <= chr_recon_cr[((CHR_MB_HEIGHT-1)*8+nb_c)*BD +: BD];
+                        for (nb_c = 0; nb_c < CHR_MB_WIDTH; nb_c = nb_c + 1) begin
+                            top_chr_cb_nb[mb_x][nb_c*BD +: BD] <= chr_recon_cb[((CHR_MB_HEIGHT-1)*CHR_MB_WIDTH+nb_c)*BD +: BD];
+                            top_chr_cr_nb[mb_x][nb_c*BD +: BD] <= chr_recon_cr[((CHR_MB_HEIGHT-1)*CHR_MB_WIDTH+nb_c)*BD +: BD];
                         end
                     end
                     begin : chr_nb_save
                         integer nb_r;
                         for (nb_r = 0; nb_r < CHR_MB_HEIGHT; nb_r = nb_r + 1) begin
-                            left_chr_cb_nb[nb_r*BD +: BD] <= chr_recon_cb[(nb_r*8+7)*BD +: BD];
-                            left_chr_cr_nb[nb_r*BD +: BD] <= chr_recon_cr[(nb_r*8+7)*BD +: BD];
+                            left_chr_cb_nb[nb_r*BD +: BD] <= chr_recon_cb[(nb_r*CHR_MB_WIDTH + (CHR_MB_WIDTH-1))*BD +: BD];
+                            left_chr_cr_nb[nb_r*BD +: BD] <= chr_recon_cr[(nb_r*CHR_MB_WIDTH + (CHR_MB_WIDTH-1))*BD +: BD];
                         end
                     end
                     ref_wr_idx <= 9'd0;
@@ -2042,14 +2049,18 @@ pred_buf = {(256*BD){1'b0}};
                     end else if (ref_wr_idx < (9'd256 + CHR_MB_PIXELS[8:0])) begin
                         // Write chroma Cb and Cr simultaneously (CHR_MB_PIXELS each)
                         // Chroma pixel index = ref_wr_idx - 256 (0..CHR_MB_PIXELS-1)
-                        // row = ci/8, col = ci%8
                         begin : chr_wr_calc
-                            reg [6:0] ci;
+                            reg [8:0] ci;
                             reg [17:0] ca;
-                            ci = ref_wr_idx[6:0]; // 0..CHR_MB_PIXELS-1
-                            // Address = (mb_y*CHR_MB_HEIGHT + row) * CHR_WIDTH + mb_x*8 + col
-                            ca = ({14'd0, mb_y} * CHR_MB_HEIGHT[4:0] + {11'd0, ci[6:3]}) * CHR_WIDTH[10:0]
-                               + ({11'd0, mb_x} * 11'd8) + {15'd0, ci[2:0]};
+                            ci = ref_wr_idx - 9'd256; // 0..CHR_MB_PIXELS-1
+                            // Address = (mb_y*CHR_MB_HEIGHT + row) * CHR_WIDTH + mb_x*CHR_MB_WIDTH + col
+                            if (CHR_MB_WIDTH == 16) begin
+                                ca = ({14'd0, mb_y} * CHR_MB_HEIGHT[4:0] + {11'd0, ci[7:4]}) * CHR_WIDTH[10:0]
+                                   + ({11'd0, mb_x} * CHR_MB_WIDTH[10:0]) + {14'd0, ci[3:0]};
+                            end else begin
+                                ca = ({14'd0, mb_y} * CHR_MB_HEIGHT[4:0] + {11'd0, ci[6:3]}) * CHR_WIDTH[10:0]
+                                   + ({11'd0, mb_x} * CHR_MB_WIDTH[10:0]) + {15'd0, ci[2:0]};
+                            end
                             chr_cb_ref_wr_en <= 1'b1;
                             chr_cb_ref_wr_addr <= ca;
                             chr_cb_ref_wr_data <= chr_recon_cb[ci*BD +: BD];
