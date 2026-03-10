@@ -13,6 +13,8 @@ module h264_encoder_top #(
     parameter CHROMA_FORMAT_IDC = 1,
     parameter MB_COLS      = FRAME_WIDTH / 16,
     parameter MB_ROWS      = FRAME_HEIGHT / 16,
+    parameter ENABLE_IDR_IPCM = 0,
+    parameter IPCM_SAD_THRESHOLD = 18000,
     parameter WEIGHTED_PRED_ENABLE = 0,
     parameter LUMA_LOG2_WEIGHT_DENOM = 0,
     parameter integer LUMA_WEIGHT = 1,
@@ -146,6 +148,7 @@ module h264_encoder_top #(
     reg        is_inter_mb_reg;    // 1 if current MB uses inter prediction
     reg        is_skip_mb_reg;     // 1 if current MB is emitted as P_SKIP
     reg        use_intra16_mb_reg; // 1 if current intra MB uses Intra_16x16
+    reg        use_ipcm_mb_reg;    // 1 if current intra MB uses I_PCM
     reg [7:0]  cur_frame_num;      // Latched frame number
     reg signed [7:0] me_best_mvx;  // Best MV from ME
     reg signed [7:0] me_best_mvy;
@@ -324,6 +327,7 @@ module h264_encoder_top #(
     reg         mb_has_residual;
     reg         bs_hold_fifo_drain;
     reg         is_intra16_mb_hdr;
+    reg         is_ipcm_mb_hdr;
     reg [5:0]   intra_mb_type_code_num;
     reg         pskip_syntax_eligible_reg;
 
@@ -1045,8 +1049,9 @@ pred_buf = {(256*BD){1'b0}};
         .is_inter_mb(is_inter_mb_reg), .is_skip_mb(is_skip_mb_reg),
         .mb_ref_idx_l0(mb_ref_idx_reg), .mvd_x(mvd_x_w), .mvd_y(mvd_y_w),
         .slice_num_ref_idx_l0_active_minus1(slice_num_ref_idx_l0_active_minus1),
-        .hold_fifo_drain(bs_hold_fifo_drain), .is_intra16_mb(is_intra16_mb_hdr), .intra_mb_type_code_num(intra_mb_type_code_num),
+        .hold_fifo_drain(bs_hold_fifo_drain), .is_intra16_mb(is_intra16_mb_hdr), .is_ipcm_mb(is_ipcm_mb_hdr), .intra_mb_type_code_num(intra_mb_type_code_num),
         .intra_pred_bits(intra_pred_bits_mb), .intra_pred_count(intra_pred_count_mb),
+        .ipcm_luma_flat(fetched_luma), .ipcm_cb_flat(fetched_cb), .ipcm_cr_flat(fetched_cr),
         .weighted_pred_enable(weighted_pred_enable_cfg_w),
         .luma_log2_weight_denom(luma_log2_weight_denom_cfg_w),
         .luma_weight(luma_weight_cfg_w),
@@ -1073,7 +1078,7 @@ pred_buf = {(256*BD){1'b0}};
             blk_state <= BS_PRED; blk_started <= 1'b0; iq_done_latched <= 1'b0;
             recon_buf <= {(256*BD){1'b0}}; top_ref_flat <= {(MB_COLS*16*BD){1'b0}}; left_ref_flat <= {(16*BD){1'b0}};
             top_pixels_flat <= {(16*BD){1'b0}}; left_pixels_flat <= {(16*BD){1'b0}}; flush_pending <= 1'b0; flush_accepted <= 1'b0;
-            is_p_frame <= 1'b0; is_inter_mb_reg <= 1'b0; is_skip_mb_reg <= 1'b0; use_intra16_mb_reg <= 1'b0; cur_frame_num <= 8'd0;
+            is_p_frame <= 1'b0; is_inter_mb_reg <= 1'b0; is_skip_mb_reg <= 1'b0; use_intra16_mb_reg <= 1'b0; use_ipcm_mb_reg <= 1'b0; cur_frame_num <= 8'd0;
             me_best_mvx <= 8'sd0; me_best_mvy <= 8'sd0; me_best_sad <= 18'd0; me_fullpel_best_sad <= 18'd0;
             inter_pred_buf <= {(256*BD){1'b0}}; ref_wr_idx <= 9'd0;
             intra16_pred_buf <= {(256*BD){1'b0}}; intra16_mode_mb <= 2'd2;
@@ -1124,7 +1129,7 @@ pred_buf = {(256*BD){1'b0}};
             chr_recon_blk <= 3'd0;
             intra_pred_bits_mb <= 64'd0;
             intra_pred_count_mb <= 7'd0;
-            is_intra16_mb_hdr <= 1'b0; intra_mb_type_code_num <= 6'd0;
+            is_intra16_mb_hdr <= 1'b0; is_ipcm_mb_hdr <= 1'b0; intra_mb_type_code_num <= 6'd0;
             i16_dc_total_coeff <= 5'd0; i16_luma_ac_nonzero <= 1'b0; i16_chroma_dc_nonzero <= 1'b0; i16_chroma_ac_nonzero <= 1'b0; i16_cbp_chroma <= 2'd0;
             pskip_syntax_eligible_reg <= 1'b0;
             frame_skip_mb_count <= 16'd0;
@@ -1179,12 +1184,14 @@ pred_buf = {(256*BD){1'b0}};
                     fetch_start <= 1'b1; mb_top_avail <= (mb_y > 6'd0); mb_left_avail <= (mb_x > 7'd0);
                     top_pixels_flat <= top_ref_flat[mb_x * 16 * BD +: 16*BD]; left_pixels_flat <= left_ref_flat;
                     use_intra16_mb_reg <= 1'b0;
+                    use_ipcm_mb_reg <= 1'b0;
                     is_skip_mb_reg <= 1'b0;
                     skip_probe_pending <= 1'b0;
                     inter_chr_prefetched_valid <= 1'b0;
                     mb_has_residual <= 1'b0;
                     pskip_syntax_eligible_reg <= 1'b0;
                     is_intra16_mb_hdr <= 1'b0;
+                    is_ipcm_mb_hdr <= 1'b0;
                     top_state <= TS_WAIT_FETCH;
                 end
                 TS_WAIT_FETCH: if (fetch_done) begin
@@ -1533,34 +1540,59 @@ pred_buf = {(256*BD){1'b0}};
                     end else if (intra16_done) begin
                         intra16_pred_buf <= intra16_pred_w;
                         intra16_mode_mb <= intra16_mode_w;
-                        use_intra16_mb_reg <= 1'b1;
+                        if ((ENABLE_IDR_IPCM != 0) && (BIT_DEPTH == 8) && (intra16_sad_w >= IPCM_SAD_THRESHOLD)) begin
+                            use_intra16_mb_reg <= 1'b0;
+                            use_ipcm_mb_reg <= 1'b1;
+                        end else begin
+                            use_intra16_mb_reg <= 1'b1;
+                            use_ipcm_mb_reg <= 1'b0;
+                        end
                         blk_started <= 1'b0;
                         top_state <= TS_MB_HDR;
                     end
                 end
 
                 TS_MB_HDR: if (!bs_busy) begin
-                    mb_has_residual <= is_inter_mb_reg ? 1'b0 : 1'b1;
-                    sub_blk <= 5'd0;
-                    blk_state <= is_inter_mb_reg ? BS_XFORM : (use_intra16_mb_reg ? BS_XFORM : BS_PRED);
-                    blk_started <= 1'b0;
-                    recon_buf <= {(256*BD){1'b0}};
-                    chr_pred_mode <= 1'b0;
-                    intra_pred_bits_mb <= 64'd0;
-                    intra_pred_count_mb <= 7'd0;
-                    is_intra16_mb_hdr <= use_intra16_mb_reg;
-                    intra_mb_type_code_num <= is_p_frame ? 6'd5 : 6'd0;
-                    i16_dc_total_coeff <= 5'd0;
-                    i16_luma_ac_nonzero <= 1'b0;
-                    i16_chroma_dc_nonzero <= 1'b0;
-                    i16_chroma_ac_nonzero <= 1'b0;
-                    i16_cbp_chroma <= 2'd0;
-                    if (is_inter_mb_reg) begin
-                        bs_hold_fifo_drain <= 1'b1;
+                    if (use_ipcm_mb_reg) begin
+                        mb_has_residual <= 1'b0;
+                        sub_blk <= 5'd0;
+                        blk_started <= 1'b0;
+                        recon_buf <= fetched_luma;
+                        chr_recon_cb <= fetched_cb;
+                        chr_recon_cr <= fetched_cr;
+                        chr_pred_mode <= 1'b0;
+                        intra_pred_bits_mb <= 64'd0;
+                        intra_pred_count_mb <= 7'd0;
+                        is_intra16_mb_hdr <= 1'b0;
+                        is_ipcm_mb_hdr <= 1'b1;
+                        intra_mb_type_code_num <= is_p_frame ? 6'd30 : 6'd25;
+                        i16_dc_total_coeff <= 5'd0;
+                        i16_luma_ac_nonzero <= 1'b0;
+                        i16_chroma_dc_nonzero <= 1'b0;
+                        i16_chroma_ac_nonzero <= 1'b0;
+                        i16_cbp_chroma <= 2'd0;
+                        bs_hold_fifo_drain <= 1'b0;
+                        top_state <= TS_DEFER_MB_HDR;
                     end else begin
+                        mb_has_residual <= is_inter_mb_reg ? 1'b0 : 1'b1;
+                        sub_blk <= 5'd0;
+                        blk_state <= is_inter_mb_reg ? BS_XFORM : (use_intra16_mb_reg ? BS_XFORM : BS_PRED);
+                        blk_started <= 1'b0;
+                        recon_buf <= {(256*BD){1'b0}};
+                        chr_pred_mode <= 1'b0;
+                        intra_pred_bits_mb <= 64'd0;
+                        intra_pred_count_mb <= 7'd0;
+                        is_intra16_mb_hdr <= use_intra16_mb_reg;
+                        is_ipcm_mb_hdr <= 1'b0;
+                        intra_mb_type_code_num <= is_p_frame ? 6'd5 : 6'd0;
+                        i16_dc_total_coeff <= 5'd0;
+                        i16_luma_ac_nonzero <= 1'b0;
+                        i16_chroma_dc_nonzero <= 1'b0;
+                        i16_chroma_ac_nonzero <= 1'b0;
+                        i16_cbp_chroma <= 2'd0;
                         bs_hold_fifo_drain <= 1'b1;
+                        top_state <= TS_ENCODE_SBLK;
                     end
-                    top_state <= TS_ENCODE_SBLK;
                 end
 
                 TS_ENCODE_SBLK: begin
@@ -1900,14 +1932,17 @@ pred_buf = {(256*BD){1'b0}};
                 end
 
                 TS_NEXT_MB: begin
-                    if (is_inter_mb_reg && !mb_has_residual) begin
+                    if (use_ipcm_mb_reg) begin
+                        left_mb_nz[0] <= 5'd16; left_mb_nz[1] <= 5'd16; left_mb_nz[2] <= 5'd16; left_mb_nz[3] <= 5'd16;
+                        top_mb_nz[mb_x * 4 + 0] <= 5'd16; top_mb_nz[mb_x * 4 + 1] <= 5'd16; top_mb_nz[mb_x * 4 + 2] <= 5'd16; top_mb_nz[mb_x * 4 + 3] <= 5'd16;
+                    end else if (is_inter_mb_reg && !mb_has_residual) begin
                         left_mb_nz[0] <= 5'd0; left_mb_nz[1] <= 5'd0; left_mb_nz[2] <= 5'd0; left_mb_nz[3] <= 5'd0;
                         top_mb_nz[mb_x * 4 + 0] <= 5'd0; top_mb_nz[mb_x * 4 + 1] <= 5'd0; top_mb_nz[mb_x * 4 + 2] <= 5'd0; top_mb_nz[mb_x * 4 + 3] <= 5'd0;
                     end else begin
                         left_mb_nz[0] <= nz_coeff[5]; left_mb_nz[1] <= nz_coeff[7]; left_mb_nz[2] <= nz_coeff[13]; left_mb_nz[3] <= nz_coeff[15];
                         top_mb_nz[mb_x * 4 + 0] <= nz_coeff[10]; top_mb_nz[mb_x * 4 + 1] <= nz_coeff[11]; top_mb_nz[mb_x * 4 + 2] <= nz_coeff[14]; top_mb_nz[mb_x * 4 + 3] <= nz_coeff[15];
                     end
-                    if (use_intra16_mb_reg) begin
+                    if (use_intra16_mb_reg || use_ipcm_mb_reg) begin
                         left_mb_mode[0] <= INTRA_MODE_DC; left_mb_mode[1] <= INTRA_MODE_DC;
                         left_mb_mode[2] <= INTRA_MODE_DC; left_mb_mode[3] <= INTRA_MODE_DC;
                         top_mb_mode[mb_x * 4 + 0] <= INTRA_MODE_DC;
@@ -1929,14 +1964,14 @@ pred_buf = {(256*BD){1'b0}};
                         integer nr;
                         for (nr = 0; nr < CHR_BLOCK_ROWS; nr = nr + 1) begin
                             // Right column (c=1) of each row -> left neighbor for next MB
-                            left_mb_nz_cb[nr] <= (is_inter_mb_reg && !mb_has_residual) ? 5'd0 : nz_coeff[16 + nr*2 + 1];
-                            left_mb_nz_cr[nr] <= (is_inter_mb_reg && !mb_has_residual) ? 5'd0 : nz_coeff[16 + CHR_BLOCKS_PER_PLANE + nr*2 + 1];
+                            left_mb_nz_cb[nr] <= use_ipcm_mb_reg ? 5'd16 : ((is_inter_mb_reg && !mb_has_residual) ? 5'd0 : nz_coeff[16 + nr*2 + 1]);
+                            left_mb_nz_cr[nr] <= use_ipcm_mb_reg ? 5'd16 : ((is_inter_mb_reg && !mb_has_residual) ? 5'd0 : nz_coeff[16 + CHR_BLOCKS_PER_PLANE + nr*2 + 1]);
                         end
                         // Bottom row (last row, both columns) -> top neighbor for MB below
-                        top_mb_nz_cb[mb_x * 2 + 0] <= (is_inter_mb_reg && !mb_has_residual) ? 5'd0 : nz_coeff[16 + (CHR_BLOCK_ROWS-1)*2];
-                        top_mb_nz_cb[mb_x * 2 + 1] <= (is_inter_mb_reg && !mb_has_residual) ? 5'd0 : nz_coeff[16 + (CHR_BLOCK_ROWS-1)*2 + 1];
-                        top_mb_nz_cr[mb_x * 2 + 0] <= (is_inter_mb_reg && !mb_has_residual) ? 5'd0 : nz_coeff[16 + CHR_BLOCKS_PER_PLANE + (CHR_BLOCK_ROWS-1)*2];
-                        top_mb_nz_cr[mb_x * 2 + 1] <= (is_inter_mb_reg && !mb_has_residual) ? 5'd0 : nz_coeff[16 + CHR_BLOCKS_PER_PLANE + (CHR_BLOCK_ROWS-1)*2 + 1];
+                        top_mb_nz_cb[mb_x * 2 + 0] <= use_ipcm_mb_reg ? 5'd16 : ((is_inter_mb_reg && !mb_has_residual) ? 5'd0 : nz_coeff[16 + (CHR_BLOCK_ROWS-1)*2]);
+                        top_mb_nz_cb[mb_x * 2 + 1] <= use_ipcm_mb_reg ? 5'd16 : ((is_inter_mb_reg && !mb_has_residual) ? 5'd0 : nz_coeff[16 + (CHR_BLOCK_ROWS-1)*2 + 1]);
+                        top_mb_nz_cr[mb_x * 2 + 0] <= use_ipcm_mb_reg ? 5'd16 : ((is_inter_mb_reg && !mb_has_residual) ? 5'd0 : nz_coeff[16 + CHR_BLOCKS_PER_PLANE + (CHR_BLOCK_ROWS-1)*2]);
+                        top_mb_nz_cr[mb_x * 2 + 1] <= use_ipcm_mb_reg ? 5'd16 : ((is_inter_mb_reg && !mb_has_residual) ? 5'd0 : nz_coeff[16 + CHR_BLOCKS_PER_PLANE + (CHR_BLOCK_ROWS-1)*2 + 1]);
                     end
                     top_ref_flat[mb_x * 16 * BD +: 16*BD] <= recon_top_row_buf_w; left_ref_flat <= recon_right_col_buf_w; mb_count <= mb_count + 12'd1;
                     if (is_skip_mb_reg)
