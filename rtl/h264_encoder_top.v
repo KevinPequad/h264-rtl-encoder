@@ -34,6 +34,9 @@ module h264_encoder_top #(
 
     // Frame number (8-bit, supports longer GOP intervals before wrap)
     input  wire [7:0]  frame_num_in,
+    // pic_order_cnt_lsb is carried independently so reordered B-picture GOPs
+    // do not have to fake display order through frame_num.
+    input  wire [8:0]  pic_order_cnt_lsb_in,
     // IDR flag (1 for IDR/I-frame, 0 for non-IDR slice types)
     input  wire        is_idr_in,
     // B-slice flag for non-IDR pictures. Current RTL support is limited to
@@ -159,9 +162,11 @@ module h264_encoder_top #(
     reg        is_b_ref_frame;     // 1 if current frame is a reference B-slice
     reg        is_inter_mb_reg;    // 1 if current MB uses inter prediction
     reg        is_skip_mb_reg;     // 1 if current MB is emitted as P_SKIP
+    reg        is_b_l1_mb_reg;     // 1 if current B inter MB uses List1 instead of List0
     reg        use_intra16_mb_reg; // 1 if current intra MB uses Intra_16x16
     reg        use_ipcm_mb_reg;    // 1 if current intra MB uses I_PCM
     reg [7:0]  cur_frame_num;      // Latched frame number
+    reg [8:0]  cur_pic_order_cnt_lsb;
     reg signed [7:0] me_best_mvx;  // Best MV from ME
     reg signed [7:0] me_best_mvy;
     reg [17:0] me_best_sad;
@@ -200,11 +205,14 @@ module h264_encoder_top #(
     reg signed [7:0] left_mvy;        // Left MB MV y
     reg        top_is_inter [0:MB_COLS-1];   // 1 if top MB was inter
     reg        left_is_inter;         // 1 if left MB was inter
+    reg        top_is_b_l1 [0:MB_COLS-1];
+    reg        left_is_b_l1;
     reg [1:0]  top_ref_idx [0:MB_COLS-1];
     reg [1:0]  left_ref_idx;
     // Diagonal (top-left) saved before top_mvx[mb_x] is overwritten
     reg signed [7:0] diag_mvx, diag_mvy;
     reg        diag_is_inter;
+    reg        diag_is_b_l1;
     reg [1:0]  diag_ref_idx;
     reg [1:0]  mb_ref_idx_reg;
     reg [1:0]  me_search_pass;
@@ -335,6 +343,7 @@ module h264_encoder_top #(
     reg [CHR_MB_HEIGHT*BIT_DEPTH-1:0] left_chr_cb_nb;
     reg [CHR_MB_HEIGHT*BIT_DEPTH-1:0] left_chr_cr_nb;
     reg [15:0] frame_skip_mb_count;
+    reg [15:0] frame_b_l1_mb_count;
     // Pre-computed chroma DC prediction values (one per 4x4 sub-block, per plane)
     reg [BIT_DEPTH-1:0] chr_dc_pred [0:CHR_BLOCKS_PER_PLANE-1];
     // Chroma residual override: when in chroma mode, bypass h264_intra_pred
@@ -373,6 +382,7 @@ wire is_luma = (sub_blk < 5'd16);
     localparam BD1 = BIT_DEPTH + 1;
     localparam CW  = BIT_DEPTH + 8; // coefficient width for transform/quant pipeline
     wire use_weighted_pred_w = WEIGHTED_PRED_ENABLE && is_p_frame;
+    wire [2:0] b_l0_ref_bank_w = (is_b_frame && (valid_ref_count >= 3'd2)) ? older_ref_bank : newest_ref_bank;
     wire weighted_pred_enable_cfg_w = (WEIGHTED_PRED_ENABLE != 0);
     wire [3:0] luma_log2_weight_denom_cfg_w = LUMA_LOG2_WEIGHT_DENOM[3:0];
     wire signed [8:0] luma_weight_cfg_w = LUMA_WEIGHT[8:0];
@@ -1071,7 +1081,9 @@ pred_buf = {(256*BD){1'b0}};
         .cavlc_valid(cavlc_bits_valid), .cavlc_bits(cavlc_bits), .cavlc_count(cavlc_count),
         .mb_qp_delta(8'd0), .mb_has_residual(mb_has_residual),
         .is_p_slice(is_p_frame), .is_b_slice(is_b_frame), .is_b_ref_slice(is_b_ref_frame), .frame_num(cur_frame_num),
+        .pic_order_cnt_lsb(cur_pic_order_cnt_lsb),
         .is_inter_mb(is_inter_mb_reg), .is_skip_mb(is_skip_mb_reg),
+        .is_b_l1_mb(is_b_l1_mb_reg),
         .mb_ref_idx_l0(mb_ref_idx_reg), .mvd_x(mvd_x_w), .mvd_y(mvd_y_w),
         .slice_num_ref_idx_l0_active_minus1(slice_num_ref_idx_l0_active_minus1),
         .hold_fifo_drain(bs_hold_fifo_drain), .is_intra16_mb(is_intra16_mb_hdr), .is_ipcm_mb(is_ipcm_mb_hdr), .intra_mb_type_code_num(intra_mb_type_code_num),
@@ -1103,7 +1115,7 @@ pred_buf = {(256*BD){1'b0}};
             blk_state <= BS_PRED; blk_started <= 1'b0; iq_done_latched <= 1'b0;
             recon_buf <= {(256*BD){1'b0}}; top_ref_flat <= {(MB_COLS*16*BD){1'b0}}; left_ref_flat <= {(16*BD){1'b0}};
             top_pixels_flat <= {(16*BD){1'b0}}; left_pixels_flat <= {(16*BD){1'b0}}; flush_pending <= 1'b0; flush_accepted <= 1'b0;
-            is_p_frame <= 1'b0; is_b_frame <= 1'b0; is_b_ref_frame <= 1'b0; is_inter_mb_reg <= 1'b0; is_skip_mb_reg <= 1'b0; use_intra16_mb_reg <= 1'b0; use_ipcm_mb_reg <= 1'b0; cur_frame_num <= 8'd0;
+            is_p_frame <= 1'b0; is_b_frame <= 1'b0; is_b_ref_frame <= 1'b0; is_inter_mb_reg <= 1'b0; is_skip_mb_reg <= 1'b0; is_b_l1_mb_reg <= 1'b0; use_intra16_mb_reg <= 1'b0; use_ipcm_mb_reg <= 1'b0; cur_frame_num <= 8'd0; cur_pic_order_cnt_lsb <= 9'd0;
             me_best_mvx <= 8'sd0; me_best_mvy <= 8'sd0; me_best_sad <= 18'd0; me_fullpel_best_sad <= 18'd0;
             inter_pred_buf <= {(256*BD){1'b0}}; ref_wr_idx <= 9'd0;
             intra16_pred_buf <= {(256*BD){1'b0}}; intra16_mode_mb <= 2'd2;
@@ -1111,8 +1123,8 @@ pred_buf = {(256*BD){1'b0}};
             ref_mem_wr_en <= 1'b0; ref_mem_wr_addr <= 20'd0; ref_mem_wr_data <= {BD{1'b0}};
             mvp_x <= 8'sd0; mvp_y <= 8'sd0;
             left_mvx <= 8'sd0; left_mvy <= 8'sd0;
-            left_is_inter <= 1'b0; left_is_i16 <= 1'b0; left_ref_idx <= 2'd0; left_mb_i16dc_nz <= 5'd0;
-            diag_mvx <= 8'sd0; diag_mvy <= 8'sd0; diag_is_inter <= 1'b0; diag_ref_idx <= 2'd0;
+            left_is_inter <= 1'b0; left_is_b_l1 <= 1'b0; left_is_i16 <= 1'b0; left_ref_idx <= 2'd0; left_mb_i16dc_nz <= 5'd0;
+            diag_mvx <= 8'sd0; diag_mvy <= 8'sd0; diag_is_inter <= 1'b0; diag_is_b_l1 <= 1'b0; diag_ref_idx <= 2'd0;
             mb_ref_idx_reg <= 2'd0; me_search_pass <= 2'd0;
             valid_ref_count <= 3'd0; newest_ref_bank <= 3'd0; older_ref_bank <= 3'd1; oldest_ref_bank <= 3'd2; ancient_ref_bank <= 3'd3; next_write_bank <= 3'd0; current_write_bank <= 3'd0;
             slice_num_ref_idx_l0_active_minus1 <= 2'd0;
@@ -1158,6 +1170,7 @@ pred_buf = {(256*BD){1'b0}};
             i16_dc_total_coeff <= 5'd0; i16_luma_ac_nonzero <= 1'b0; i16_chroma_dc_nonzero <= 1'b0; i16_chroma_ac_nonzero <= 1'b0; i16_cbp_chroma <= 2'd0;
             pskip_syntax_eligible_reg <= 1'b0;
             frame_skip_mb_count <= 16'd0;
+            frame_b_l1_mb_count <= 16'd0;
         end else begin
             fetch_start <= 1'b0; pred_start <= 1'b0; intra16_start <= 1'b0; xform_start <= 1'b0; quant_start <= 1'b0; zz_start <= 1'b0;
             cavlc_start <= 1'b0; iq_start <= 1'b0; it_start <= 1'b0; recon_start <= 1'b0; me_start <= 1'b0;
@@ -1171,6 +1184,7 @@ pred_buf = {(256*BD){1'b0}};
             case (top_state)
                 TS_IDLE: if (start) begin
                     cur_frame_num <= frame_num_in;
+                    cur_pic_order_cnt_lsb <= pic_order_cnt_lsb_in;
                     is_p_frame <= ~is_idr_in && !is_b_in;
                     is_b_frame <= ~is_idr_in && is_b_in;
                     is_b_ref_frame <= ~is_idr_in && is_b_in && is_bref_in;
@@ -1178,6 +1192,7 @@ pred_buf = {(256*BD){1'b0}};
                     me_search_pass <= 2'd0;
                     mb_ref_idx_reg <= 2'd0;
                     frame_skip_mb_count <= 16'd0;
+                    frame_b_l1_mb_count <= 16'd0;
                     if (is_idr_in) begin
                         valid_ref_count <= 3'd0;
                         newest_ref_bank <= 3'd0;
@@ -1193,7 +1208,7 @@ pred_buf = {(256*BD){1'b0}};
                     end else begin
                         current_write_bank <= next_write_bank;
                         ref_wr_bank_sel <= next_write_bank;
-                        ref_rd_bank_sel <= newest_ref_bank;
+                        ref_rd_bank_sel <= is_b_in && (valid_ref_count >= 3'd2) ? older_ref_bank : newest_ref_bank;
                         if (is_b_in)
                             slice_num_ref_idx_l0_active_minus1 <= 2'd0;
                         else
@@ -1216,6 +1231,7 @@ pred_buf = {(256*BD){1'b0}};
                     use_intra16_mb_reg <= 1'b0;
                     use_ipcm_mb_reg <= 1'b0;
                     is_skip_mb_reg <= 1'b0;
+                    is_b_l1_mb_reg <= 1'b0;
                     skip_probe_pending <= 1'b0;
                     inter_chr_prefetched_valid <= 1'b0;
                     mb_has_residual <= 1'b0;
@@ -1227,7 +1243,7 @@ pred_buf = {(256*BD){1'b0}};
                 TS_WAIT_FETCH: if (fetch_done) begin
                     if (is_p_frame || is_b_frame) begin
                         me_search_pass <= 2'd0;
-                        ref_rd_bank_sel <= newest_ref_bank;
+                        ref_rd_bank_sel <= b_l0_ref_bank_w;
                         top_state <= TS_ME_START;
                     end else begin
                         is_inter_mb_reg <= 1'b0;
@@ -1244,7 +1260,16 @@ pred_buf = {(256*BD){1'b0}};
                     top_state <= TS_WAIT_ME;
                 end
                 TS_WAIT_ME: if (me_done) begin
-                    if (is_p_frame && (valid_ref_count >= 3'd2) && (me_search_pass == 2'd0)) begin
+                    if (is_b_frame && (valid_ref_count >= 3'd2) && (me_search_pass == 2'd0)) begin
+                        me_pass0_mvx <= me_mvx_w;
+                        me_pass0_mvy <= me_mvy_w;
+                        me_pass0_sad <= me_sad_w;
+                        me_pass0_ref_mb <= me_ref_mb_w;
+                        me_pass0_ref_idx <= 2'd0;
+                        me_search_pass <= 2'd1;
+                        ref_rd_bank_sel <= newest_ref_bank;
+                        top_state <= TS_ME_START;
+                    end else if (is_p_frame && (valid_ref_count >= 3'd2) && (me_search_pass == 2'd0)) begin
                         me_pass0_mvx <= me_mvx_w;
                         me_pass0_mvy <= me_mvy_w;
                         me_pass0_sad <= me_sad_w;
@@ -1280,13 +1305,31 @@ pred_buf = {(256*BD){1'b0}};
                         reg [17:0] sel_sad;
                         reg [256*BIT_DEPTH-1:0] sel_ref_mb;
                         reg [1:0] sel_ref_idx;
+                        reg sel_is_b_l1;
                         reg signed [7:0] ax, ay, bx, by, cx, cy;
                         reg a_avail, b_avail, c_avail, d_avail;
                         reg a_match, b_match, c_match;
                         reg [1:0] match_cnt;
                         reg signed [7:0] med_x, med_y;
 
-                        if ((valid_ref_count >= 3'd4) && (me_search_pass == 2'd3) && (me_sad_w < me_pass0_sad)) begin
+                        sel_is_b_l1 = 1'b0;
+                        if (is_b_frame && (valid_ref_count >= 3'd2) && (me_search_pass == 2'd1) && (me_sad_w < me_pass0_sad)) begin
+                            sel_fullpel_mvx = me_mvx_w;
+                            sel_fullpel_mvy = me_mvy_w;
+                            sel_sad = me_sad_w;
+                            sel_ref_mb = me_ref_mb_w;
+                            sel_ref_idx = 2'd0;
+                            sel_is_b_l1 = 1'b1;
+                            ref_rd_bank_sel <= newest_ref_bank;
+                        end else if (is_b_frame && (valid_ref_count >= 3'd2) && (me_search_pass != 2'd0)) begin
+                            sel_fullpel_mvx = me_pass0_mvx;
+                            sel_fullpel_mvy = me_pass0_mvy;
+                            sel_sad = me_pass0_sad;
+                            sel_ref_mb = me_pass0_ref_mb;
+                            sel_ref_idx = 2'd0;
+                            sel_is_b_l1 = 1'b0;
+                            ref_rd_bank_sel <= older_ref_bank;
+                        end else if ((valid_ref_count >= 3'd4) && (me_search_pass == 2'd3) && (me_sad_w < me_pass0_sad)) begin
                             sel_fullpel_mvx = me_mvx_w;
                             sel_fullpel_mvy = me_mvy_w;
                             sel_sad = me_sad_w;
@@ -1323,7 +1366,7 @@ pred_buf = {(256*BD){1'b0}};
                             sel_sad = me_sad_w;
                             sel_ref_mb = me_ref_mb_w;
                             sel_ref_idx = 2'd0;
-                            ref_rd_bank_sel <= newest_ref_bank;
+                            ref_rd_bank_sel <= b_l0_ref_bank_w;
                         end
 
                         me_fullpel_mvx <= sel_fullpel_mvx;
@@ -1331,6 +1374,7 @@ pred_buf = {(256*BD){1'b0}};
                         me_fullpel_best_sad <= sel_sad;
                         inter_pred_buf <= sel_ref_mb;
                         mb_ref_idx_reg <= sel_ref_idx;
+                        is_b_l1_mb_reg <= sel_is_b_l1;
                         luma_fetch_started <= 1'b0;
                         luma_fetch_cnt <= 9'd0;
                         luma_f_row <= 5'd0;
@@ -1435,20 +1479,28 @@ pred_buf = {(256*BD){1'b0}};
 
                         ax = a_avail ? left_mvx : 8'sd0;
                         ay = a_avail ? left_mvy : 8'sd0;
-                        a_match = a_avail && left_is_inter && (left_ref_idx == mb_ref_idx_reg);
+                        a_match = a_avail && left_is_inter &&
+                                  (left_ref_idx == mb_ref_idx_reg) &&
+                                  (!is_b_frame || (left_is_b_l1 == is_b_l1_mb_reg));
 
                         bx = b_avail ? top_mvx[mb_x] : 8'sd0;
                         by = b_avail ? top_mvy[mb_x] : 8'sd0;
-                        b_match = b_avail && top_is_inter[mb_x] && (top_ref_idx[mb_x] == mb_ref_idx_reg);
+                        b_match = b_avail && top_is_inter[mb_x] &&
+                                  (top_ref_idx[mb_x] == mb_ref_idx_reg) &&
+                                  (!is_b_frame || (top_is_b_l1[mb_x] == is_b_l1_mb_reg));
 
                         if (c_avail) begin
                             cx = top_mvx[mb_x + 7'd1];
                             cy = top_mvy[mb_x + 7'd1];
-                            c_match = top_is_inter[mb_x + 7'd1] && (top_ref_idx[mb_x + 7'd1] == mb_ref_idx_reg);
+                            c_match = top_is_inter[mb_x + 7'd1] &&
+                                      (top_ref_idx[mb_x + 7'd1] == mb_ref_idx_reg) &&
+                                      (!is_b_frame || (top_is_b_l1[mb_x + 7'd1] == is_b_l1_mb_reg));
                         end else if (d_avail) begin
                             cx = diag_mvx;
                             cy = diag_mvy;
-                            c_match = diag_is_inter && (diag_ref_idx == mb_ref_idx_reg);
+                            c_match = diag_is_inter &&
+                                      (diag_ref_idx == mb_ref_idx_reg) &&
+                                      (!is_b_frame || (diag_is_b_l1 == is_b_l1_mb_reg));
                         end else begin
                             cx = 8'sd0;
                             cy = 8'sd0;
@@ -2008,32 +2060,39 @@ pred_buf = {(256*BD){1'b0}};
                     top_ref_flat[mb_x * 16 * BD +: 16*BD] <= recon_top_row_buf_w; left_ref_flat <= recon_right_col_buf_w; mb_count <= mb_count + 12'd1;
                     if (is_skip_mb_reg)
                         frame_skip_mb_count <= frame_skip_mb_count + 16'd1;
+                    if (is_b_frame && is_inter_mb_reg && is_b_l1_mb_reg)
+                        frame_b_l1_mb_count <= frame_b_l1_mb_count + 16'd1;
                     // Save top-left diagonal before overwriting (for D neighbor)
                     diag_mvx <= top_mvx[mb_x];
                     diag_mvy <= top_mvy[mb_x];
                     diag_is_inter <= top_is_inter[mb_x];
+                    diag_is_b_l1 <= top_is_b_l1[mb_x];
                     diag_ref_idx <= top_ref_idx[mb_x];
                     // Store MV and inter status for neighbor prediction
                     if (is_inter_mb_reg) begin
                         top_mvx[mb_x] <= me_best_mvx;
                         top_mvy[mb_x] <= me_best_mvy;
                         top_is_inter[mb_x] <= 1'b1;
+                        top_is_b_l1[mb_x] <= is_b_frame && is_b_l1_mb_reg;
                         top_ref_idx[mb_x] <= mb_ref_idx_reg;
                         top_is_i16[mb_x] <= 1'b0;
                         left_mvx <= me_best_mvx;
                         left_mvy <= me_best_mvy;
                         left_is_inter <= 1'b1;
+                        left_is_b_l1 <= is_b_frame && is_b_l1_mb_reg;
                         left_ref_idx <= mb_ref_idx_reg;
                         left_is_i16 <= 1'b0;
                     end else begin
                         top_mvx[mb_x] <= 8'sd0;
                         top_mvy[mb_x] <= 8'sd0;
                         top_is_inter[mb_x] <= 1'b0;
+                        top_is_b_l1[mb_x] <= 1'b0;
                         top_ref_idx[mb_x] <= 2'd0;
                         top_is_i16[mb_x] <= use_intra16_mb_reg;
                         left_mvx <= 8'sd0;
                         left_mvy <= 8'sd0;
                         left_is_inter <= 1'b0;
+                        left_is_b_l1 <= 1'b0;
                         left_ref_idx <= 2'd0;
                         left_is_i16 <= use_intra16_mb_reg;
                     end
@@ -2776,7 +2835,7 @@ pred_buf = {(256*BD){1'b0}};
                          else if (!flush_accepted) flush_accepted <= 1'b1;
                          else if (bs_cmd_done) begin
                              done <= 1'b1;
-                             $display("[PSKIP] Frame %0d skip_mbs=%0d", cur_frame_num, frame_skip_mb_count);
+                             $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d", cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count);
                              if (is_p_frame) begin
                                  ancient_ref_bank <= oldest_ref_bank;
                                  oldest_ref_bank <= older_ref_bank;

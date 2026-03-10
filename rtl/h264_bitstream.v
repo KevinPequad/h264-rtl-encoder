@@ -42,8 +42,10 @@ module h264_bitstream #(
     input  wire        is_b_slice,
     input  wire        is_b_ref_slice,
     input  wire [7:0]  frame_num,
+    input  wire [8:0]  pic_order_cnt_lsb,
     input  wire        is_inter_mb,
     input  wire        is_skip_mb,
+    input  wire        is_b_l1_mb,
     input  wire [1:0]  mb_ref_idx_l0,
     input  wire signed [8:0] mvd_x,
     input  wire signed [8:0] mvd_y,
@@ -178,14 +180,13 @@ module h264_bitstream #(
     wire [7:0] sps_constraint_flags = (use_high_profile || use_main_profile) ? 8'h00 : 8'hC0;
     localparam integer FRAME_NUM_BITS = 8;
     localparam integer LOG2_MAX_FRAME_NUM_MINUS4 = FRAME_NUM_BITS - 4;
-    localparam integer POC_LSB_BITS = FRAME_NUM_BITS + 1;
+    localparam integer POC_LSB_BITS = 9;
     localparam integer LOG2_MAX_POC_LSB_MINUS4 = POC_LSB_BITS - 4;
     wire [6:0] sps_id_and_chroma_bits =
         (CHROMA_FORMAT_IDC == 3) ? 7'b1001000 : // sps_id=UE(0)=1, chroma_format_idc=UE(3)=00100, separate_colour_plane_flag=0
         (CHROMA_FORMAT_IDC == 2) ? 7'b1011000 : // sps_id=UE(0)=1, chroma_format_idc=UE(2)=011
                                   7'b1010000 ; // sps_id=UE(0)=1, chroma_format_idc=UE(1)=010
     wire [2:0] sps_id_and_chroma_len = (CHROMA_FORMAT_IDC == 3) ? 3'd7 : 3'd4;
-    wire [POC_LSB_BITS-1:0] pic_order_cnt_lsb = {frame_num, 1'b0};
     localparam integer FRAME_MB_COUNT = MB_COLS * MB_ROWS;
     localparam integer FRAME_MBPS = FRAME_MB_COUNT * FRAME_RATE;
     localparam [31:0] VUI_NUM_UNITS_IN_TICK = 32'd1;
@@ -958,8 +959,9 @@ module h264_bitstream #(
                             6'd24: begin
                                 if (is_inter_mb) begin
                                     if (is_b_slice) begin
-                                        // Current B inter path uses B_L0_16x16, which is mb_type=1.
-                                        ue_input <= 9'd1;
+                                        // Current B inter path uses 16x16 single-list prediction:
+                                        // B_L0_16x16 -> codeNum 1, B_L1_16x16 -> codeNum 2.
+                                        ue_input <= is_b_l1_mb ? 9'd2 : 9'd1;
                                         sub <= 6'd22;
                                     end else begin
                                         // Current P inter path uses P_L0_16x16, which is mb_type=0.
