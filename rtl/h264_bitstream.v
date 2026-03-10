@@ -38,7 +38,7 @@ module h264_bitstream #(
 
     // P-frame support
     input  wire        is_p_slice,
-    input  wire [3:0]  frame_num,
+    input  wire [7:0]  frame_num,
     input  wire        is_inter_mb,
     input  wire [1:0]  mb_ref_idx_l0,
     input  wire signed [8:0] mvd_x,
@@ -160,8 +160,12 @@ module h264_bitstream #(
                                  use_high_profile   ? 8'h6E :
                                  use_main_profile   ? 8'h4D : 8'h42;
     wire [7:0] sps_constraint_flags = (use_high_profile || use_main_profile) ? 8'h00 : 8'hC0;
+    localparam integer FRAME_NUM_BITS = 8;
+    localparam integer LOG2_MAX_FRAME_NUM_MINUS4 = FRAME_NUM_BITS - 4;
+    localparam integer POC_LSB_BITS = FRAME_NUM_BITS + 1;
+    localparam integer LOG2_MAX_POC_LSB_MINUS4 = POC_LSB_BITS - 4;
     wire [3:0] sps_id_and_chroma_bits = (CHROMA_FORMAT_IDC == 2) ? 4'b1011 : 4'b1010;
-    wire [5:0] pic_order_cnt_lsb = {frame_num, 1'b0};
+    wire [POC_LSB_BITS-1:0] pic_order_cnt_lsb = {frame_num, 1'b0};
     localparam integer FRAME_MB_COUNT = MB_COLS * MB_ROWS;
     localparam integer FRAME_MBPS = FRAME_MB_COUNT * FRAME_RATE;
     localparam [31:0] VUI_NUM_UNITS_IN_TICK = 32'd1;
@@ -555,15 +559,15 @@ module h264_bitstream #(
                                 sub <= sub + 6'd1;
                             end
                             // qpprime_y_zero_transform_bypass=0, seq_scaling_matrix_present=0
-                            // Then: log2_max_frame_num_minus4=UE(0)='1'
+                            // Then: log2_max_frame_num_minus4=UE(4)='00101'
                             // + poc_type=UE(0)='1' (poc_type=0)
-                            // + log2_max_pic_order_cnt_lsb_minus4=UE(2)='011' (max_poc_lsb=64)
+                            // + log2_max_pic_order_cnt_lsb_minus4=UE(5)='00110' (max_poc_lsb=512)
                             // + max_num_ref_frames=UE(4)='00101'
                             // + gaps_in_frame_num=0
-                            // = 0,0 + 1,1,011,00101,0 = 13 bits: 0011011001010
+                            // = 0,0 + 00101,1,00110,00101,0 = 19 bits: 0000101100110001010
                             6'd22: begin
-                                bit_buf <= bit_buf | ({13'b0011011001010, 83'd0} >> bit_cnt[6:0]);
-                                bit_cnt <= bit_cnt + 7'd13;
+                                bit_buf <= bit_buf | ({19'b0000101100110001010, 77'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd19;
                                 // Emit to make room
                                 state <= S_EMIT;
                                 return_state <= S_SPS;
@@ -579,7 +583,7 @@ module h264_bitstream #(
                             6'd30: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
-                                ue_input <= 10'd0; // log2_max_frame_num_minus4
+                                ue_input <= LOG2_MAX_FRAME_NUM_MINUS4[9:0];
                                 sub <= 6'd31;
                             end
                             6'd31: begin
@@ -591,7 +595,7 @@ module h264_bitstream #(
                             6'd32: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
-                                ue_input <= 10'd2; // log2_max_pic_order_cnt_lsb_minus4
+                                ue_input <= LOG2_MAX_POC_LSB_MINUS4[9:0];
                                 sub <= 6'd33;
                             end
                             6'd33: begin
@@ -689,61 +693,61 @@ module h264_bitstream #(
                                         if (use_high_profile) begin
                                             // P-slice base header up to ref_pic_list_reordering_flag_l0.
                                             if (slice_multi_ref_enable) begin
-                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits, 76'd0};
-                                                bit_cnt <= 7'd13 + {3'd0, slice_multi_ref_bits_len};
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits, 71'd0};
+                                                bit_cnt <= 7'd20 + {3'd0, slice_multi_ref_bits_len};
                                             end else begin
-                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 2'b00, 81'd0};
-                                                bit_cnt <= 7'd15;
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 2'b00, 74'd0};
+                                                bit_cnt <= 7'd22;
                                             end
                                         end else begin
                                             if (slice_multi_ref_enable) begin
-                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits, 76'd0};
-                                                bit_cnt <= 7'd13 + {3'd0, slice_multi_ref_bits_len};
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits, 71'd0};
+                                                bit_cnt <= 7'd20 + {3'd0, slice_multi_ref_bits_len};
                                             end else begin
-                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 2'b00, 81'd0};
-                                                bit_cnt <= 7'd15;
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 2'b00, 74'd0};
+                                                bit_cnt <= 7'd22;
                                             end
                                         end
                                         ue_input <= {6'd0, luma_log2_weight_denom};
                                         sub <= 6'd8;
                                     end else begin
                                         if (use_high_profile) begin
-                                            // High-profile P-slice: SPS has poc_type=0, need poc_lsb(6 bits)
+                                            // High-profile P-slice: SPS has poc_type=0, need poc_lsb(9 bits)
                                             // first_mb=UE(0)'1', slice_type(P)=UE(0)'1', pps_id=UE(0)'1',
-                                            // frame_num(4), poc_lsb(6), num_ref_override=0, ref_list_reorder=0,
+                                            // frame_num(8), poc_lsb(9), num_ref_override=0, ref_list_reorder=0,
                                             // adaptive_marking=0, qp_delta=SE(0)'1', disable_deblocking=UE(1)'010'
                                             if (slice_multi_ref_enable) begin
-                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits_qp, 71'd0};
-                                                bit_cnt <= 7'd13 + {3'd0, slice_multi_ref_bits_qp_len};
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits_qp, 64'd0};
+                                                bit_cnt <= 7'd20 + {3'd0, slice_multi_ref_bits_qp_len};
                                             end else begin
-                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, 3'b010, 76'd0};
-                                                bit_cnt <= 7'd20;
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, 3'b010, 69'd0};
+                                                bit_cnt <= 7'd27;
                                             end
                                         end else begin
-                                            // Baseline/Main P-slice: SPS now uses poc_type=0, so emit poc_lsb(6 bits)
+                                            // Baseline/Main P-slice: SPS now uses poc_type=0, so emit poc_lsb(9 bits)
                                             if (slice_multi_ref_enable) begin
-                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits_qp, 71'd0};
-                                                bit_cnt <= 7'd13 + {3'd0, slice_multi_ref_bits_qp_len};
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits_qp, 64'd0};
+                                                bit_cnt <= 7'd20 + {3'd0, slice_multi_ref_bits_qp_len};
                                             end else begin
-                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, 3'b010, 76'd0};
-                                                bit_cnt <= 7'd20;
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, 3'b010, 69'd0};
+                                                bit_cnt <= 7'd27;
                                             end
                                         end
                                         sub <= sub + 6'd1;
                                     end
                                 end else begin
                                     if (use_high_profile) begin
-                                        // High-profile IDR: SPS has poc_type=0, need poc_lsb(6 bits)
+                                        // High-profile IDR: SPS has poc_type=0, need poc_lsb(9 bits)
                                         // first_mb=UE(0)'1', slice_type(I)=UE(2)'011', pps_id=UE(0)'1',
-                                        // frame_num(4), idr_pic_id=UE(0)'1', poc_lsb(6),
+                                        // frame_num(8), idr_pic_id=UE(0)'1', poc_lsb(9),
                                         // no_output_of_prior_pics=0, long_term_ref=0,
                                         // qp_delta=SE(0)'1', disable_deblocking=UE(1)'010'
-                                        bit_buf <= {1'b1, 3'b011, 1'b1, frame_num, 1'b1, pic_order_cnt_lsb, 2'b00, 1'b1, 3'b010, 74'd0};
-                                        bit_cnt <= 7'd22;
+                                        bit_buf <= {1'b1, 3'b011, 1'b1, frame_num, 1'b1, pic_order_cnt_lsb, 2'b00, 1'b1, 3'b010, 67'd0};
+                                        bit_cnt <= 7'd29;
                                     end else begin
-                                        // Baseline/Main IDR: SPS now uses poc_type=0, so emit poc_lsb(6 bits)
-                                        bit_buf <= {1'b1, 3'b011, 1'b1, frame_num, 1'b1, pic_order_cnt_lsb, 2'b00, 1'b1, 3'b010, 74'd0};
-                                        bit_cnt <= 7'd22;
+                                        // Baseline/Main IDR: SPS now uses poc_type=0, so emit poc_lsb(9 bits)
+                                        bit_buf <= {1'b1, 3'b011, 1'b1, frame_num, 1'b1, pic_order_cnt_lsb, 2'b00, 1'b1, 3'b010, 67'd0};
+                                        bit_cnt <= 7'd29;
                                     end
                                     sub <= sub + 6'd1;
                                 end

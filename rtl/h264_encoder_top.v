@@ -28,8 +28,8 @@ module h264_encoder_top #(
     input  wire        start,
     output reg         done,
 
-    // Frame number (4-bit, wraps at 16 per H.264 spec)
-    input  wire [3:0]  frame_num_in,
+    // Frame number (8-bit, supports longer GOP intervals before wrap)
+    input  wire [7:0]  frame_num_in,
     // IDR flag (1 for IDR/I-frame, 0 for P-frame)
     input  wire        is_idr_in,
 
@@ -143,7 +143,7 @@ module h264_encoder_top #(
     reg        is_p_frame;         // 1 if current frame is P-frame
     reg        is_inter_mb_reg;    // 1 if current MB uses inter prediction
     reg        use_intra16_mb_reg; // 1 if current intra MB uses Intra_16x16
-    reg [3:0]  cur_frame_num;      // Latched frame number
+    reg [7:0]  cur_frame_num;      // Latched frame number
     reg signed [7:0] me_best_mvx;  // Best MV from ME
     reg signed [7:0] me_best_mvy;
     reg [17:0] me_best_sad;
@@ -1053,7 +1053,7 @@ pred_buf = {(256*BD){1'b0}};
             blk_state <= BS_PRED; blk_started <= 1'b0; iq_done_latched <= 1'b0;
             recon_buf <= {(256*BD){1'b0}}; top_ref_flat <= {(MB_COLS*16*BD){1'b0}}; left_ref_flat <= {(16*BD){1'b0}};
             top_pixels_flat <= {(16*BD){1'b0}}; left_pixels_flat <= {(16*BD){1'b0}}; flush_pending <= 1'b0; flush_accepted <= 1'b0;
-            is_p_frame <= 1'b0; is_inter_mb_reg <= 1'b0; use_intra16_mb_reg <= 1'b0; cur_frame_num <= 4'd0;
+            is_p_frame <= 1'b0; is_inter_mb_reg <= 1'b0; use_intra16_mb_reg <= 1'b0; cur_frame_num <= 8'd0;
             me_best_mvx <= 8'sd0; me_best_mvy <= 8'sd0; me_best_sad <= 18'd0; me_fullpel_best_sad <= 18'd0;
             inter_pred_buf <= {(256*BD){1'b0}}; ref_wr_idx <= 9'd0;
             intra16_pred_buf <= {(256*BD){1'b0}}; intra16_mode_mb <= 2'd2;
