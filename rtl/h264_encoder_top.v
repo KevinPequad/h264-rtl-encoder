@@ -89,7 +89,7 @@ module h264_encoder_top #(
 
     // SAD threshold: if ME SAD > this, use intra instead of inter for this MB
     localparam [17:0] INTRA_SAD_THRESHOLD = 18'd8000;
-    localparam        ENABLE_INTRA16_EXPERIMENTAL = 1'b0;
+    localparam        ENABLE_IDR_INTRA16 = 1'b1;
 
     // ====================================================================
     // Top-level FSM (5-bit for >16 states)
@@ -1194,7 +1194,7 @@ pred_buf = {(256*BD){1'b0}};
                         top_state <= TS_ME_START;
                     end else begin
                         is_inter_mb_reg <= 1'b0;
-                        if (ENABLE_INTRA16_EXPERIMENTAL)
+                        if (ENABLE_IDR_INTRA16)
                             top_state <= TS_I16_PRED;
                         else
                             top_state <= TS_MB_HDR;
@@ -1519,8 +1519,6 @@ pred_buf = {(256*BD){1'b0}};
                             end else begin
                                 top_state <= TS_MB_HDR;
                             end
-                        end else if (ENABLE_INTRA16_EXPERIMENTAL) begin
-                            top_state <= TS_I16_PRED;
                         end else begin
                             use_intra16_mb_reg <= 1'b0;
                             top_state <= TS_MB_HDR;
@@ -2563,13 +2561,15 @@ pred_buf = {(256*BD){1'b0}};
                                             cavlc_is_chroma_ac <= 1'b0;
                                             zz_chroma_ac_mode <= 1'b0;
                                             if (use_intra16_mb_reg) begin
-                                                i16_cbp_chroma <= i16_chroma_ac_nonzero ? 2'd2 :
-                                                                  (i16_chroma_dc_nonzero ? 2'd1 : 2'd0);
+                                                // The current I16 path always emits luma AC and chroma AC
+                                                // residual syntax, even when the coefficients are all zero.
+                                                // Keep mb_type aligned with the emitted syntax so FFmpeg
+                                                // does not desynchronize while parsing macroblock residuals.
+                                                i16_cbp_chroma <= 2'd2;
                                                 intra_mb_type_code_num <= (is_p_frame ? 6'd6 : 6'd1)
                                                                         + {4'd0, intra16_mode_mb}
-                                                                        + {2'd0, (i16_chroma_ac_nonzero ? 2'd2 :
-                                                                                 (i16_chroma_dc_nonzero ? 2'd1 : 2'd0)), 2'd0}
-                                                                        + (i16_luma_ac_nonzero ? 6'd12 : 6'd0);
+                                                                        + 6'd8
+                                                                        + 6'd12;
                                             end
                                             if (is_inter_mb_reg) begin
                                                 mb_nonzero_i = i16_chroma_dc_nonzero || (total_coeffs != 5'd0);

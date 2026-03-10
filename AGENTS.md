@@ -202,6 +202,8 @@ The testbench must not:
   - Full directional `Intra_4x4` mode support
   - `Intra_16x16` luma prediction with `Vertical`, `Horizontal`, `DC`, and
     `Plane` mode search
+  - Current IDR-path `Intra_16x16` macroblock coding through the RTL byte
+    stream
   - Chroma intra prediction: DC-style path
   - `4x4` H.264 integer transform
   - Inverse transform path
@@ -357,6 +359,15 @@ The testbench must not:
   - current-tree `Intra_16x16` smoke at `320x176`, `1` frame,
     `output/validation_320x176_1f_i16x16_fix2.h264`, and
     `output/validation_320x176_1f_i16x16_fix2.mp4`
+  - strict FFmpeg-decodable one-frame IDR `Intra_16x16` validation at
+    `320x176`, `1` frame, `791,490` cycles,
+    `output/validation_i16idr2_320x176_1f.h264`, and
+    `output/validation_i16idr2_320x176_1f.mp4`
+  - strict FFmpeg-decodable short-GOP validation with an IDR `Intra_16x16`
+    first frame at `320x176`, `4` frames, `91,031,284` cycles, RTL PSNR avg
+    `31.628391`, RTL SSIM all `0.829910`,
+    `output/validation_i16idr_320x176_4f.h264`, and
+    `output/validation_i16idr_320x176_4f.mp4`
 
 - A 720p chroma corruption bug was traced to raw input address overflow in the Cr plane fetch path and fixed by widening the raw input address width
 - A directional `Intra_4x4` top-right reference fetch bug was fixed in
@@ -384,6 +395,15 @@ The testbench must not:
 - `validate_clip.py` now supports `--decode-only` and granular skip flags so
   longer strict-decode regressions can stay cheaper while preserving staged
   build / sim logs and JSON summaries
+- The `Intra_16x16` IDR path now emits mb_type values that match the residual
+  syntax the RTL actually outputs, removing the earlier first-row FFmpeg decode
+  failure at `MB 2 0`
+- The `Intra_16x16` DC inverse path in `h264_luma_dc.v` now preserves the full
+  Hadamard dynamic range instead of truncating the top bits before inverse
+  scaling
+- The current `Intra_16x16` IDR path is now decodable on the RTL byte stream,
+  but it is still not visually correct enough to count as a finished quality
+  path
 - Deferred inter headers and FIFO discard now prevent illegal zero-residual
   CAVLC payloads from leaking after `cbp=0` or `P_SKIP`
 
