@@ -324,6 +324,20 @@ Measured validation points:
   `0` on the IDR `I_PCM` path and frame `1` on the P-slice `I_PCM` path,
   `59,889` cycles, `1,595` bytes, packaged MP4 output, and decoded YUV exactly
   matching both source frames byte-for-byte
+- `ipcm_32x16_1f_10b_latched`: strict FFmpeg-decodable forced-`I_PCM` IDR
+  validation at `32x16`, `10-bit 4:2:0`, `5,965` cycles, `1,007` bytes, and
+  decoded YUV exactly matching the source frame byte-for-byte
+- `ipcm_32x16_1f_10b_422_latched`: strict FFmpeg-decodable forced-`I_PCM` IDR
+  validation at `32x16`, `10-bit 4:2:2`, `7,885` cycles, `1,327` bytes, and
+  decoded YUV exactly matching the source frame byte-for-byte
+- `ipcm_p_32x16_2f_10b_latched`: strict FFmpeg-decodable two-frame validation
+  with frame `0` on the IDR `I_PCM` path and frame `1` on the P-slice `I_PCM`
+  path at `32x16`, `10-bit 4:2:0`, `59,645` cycles, `1,980` bytes, and decoded
+  YUV exactly matching both source frames byte-for-byte
+- `ipcm_p_32x16_2f_10b_422_latched`: strict FFmpeg-decodable two-frame
+  validation with frame `0` on the IDR `I_PCM` path and frame `1` on the
+  P-slice `I_PCM` path at `32x16`, `10-bit 4:2:2`, `62,973` cycles, `2,620`
+  bytes, and decoded YUV exactly matching both source frames byte-for-byte
 - `320x176_4f_decodeonly`: strict FFmpeg-decodable multi-frame decode-only
   validation on the current tree, `92,028,425` cycles, `1,912` bytes, paired
   staged `.build.log` / `.sim.log`, JSON validation-mode recording, and
@@ -400,13 +414,15 @@ Recent correctness fix:
   byte-aligns with `pcm_alignment_zero_bit`, emits raw luma / Cb / Cr samples
   through the RTL byte path itself, and decodes back to an exact byte-for-byte
   match on the validated `320x176 4:2:0` and `32x16 4:2:2` all-IDR cases
-- the current tree also supports `I_PCM` on the P-slice intra path for
-  `8-bit` builds, and the checked-in `tb/Makefile` now exposes
-  `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
-  `INTER_SAD_THRESHOLD` so the path can be reproduced without raw
-  `EXTRA_VERILATOR_ARGS`
-- `I_PCM` is still only implemented on the current `8-bit` RTL path; `10-bit`
-  `I_PCM` is not closed yet
+- the `I_PCM` source path is now latched in `rtl/h264_encoder_top.v` before the
+  bitstream emit begins, which closes the earlier corruption where the live
+  fetch bus could be overwritten by the next macroblock during `10-bit` sample
+  emission
+- the current tree now supports `I_PCM` on the IDR path and the current
+  P-slice intra path for `8-bit` and `10-bit` builds in both `4:2:0` and
+  `4:2:2`, and the checked-in `tb/Makefile` exposes `ENABLE_IDR_IPCM`,
+  `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and `INTER_SAD_THRESHOLD` so the path
+  can be reproduced without raw `EXTRA_VERILATOR_ARGS`
 - the `Intra_16x16` DC inverse path in `h264_luma_dc.v` now preserves the full
   Hadamard dynamic range instead of truncating the top bits before inverse
   scaling

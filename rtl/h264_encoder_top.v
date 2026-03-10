@@ -1052,7 +1052,7 @@ pred_buf = {(256*BD){1'b0}};
         .slice_num_ref_idx_l0_active_minus1(slice_num_ref_idx_l0_active_minus1),
         .hold_fifo_drain(bs_hold_fifo_drain), .is_intra16_mb(is_intra16_mb_hdr), .is_ipcm_mb(is_ipcm_mb_hdr), .intra_mb_type_code_num(intra_mb_type_code_num),
         .intra_pred_bits(intra_pred_bits_mb), .intra_pred_count(intra_pred_count_mb),
-        .ipcm_luma_flat(fetched_luma), .ipcm_cb_flat(fetched_cb), .ipcm_cr_flat(fetched_cr),
+        .ipcm_luma_flat(recon_buf), .ipcm_cb_flat(chr_recon_cb), .ipcm_cr_flat(chr_recon_cr),
         .weighted_pred_enable(weighted_pred_enable_cfg_w),
         .luma_log2_weight_denom(luma_log2_weight_denom_cfg_w),
         .luma_weight(luma_weight_cfg_w),
@@ -1530,7 +1530,7 @@ pred_buf = {(256*BD){1'b0}};
                             end
                         end else begin
                             use_intra16_mb_reg <= 1'b0;
-                            use_ipcm_mb_reg <= ((ENABLE_P_IPCM != 0) && (BIT_DEPTH == 8));
+                            use_ipcm_mb_reg <= (ENABLE_P_IPCM != 0);
                             top_state <= TS_MB_HDR;
                         end
                     end
