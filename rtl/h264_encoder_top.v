@@ -381,7 +381,7 @@ wire is_luma = (sub_blk < 5'd16);
     localparam BD = BIT_DEPTH;
     localparam BD1 = BIT_DEPTH + 1;
     localparam CW  = BIT_DEPTH + 8; // coefficient width for transform/quant pipeline
-    wire use_weighted_pred_w = WEIGHTED_PRED_ENABLE && is_p_frame;
+    wire use_weighted_pred_w = WEIGHTED_PRED_ENABLE && (is_p_frame || is_b_frame);
     wire [2:0] b_l0_ref_bank_w = (is_b_frame && (valid_ref_count >= 3'd2)) ? older_ref_bank : newest_ref_bank;
     wire weighted_pred_enable_cfg_w = (WEIGHTED_PRED_ENABLE != 0);
     wire [3:0] luma_log2_weight_denom_cfg_w = LUMA_LOG2_WEIGHT_DENOM[3:0];

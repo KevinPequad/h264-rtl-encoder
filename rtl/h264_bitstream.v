@@ -130,6 +130,7 @@ module h264_bitstream #(
     wire use_high422_profile = (CHROMA_FORMAT_IDC == 2) || (BIT_DEPTH > 10);
     wire use_main_profile = weighted_pred_enable && !use_high_profile;
     wire weighted_pred_flag = weighted_pred_enable;
+    wire [1:0] weighted_bipred_idc = weighted_pred_enable ? 2'b01 : 2'b00;
     wire slice_multi_ref_enable = (slice_num_ref_idx_l0_active_minus1 != 2'd0);
     wire slice_has_skip_run = is_p_slice || is_b_slice;
     localparam integer CHR_MB_WIDTH = (CHROMA_FORMAT_IDC == 3) ? 16 : 8;
@@ -703,13 +704,15 @@ module h264_bitstream #(
                                     // entropy_coding_mode=0 (CAVLC), pic_order_present=0,
                                     // num_slice_groups=UE(0)'1', num_ref_idx_l0=UE(0)'1',
                                     // num_ref_idx_l1=UE(0)'1', weighted_pred=0,
-                                    // weighted_bipred=00, pic_init_qp=SE(0)'1',
+                                    // weighted_bipred is explicit (01) when weighted prediction is enabled.
                                     // pic_init_qs=SE(0)'1', chroma_qp_offset=SE(0)'1',
                                     // deblocking_filter_control=1, constrained_intra=0, redundant_pic_cnt=0,
                                     // transform_8x8_mode=0, pic_scaling_matrix_present=0,
                                     // second_chroma_qp_index_offset=SE(0)'1'
                                     // = 19 bits before rbsp_stop_one_bit.
-                                    bit_buf <= {7'b1100111, weighted_pred_flag, 8'b00111100, 3'b001, 77'd0};
+                                    bit_buf <= {7'b1100111, weighted_pred_flag,
+                                                (weighted_bipred_idc == 2'b01) ? 8'b01111100 : 8'b00111100,
+                                                3'b001, 77'd0};
                                     bit_cnt <= 7'd19;
                                     sub <= 6'd10; // jump to emit+trailing
                                 end else begin
@@ -719,7 +722,7 @@ module h264_bitstream #(
                                     sub <= sub + 6'd1;
                                 end
                             end
-                            6'd6:  begin write_byte<=8'h3C; do_write<=1'b1; sub<=sub+6'd1; end
+                            6'd6:  begin write_byte<=weighted_pred_enable ? 8'h7C : 8'h3C; do_write<=1'b1; sub<=sub+6'd1; end
                             6'd7:  begin write_byte<=8'h80; do_write<=1'b1; sub<=sub+6'd1; end
                             6'd8:  begin cmd_done<=1'b1; busy<=1'b0; state<=S_IDLE; zero_cnt<=2'd0; end
                             // High 10 PPS path: add RBSP trailing and emit
@@ -813,20 +816,33 @@ module h264_bitstream #(
                                         sub <= sub + 6'd1;
                                     end
                                 end else if (is_b_slice) begin
-                                    // Non-reference B-slice header on the current intra/I_PCM-only B path:
-                                    // first_mb=UE(0), slice_type(B)=UE(1), pps_id=UE(0), frame_num(8),
-                                    // pic_order_cnt_lsb(9), direct_spatial_mv_pred_flag=1,
-                                    // num_ref_idx_active_override_flag=0, ref_pic_list_reordering_flag_l0=0,
-                                    // ref_pic_list_reordering_flag_l1=0, optional adaptive_ref_pic_marking_mode_flag,
-                                    // slice_qp_delta=SE(0), deblocking=UE(1)
-                                    if (is_b_ref_slice) begin
-                                        bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, 6'b100001, 3'b010, 65'd0};
-                                        bit_cnt <= 7'd31;
+                                    if (weighted_pred_flag) begin
+                                        // B-slice base header up to ref_pic_list_reordering_flag_l1:
+                                        // first_mb=UE(0), slice_type(B)=UE(1), pps_id=UE(0), frame_num(8),
+                                        // pic_order_cnt_lsb(9), direct_spatial_mv_pred_flag=1,
+                                        // num_ref_idx_active_override_flag=0,
+                                        // ref_pic_list_reordering_flag_l0=0,
+                                        // ref_pic_list_reordering_flag_l1=0.
+                                        bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, 4'b1000, 70'd0};
+                                        bit_cnt <= 7'd26;
+                                        ue_input <= {6'd0, luma_log2_weight_denom};
+                                        sub <= 6'd8;
                                     end else begin
-                                        bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, 5'b10001, 3'b010, 66'd0};
-                                        bit_cnt <= 7'd30;
+                                        // Non-reference B-slice header on the current intra/I_PCM-only B path:
+                                        // first_mb=UE(0), slice_type(B)=UE(1), pps_id=UE(0), frame_num(8),
+                                        // pic_order_cnt_lsb(9), direct_spatial_mv_pred_flag=1,
+                                        // num_ref_idx_active_override_flag=0, ref_pic_list_reordering_flag_l0=0,
+                                        // ref_pic_list_reordering_flag_l1=0, optional adaptive_ref_pic_marking_mode_flag,
+                                        // slice_qp_delta=SE(0), deblocking=UE(1)
+                                        if (is_b_ref_slice) begin
+                                            bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, 6'b100001, 3'b010, 65'd0};
+                                            bit_cnt <= 7'd31;
+                                        end else begin
+                                            bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, 5'b10001, 3'b010, 66'd0};
+                                            bit_cnt <= 7'd30;
+                                        end
+                                        sub <= sub + 6'd1;
                                     end
-                                    sub <= sub + 6'd1;
                                 end else begin
                                     if (use_high_profile) begin
                                         // High-profile IDR: SPS has poc_type=0, need poc_lsb(9 bits)
@@ -925,10 +941,80 @@ module h264_bitstream #(
                                 sub <= 6'd19;
                             end
                             6'd19: begin
-                                // adaptive_ref_pic_marking_mode_flag=0, slice_qp_delta=SE(0)='1',
-                                // disable_deblocking_filter_idc=UE(1)='010'
-                                bit_buf <= bit_buf | ({5'b01010, 91'd0} >> bit_cnt[6:0]);
-                                bit_cnt <= bit_cnt + 7'd5;
+                                if (is_b_slice) begin
+                                    bit_buf <= bit_buf | (({luma_weight_non_default, 95'd0}) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + 7'd1;
+                                    if (luma_weight_non_default) begin
+                                        se_input <= luma_weight;
+                                        sub <= 6'd20;
+                                    end else begin
+                                        sub <= 6'd22;
+                                    end
+                                end else begin
+                                    // adaptive_ref_pic_marking_mode_flag=0, slice_qp_delta=SE(0)='1',
+                                    // disable_deblocking_filter_idc=UE(1)='010'
+                                    bit_buf <= bit_buf | ({5'b01010, 91'd0} >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + 7'd5;
+                                    sub <= 6'd6;
+                                end
+                            end
+                            6'd20: begin
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                se_input <= luma_offset;
+                                sub <= 6'd21;
+                            end
+                            6'd21: begin
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                sub <= 6'd22;
+                            end
+                            6'd22: begin
+                                state <= S_EMIT;
+                                return_state <= S_SLICE;
+                                sub <= 6'd23;
+                            end
+                            6'd23: begin
+                                bit_buf <= bit_buf | (({chroma_weight_non_default, 95'd0}) >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd1;
+                                if (chroma_weight_non_default) begin
+                                    se_input <= chroma_weight_cb;
+                                    sub <= 6'd24;
+                                end else begin
+                                    sub <= 6'd28;
+                                end
+                            end
+                            6'd24: begin
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                se_input <= chroma_offset_cb;
+                                sub <= 6'd25;
+                            end
+                            6'd25: begin
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                se_input <= chroma_weight_cr;
+                                sub <= 6'd26;
+                            end
+                            6'd26: begin
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                se_input <= chroma_offset_cr;
+                                sub <= 6'd27;
+                            end
+                            6'd27: begin
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                sub <= 6'd28;
+                            end
+                            6'd28: begin
+                                if (is_b_ref_slice) begin
+                                    bit_buf <= bit_buf | ({5'b01010, 91'd0} >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + 7'd5;
+                                end else begin
+                                    bit_buf <= bit_buf | ({4'b1010, 92'd0} >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + 7'd4;
+                                end
                                 sub <= 6'd6;
                             end
                             default: state <= S_IDLE;
