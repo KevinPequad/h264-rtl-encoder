@@ -219,6 +219,9 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - explicit weighted B prediction on the current single-list reordered B
   subpaths and limited `B_BI_16x16` path, including B-slice
   `pred_weight_table` signaling for `List0` and `List1`
+- single-list weighted `P` / `B` / direct qpel refinement now scores weighted
+  luma samples during mode decision instead of scoring the unweighted
+  predictor and applying weights only later in reconstruction
 - full directional `Intra_4x4` mode support
 - `Intra_16x16` luma prediction with `Vertical`, `Horizontal`, `DC`, and
   `Plane` mode search
@@ -582,6 +585,15 @@ Measured validation points:
   `output/validation_bdirect_auto_probe_320x176_5f.h264`, and simulator
   logging showing nonzero `b_direct_mbs` across all three non-IDR pictures
   (`219`, `148`, and `31`)
+- `bdirect_auto_weighted_32x16_3f`: strict FFmpeg-decodable weighted
+  non-forced auto `B_DIRECT_16x16` reordered-B validation at `32x16`, `3`
+  frames, `131,078` cycles, `180` bytes, RTL PSNR avg `30.158513`, RTL SSIM
+  all `0.775715`, `output/validation_bdirect_auto_weighted_32x16_3f.h264`,
+  and simulator logging showing `b_direct_mbs=1` on the last picture
+- `weightedp_small_32x16_2f`: strict FFmpeg-decodable small weighted-P
+  validation at `32x16`, `2` frames, `51,117` cycles, `112` bytes, RTL PSNR
+  avg `28.420753`, RTL SSIM all `0.66449`, and
+  `output/validation_weightedp_small_32x16_2f.h264`
 - `32x16_2f_444_ipcm_scripted`: strict staged validation through
   `scripts/validate_clip.py` with `--enable-idr-ipcm 1 --enable-p-ipcm 1`
   at `32x16`, `8-bit 4:4:4`, packaged MP4 output, and JSON summary in

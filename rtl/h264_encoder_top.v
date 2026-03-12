@@ -1020,7 +1020,7 @@ module h264_encoder_top #(
         output [256*BD-1:0] pred_buf_out;
         output integer sad_out;
         integer px_i, py_i;
-        integer pred_sample_i, orig_sample_i, ref1_sample_i, ref2_sample_i;
+        integer pred_sample_i, comp_sample_i, orig_sample_i, ref1_sample_i, ref2_sample_i;
         integer frac_x_i, frac_y_i, base_x_i, base_y_i;
         reg [3:0] qpel_idx_i;
         reg [1:0] ref0_plane_i, ref1_plane_i;
@@ -1052,11 +1052,12 @@ module h264_encoder_top #(
                         pred_sample_i = ref1_sample_i;
                     end
                     pred_buf_out[((py_i*16)+px_i)*BD +: BD] = pred_sample_i[BD-1:0];
+                    comp_sample_i = use_post_weighted_pred_w ? apply_luma_weight(pred_sample_i[BD-1:0]) : pred_sample_i;
                     orig_sample_i = fetched_luma[((py_i*16)+px_i)*BD +: BD];
-                    if (orig_sample_i >= pred_sample_i)
-                        sad_out = sad_out + (orig_sample_i - pred_sample_i);
+                    if (orig_sample_i >= comp_sample_i)
+                        sad_out = sad_out + (orig_sample_i - comp_sample_i);
                     else
-                        sad_out = sad_out + (pred_sample_i - orig_sample_i);
+                        sad_out = sad_out + (comp_sample_i - orig_sample_i);
                 end
             end
         end
@@ -2155,7 +2156,7 @@ pred_buf = {(256*BD){1'b0}};
                         end
                     end else begin : luma_refine
                         integer cand_dx, cand_dy, px, py;
-                        integer cand_sad, pred_sample, ref1_sample, ref2_sample, orig_sample, pskip_idx;
+                        integer cand_sad, pred_sample, comp_sample, ref1_sample, ref2_sample, orig_sample, pskip_idx;
                         integer best_sad_i, best_dx_i, best_dy_i;
                         integer bi_final_idx, bi_final_sample, bi_final_orig_sample, bi_final_sad_i;
                         integer direct_sad_i;
@@ -2215,11 +2216,12 @@ pred_buf = {(256*BD){1'b0}};
                                             pred_sample = ref1_sample;
                                         end
                                         cand_pred_buf_i[((py*16)+px)*BD +: BD] = pred_sample[BD-1:0];
+                                        comp_sample = use_post_weighted_pred_w ? apply_luma_weight(pred_sample[BD-1:0]) : pred_sample;
                                         orig_sample = fetched_luma[((py*16)+px)*BD +: BD];
-                                        if (orig_sample >= pred_sample)
-                                            cand_sad = cand_sad + (orig_sample - pred_sample);
+                                        if (orig_sample >= comp_sample)
+                                            cand_sad = cand_sad + (orig_sample - comp_sample);
                                         else
-                                            cand_sad = cand_sad + (pred_sample - orig_sample);
+                                            cand_sad = cand_sad + (comp_sample - orig_sample);
                                     end
                                 end
 
