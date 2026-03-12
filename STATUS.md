@@ -19,9 +19,11 @@ Current state:
 - the current tree now also supports a limited non-reference `B`-slice path on
   intra / `I_PCM` macroblocks
 - the current tree now also supports limited non-reference inter-coded
-  `B_L0_16x16` macroblocks on a single-list B path
+  `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` macroblocks on a reordered
+  dual-list `16x16` B path
 - the current tree now also supports limited reference-`B` / `BREF`
-  `B_L0_16x16` pictures on that single-list B path
+  `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` pictures on that reordered
+  dual-list `16x16` B path
 - the repository is still not complete as a full H.264 standard encoder
 
 Completion is still blocked by major missing features including CABAC syntax
@@ -162,17 +164,17 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - I-frame support
 - P-frame support
 - non-reference `B`-slice support on the current intra / `I_PCM` path
-- limited non-reference inter-coded `B_L0_16x16` and `B_L1_16x16` support on
-  the current reordered single-list B path
-- limited reference-`B` / `BREF` support on the current reordered single-list
-  `B_L0_16x16` / `B_L1_16x16` path
+- limited non-reference inter-coded `B_L0_16x16`, `B_L1_16x16`, and
+  `B_BI_16x16` support on the current reordered dual-list `16x16` B path
+- limited reference-`B` / `BREF` support on the current reordered dual-list
+  `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` path
 - reordered `B`-GOP scheduling support in the testbench / validation flow for
   encode orders such as `0,2,1,4,3`, with non-reference `B` pictures reusing
   the same `frame_num` as the surrounding reference pair while carrying their
   own `pic_order_cnt_lsb`
-- current reordered B inter selection can choose past `List0` or future
-  `List1` prediction per macroblock, with `B_L1_16x16` emitted through the RTL
-  bitstream path when the future reference wins
+- current reordered B inter selection can choose past `List0`, future `List1`,
+  or bidirectional `B_BI_16x16` prediction per macroblock on the current
+  limited reordered dual-list `16x16` B path
 - reordered GOP forcing can now emit reference-slot pictures as `BREF` instead
   of `P`, so encode orders such as `0,2,1,4,3` can be driven as all-BREF
   non-IDR GOPs for validation
@@ -200,8 +202,9 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - chroma fractional interpolation on the current inter path
 - weighted P prediction for inter luma and chroma on the RTL path
 - `pred_weight_table` slice signaling in RTL for weighted P slices
-- explicit weighted B prediction on the current single-list B path, including
-  B-slice `pred_weight_table` signaling for `List0` and `List1`
+- explicit weighted B prediction on the current single-list reordered B
+  subpaths, including B-slice `pred_weight_table` signaling for `List0` and
+  `List1`
 - full directional `Intra_4x4` mode support
 - `Intra_16x16` luma prediction with `Vertical`, `Horizontal`, `DC`, and
   `Plane` mode search
@@ -230,11 +233,11 @@ Implemented now relative to the chosen `x264` baseline:
 - CAVLC entropy path owned by RTL
 - I-picture and P-picture coding
 - non-reference `B`-picture syntax on the current intra / `I_PCM` path
-- limited non-reference `B_L0_16x16` and `B_L1_16x16` inter coding on the
-  current reordered single-list B path
+- limited non-reference `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` inter
+  coding on the current reordered dual-list `16x16` B path
 - limited reference-`B` / `BREF` picture support on the current reordered
-  single-list B path
-- explicit weighted prediction on the current single-list B path
+  dual-list `16x16` B path
+- explicit weighted prediction on the current single-list reordered B subpaths
 - full `Intra_4x4` directional luma mode coverage
 - `Intra_16x16` luma prediction and syntax support
 - current IDR-path `Intra_16x16` macroblock coding through the RTL byte stream
@@ -299,8 +302,12 @@ Verified validation and tooling coverage around the encoder flow:
   validation scripts for the current limited reference-`B` path
 - runtime-configurable `reorder_b_gop` support in the testbench and validation
   scripts for reordered B-picture encode order
+- runtime-configurable `force_b_bi` support in the testbench and validation
+  scripts for the current limited `B_BI_16x16` path
 - simulator-side per-frame `b_l1_mbs` logging so reordered B validation can
   prove that the future-reference `List1` path was actually selected
+- simulator-side per-frame `b_bi_mbs` logging so reordered B validation can
+  prove that the bidirectional `B_BI_16x16` path was actually selected
 - reordered validation can now combine `--reorder-b-gop` and
   `--force-bref-slice` so the reference slots are emitted as `BREF` pictures
 - fast strict-decode-only validation mode in `validate_clip.py` for longer
@@ -488,6 +495,21 @@ Measured validation points:
   `output/validation_weightedb_bl1_32x16_3f.mp4`, with `trace_headers`
   confirming `weighted_bipred_idc = 1` in PPS and B-slice `pred_weight_table`
   entries for both `List0` and `List1`
+- `forcebbi_32x16_3f`: strict FFmpeg-decodable forced-`B_BI_16x16`
+  reordered-B validation at `32x16`, `3` frames,
+  `output/validation_forcebbi_32x16_3f.h264`, and
+  `output/validation_forcebbi_32x16_3f.json`, with simulator logging showing
+  `b_bi_mbs=2` on the B picture
+- `forcebbi_320x176_5f`: strict FFmpeg-decodable forced-`B_BI_16x16`
+  reordered all-`BREF` validation at `320x176`, encode order `0,2,1,4,3`,
+  `output/validation_forcebbi_320x176_5f.h264`, and
+  `output/validation_forcebbi_320x176_5f.json`, with simulator logging showing
+  `b_bi_mbs=10`, `220`, and `220` across the three non-IDR pictures
+- `forcebbi_320x176_5f_mp4`: strict FFmpeg-decodable forced-`B_BI_16x16`
+  reordered all-`BREF` validation at `320x176`, `5` frames,
+  `84,060,781` cycles, `11,969` bytes,
+  `output/validation_forcebbi_320x176_5f_mp4.h264`, and
+  `output/validation_forcebbi_320x176_5f_mp4.mp4`
 - `32x16_2f_444_ipcm_scripted`: strict staged validation through
   `scripts/validate_clip.py` with `--enable-idr-ipcm 1 --enable-p-ipcm 1`
   at `32x16`, `8-bit 4:4:4`, packaged MP4 output, and JSON summary in
@@ -591,6 +613,10 @@ Current verified milestone outputs:
   RTL writer now emits the correct full-residual inter code on that path, and
   focused strict-decode reruns ending on the old bad picture re-close at
   `320x176` for extracted `2`-frame and `4`-frame clips
+- the current reordered B path now carries explicit list0/list1 neighbor MV
+  state and list-specific MVD syntax, which re-opened a limited `B_BI_16x16`
+  path for forced strict-decode validation at `32x16` and `320x176`; automatic
+  BI mode selection is still not closed on the real `320x176` reordered clip
 - `scripts/validate_clip.py` and `scripts/rtl_runner.py` now expose
   `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
   `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths
@@ -613,7 +639,7 @@ H.264 encoder yet:
 - CABAC context modelling, syntax binarization, and final bitstream-path
   integration
 - no broader `B` / `BREF` picture support beyond the current limited
-  reordered single-list `B_L0_16x16` / `B_L1_16x16` path
+  reordered dual-list `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` `16x16` path
 - weighted bipred on bidirectional B macroblocks
 - direct motion-vector prediction modes
 - reference-picture management beyond the current four-reference P-slice subset
@@ -633,7 +659,8 @@ Still missing relative to the chosen `x264` software baseline:
 - broader inter-coded `B` / `BREF` picture handling and the associated
   reference management
 - reference-picture management beyond the current four-reference P-slice subset
-- weighted bipred support beyond the current weighted P path
+- weighted bipred support beyond the current weighted P path and single-list
+  weighted B subpaths
 - direct prediction modes
 - broader sub-pel motion estimation / compensation and richer mode decision
 - broader partition / transform coverage including `8x8dct`-class tools

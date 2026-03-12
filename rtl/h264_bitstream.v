@@ -46,9 +46,13 @@ module h264_bitstream #(
     input  wire        is_inter_mb,
     input  wire        is_skip_mb,
     input  wire        is_b_l1_mb,
+    input  wire        is_b_bi_mb,
     input  wire [1:0]  mb_ref_idx_l0,
-    input  wire signed [8:0] mvd_x,
-    input  wire signed [8:0] mvd_y,
+    input  wire [1:0]  mb_ref_idx_l1,
+    input  wire signed [8:0] mvd_x_l0,
+    input  wire signed [8:0] mvd_y_l0,
+    input  wire signed [8:0] mvd_x_l1,
+    input  wire signed [8:0] mvd_y_l1,
     input  wire [1:0]  slice_num_ref_idx_l0_active_minus1,
     input  wire        hold_fifo_drain,
     input  wire        is_intra16_mb,
@@ -338,12 +342,18 @@ module h264_bitstream #(
         endcase
     end
     wire [10:0] se_code1 = se_codenum + 11'd1;  // codeNum + 1
-    wire [9:0]  mvd_x_codenum_w = (mvd_x == 9'sd0) ? 10'd0 :
-                                  (mvd_x[8])        ? ({(~mvd_x + 9'd1), 1'b0}) :
-                                                       ({mvd_x, 1'b0} - 10'd1);
-    wire [9:0]  mvd_y_codenum_w = (mvd_y == 9'sd0) ? 10'd0 :
-                                  (mvd_y[8])        ? ({(~mvd_y + 9'd1), 1'b0}) :
-                                                       ({mvd_y, 1'b0} - 10'd1);
+    wire [9:0]  mvd_x_l0_codenum_w = (mvd_x_l0 == 9'sd0) ? 10'd0 :
+                                     (mvd_x_l0[8])       ? ({(~mvd_x_l0 + 9'd1), 1'b0}) :
+                                                            ({mvd_x_l0, 1'b0} - 10'd1);
+    wire [9:0]  mvd_y_l0_codenum_w = (mvd_y_l0 == 9'sd0) ? 10'd0 :
+                                     (mvd_y_l0[8])       ? ({(~mvd_y_l0 + 9'd1), 1'b0}) :
+                                                            ({mvd_y_l0, 1'b0} - 10'd1);
+    wire [9:0]  mvd_x_l1_codenum_w = (mvd_x_l1 == 9'sd0) ? 10'd0 :
+                                     (mvd_x_l1[8])       ? ({(~mvd_x_l1 + 9'd1), 1'b0}) :
+                                                            ({mvd_x_l1, 1'b0} - 10'd1);
+    wire [9:0]  mvd_y_l1_codenum_w = (mvd_y_l1 == 9'sd0) ? 10'd0 :
+                                     (mvd_y_l1[8])       ? ({(~mvd_y_l1 + 9'd1), 1'b0}) :
+                                                            ({mvd_y_l1, 1'b0} - 10'd1);
 
     // Find MSB position of se_code1 (priority encoder)
     reg [3:0] se_msb;
@@ -1072,9 +1082,12 @@ module h264_bitstream #(
                             6'd24: begin
                                 if (is_inter_mb) begin
                                     if (is_b_slice) begin
-                                        // Current B inter path uses 16x16 single-list prediction:
-                                        // B_L0_16x16 -> codeNum 1, B_L1_16x16 -> codeNum 2.
-                                        ue_input <= is_b_l1_mb ? 9'd2 : 9'd1;
+                                        // Current B inter path supports 16x16 single-list and
+                                        // bidirectional coding:
+                                        // B_L0_16x16 -> codeNum 1
+                                        // B_L1_16x16 -> codeNum 2
+                                        // B_BI_16x16 -> codeNum 3
+                                        ue_input <= is_b_bi_mb ? 9'd3 : (is_b_l1_mb ? 9'd2 : 9'd1);
                                         sub <= 6'd22;
                                     end else begin
                                         // Current P inter path uses P_L0_16x16, which is mb_type=0.
@@ -1145,13 +1158,17 @@ module h264_bitstream #(
                             end
 
                             // ===== Inter MB path (sub 10+) =====
-                            // After mb_type=UE(0), encode ref_idx_l0 if the slice has more than
-                            // one active ref, then emit mvd_x/mvd_y.
+                            // After the inter mb_type, P-slices may need ref_idx_l0 before the
+                            // motion-vector-difference syntax. The current B-slice subset uses one
+                            // active reference per list, so it emits only the relevant MVD pairs.
                             // For exactly two active refs, ref_idx_l0 uses TE(v) with x=1,
                             // which is a single bit encoded as (1 ^ ref_idx).
                             // For three active refs, TE(v) falls back to UE(v) of ref_idx.
                             6'd10: begin
-                                if (slice_multi_ref_enable) begin
+                                if (is_b_slice) begin
+                                    ue_input <= is_b_l1_mb ? mvd_x_l1_codenum_w : mvd_x_l0_codenum_w;
+                                    sub <= 6'd12;
+                                end else if (slice_multi_ref_enable) begin
                                     if (slice_num_ref_idx_l0_active_minus1 == 2'd1) begin
                                         bit_buf <= bit_buf | ({(~mb_ref_idx_l0[0]), 95'd0} >> bit_cnt[6:0]);
                                         bit_cnt <= bit_cnt + 7'd1;
@@ -1165,7 +1182,7 @@ module h264_bitstream #(
                                 end
                             end
                             6'd11: begin
-                                ue_input <= mvd_x_codenum_w;
+                                ue_input <= mvd_x_l0_codenum_w;
                                 sub <= 6'd12;
                             end
                             6'd12: begin
@@ -1173,7 +1190,7 @@ module h264_bitstream #(
                                 // encoded with the same UE(v) machinery as the parameter sets.
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
-                                ue_input <= mvd_y_codenum_w;
+                                ue_input <= (is_b_slice && is_b_l1_mb) ? mvd_y_l1_codenum_w : mvd_y_l0_codenum_w;
                                 sub <= 6'd13;
                             end
                             6'd13: begin
@@ -1185,7 +1202,12 @@ module h264_bitstream #(
                             6'd14: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
-                                sub <= 6'd15;
+                                if (is_b_slice && is_b_bi_mb) begin
+                                    ue_input <= mvd_x_l1_codenum_w;
+                                    sub <= 6'd27;
+                                end else begin
+                                    sub <= 6'd15;
+                                end
                             end
                             6'd15: begin
                                 // Inter coded_block_pattern:
@@ -1230,6 +1252,22 @@ module h264_bitstream #(
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
                                 sub <= 6'd11;
+                            end
+                            6'd27: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= mvd_y_l1_codenum_w;
+                                sub <= 6'd28;
+                            end
+                            6'd28: begin
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
+                                sub <= 6'd29;
+                            end
+                            6'd29: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                sub <= 6'd15;
                             end
                             6'd25: begin
                                 if (bit_cnt[2:0] != 3'd0)
