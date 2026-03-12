@@ -196,6 +196,10 @@ module h264_encoder_top #(
     reg [8:0]  luma_fetch_cnt;
     reg [4:0]  luma_f_row, luma_f_col;
     reg [LUMA_RAW_SAMPLES*BD-1:0] luma_raw;
+    reg        b_bi_luma_fetch_l1_phase;
+    reg [256*BIT_DEPTH-1:0] b_bi_fullpel_ref_l1;
+    reg [17:0] b_bi_fullpel_sad_l1;
+    reg [256*BIT_DEPTH-1:0] b_bi_luma_pred_l0;
 
     // Inter chroma prediction buffers (8x8 for 4:2:0, 8x16 for 4:2:2)
     reg [CHR_MB_PIXELS*BIT_DEPTH-1:0] inter_chr_pred_cb, inter_chr_pred_cr;
@@ -1433,6 +1437,7 @@ pred_buf = {(256*BD){1'b0}};
             me_fullpel_mvx <= 8'sd0; me_fullpel_mvy <= 8'sd0;
             luma_fetch_started <= 1'b0; luma_fetch_cnt <= 9'd0; luma_f_row <= 5'd0; luma_f_col <= 5'd0;
             luma_raw <= {(LUMA_RAW_SAMPLES*BD){1'b0}};
+            b_bi_luma_fetch_l1_phase <= 1'b0; b_bi_fullpel_ref_l1 <= {(256*BD){1'b0}}; b_bi_fullpel_sad_l1 <= 18'd0; b_bi_luma_pred_l0 <= {(256*BD){1'b0}};
             inter_chr_pred_cb <= {(CHR_MB_PIXELS*BD){1'b0}}; inter_chr_pred_cr <= {(CHR_MB_PIXELS*BD){1'b0}};
             b_bi_chr_pred_cb_l0 <= {(CHR_MB_PIXELS*BD){1'b0}}; b_bi_chr_pred_cr_l0 <= {(CHR_MB_PIXELS*BD){1'b0}};
             inter_chr_mode <= 1'b0;
@@ -1522,6 +1527,7 @@ pred_buf = {(256*BD){1'b0}};
                     is_skip_mb_reg <= 1'b0;
                     is_b_l1_mb_reg <= 1'b0;
                     is_b_bi_mb_reg <= 1'b0;
+                    b_bi_luma_fetch_l1_phase <= 1'b0;
                     skip_probe_pending <= 1'b0;
                     inter_chr_prefetched_valid <= 1'b0;
                     mb_has_residual <= 1'b0;
@@ -1708,21 +1714,25 @@ pred_buf = {(256*BD){1'b0}};
                             me_best_mvx_l1 <= (me_mvx_w <<< 2);
                             me_best_mvy_l1 <= (me_mvy_w <<< 2);
                             me_best_sad <= sel_sad;
+                            b_bi_fullpel_ref_l1 <= me_ref_mb_w;
+                            b_bi_fullpel_sad_l1 <= me_sad_w;
+                            b_bi_luma_fetch_l1_phase <= 1'b0;
                             mvp_x <= bi_mvp_x_l0;
                             mvp_y <= bi_mvp_y_l0;
                             mvp_x_l0 <= bi_mvp_x_l0;
                             mvp_y_l0 <= bi_mvp_y_l0;
                             mvp_x_l1 <= bi_mvp_x_l1;
                             mvp_y_l1 <= bi_mvp_y_l1;
-                            is_inter_mb_reg <= (sel_sad < INTER_SAD_THRESHOLD);
-                            if (sel_sad < INTER_SAD_THRESHOLD) begin
-                                top_state <= TS_MB_HDR;
-                            end else begin
-                                is_b_bi_mb_reg <= 1'b0;
-                                use_intra16_mb_reg <= 1'b0;
-                                use_ipcm_mb_reg <= (ENABLE_P_IPCM != 0);
-                                top_state <= TS_MB_HDR;
-                            end
+                            luma_fetch_started <= 1'b0;
+                            luma_fetch_cnt <= 9'd0;
+                            luma_f_row <= 5'd0;
+                            luma_f_col <= 5'd0;
+                            me_fullpel_mvx <= me_pass0_mvx;
+                            me_fullpel_mvy <= me_pass0_mvy;
+                            me_fullpel_best_sad <= me_pass0_sad;
+                            inter_pred_buf <= me_pass0_ref_mb;
+                            ref_rd_bank_sel <= older_ref_bank;
+                            top_state <= TS_LUMA_FETCH;
                         end else begin
                             luma_fetch_started <= 1'b0;
                             luma_fetch_cnt <= 9'd0;
@@ -1749,11 +1759,13 @@ pred_buf = {(256*BD){1'b0}};
                         integer cand_dx, cand_dy, px, py;
                         integer cand_sad, pred_sample, ref1_sample, ref2_sample, orig_sample, pskip_idx;
                         integer best_sad_i, best_dx_i, best_dy_i;
+                        integer bi_final_idx, bi_final_sample, bi_final_orig_sample, bi_final_sad_i;
                         integer frac_x_i, frac_y_i, base_x_i, base_y_i;
                         reg [3:0] qpel_idx_i;
                         reg [1:0] ref0_plane_i, ref1_plane_i;
                         reg [256*BIT_DEPTH-1:0] best_pred_buf_i;
                         reg [256*BIT_DEPTH-1:0] cand_pred_buf_i;
+                        reg [256*BIT_DEPTH-1:0] bi_final_pred_buf_i;
                         reg signed [7:0] ax, ay, bx, by, cx, cy;
                         reg a_avail, b_avail, c_avail, d_avail;
                         reg a_match, b_match, c_match;
@@ -1822,194 +1834,245 @@ pred_buf = {(256*BD){1'b0}};
                         me_best_sad <= best_sad_i;
                         inter_pred_buf <= best_pred_buf_i;
                         is_inter_mb_reg <= (best_sad_i < INTER_SAD_THRESHOLD);
-
-                        a_avail = (mb_x > 7'd0);
-                        b_avail = (mb_y > 6'd0);
-                        c_avail = (mb_y > 6'd0) && (mb_x < MB_COLS[6:0] - 7'd1);
-                        d_avail = (mb_y > 6'd0) && (mb_x > 7'd0);
-
-                        if (is_b_frame && is_b_l1_mb_reg) begin
-                            ax = a_avail ? left_mvx_l1 : 8'sd0;
-                            ay = a_avail ? left_mvy_l1 : 8'sd0;
-                            a_match = a_avail && left_is_inter_l1 &&
-                                      (left_ref_idx_l1 == mb_ref_idx_reg);
-
-                            bx = b_avail ? top_mvx_l1[mb_x] : 8'sd0;
-                            by = b_avail ? top_mvy_l1[mb_x] : 8'sd0;
-                            b_match = b_avail && top_is_inter_l1[mb_x] &&
-                                      (top_ref_idx_l1[mb_x] == mb_ref_idx_reg);
-
-                            if (c_avail) begin
-                                cx = top_mvx_l1[mb_x + 7'd1];
-                                cy = top_mvy_l1[mb_x + 7'd1];
-                                c_match = top_is_inter_l1[mb_x + 7'd1] &&
-                                          (top_ref_idx_l1[mb_x + 7'd1] == mb_ref_idx_reg);
-                            end else if (d_avail) begin
-                                cx = diag_mvx_l1;
-                                cy = diag_mvy_l1;
-                                c_match = diag_is_inter_l1 &&
-                                          (diag_ref_idx_l1 == mb_ref_idx_reg);
+                        if (is_b_frame && is_b_bi_mb_reg) begin
+                            if (!b_bi_luma_fetch_l1_phase) begin
+                                me_best_mvx_l0 <= (me_fullpel_mvx <<< 2) + best_dx_i;
+                                me_best_mvy_l0 <= (me_fullpel_mvy <<< 2) + best_dy_i;
+                                b_bi_luma_pred_l0 <= best_pred_buf_i;
+                                me_fullpel_mvx <= $signed(me_best_mvx_l1) >>> 2;
+                                me_fullpel_mvy <= $signed(me_best_mvy_l1) >>> 2;
+                                me_fullpel_best_sad <= b_bi_fullpel_sad_l1;
+                                inter_pred_buf <= b_bi_fullpel_ref_l1;
+                                b_bi_luma_fetch_l1_phase <= 1'b1;
+                                luma_fetch_started <= 1'b0;
+                                luma_fetch_cnt <= 9'd0;
+                                luma_f_row <= 5'd0;
+                                luma_f_col <= 5'd0;
+                                ref_rd_bank_sel <= newest_ref_bank;
+                                top_state <= TS_LUMA_FETCH;
                             end else begin
-                                cx = 8'sd0;
-                                cy = 8'sd0;
-                                c_match = 1'b0;
+                                bi_final_sad_i = 0;
+                                bi_final_pred_buf_i = {(256*BD){1'b0}};
+                                for (bi_final_idx = 0; bi_final_idx < 256; bi_final_idx = bi_final_idx + 1) begin
+                                    bi_final_sample =
+                                        (b_bi_luma_pred_l0[bi_final_idx*BD +: BD] +
+                                         best_pred_buf_i[bi_final_idx*BD +: BD] + 1) >>> 1;
+                                    bi_final_pred_buf_i[bi_final_idx*BD +: BD] = bi_final_sample[BD-1:0];
+                                    bi_final_orig_sample = fetched_luma[bi_final_idx*BD +: BD];
+                                    if (bi_final_orig_sample >= bi_final_sample)
+                                        bi_final_sad_i = bi_final_sad_i + (bi_final_orig_sample - bi_final_sample);
+                                    else
+                                        bi_final_sad_i = bi_final_sad_i + (bi_final_sample - bi_final_orig_sample);
+                                end
+
+                                me_best_mvx <= me_best_mvx_l0;
+                                me_best_mvy <= me_best_mvy_l0;
+                                me_best_mvx_l1 <= (me_fullpel_mvx <<< 2) + best_dx_i;
+                                me_best_mvy_l1 <= (me_fullpel_mvy <<< 2) + best_dy_i;
+                                me_best_sad <= bi_final_sad_i;
+                                inter_pred_buf <= bi_final_pred_buf_i;
+                                is_inter_mb_reg <= (bi_final_sad_i < INTER_SAD_THRESHOLD);
+                                b_bi_luma_fetch_l1_phase <= 1'b0;
+                                if (bi_final_sad_i < INTER_SAD_THRESHOLD) begin
+                                    use_intra16_mb_reg <= 1'b0;
+                                    use_ipcm_mb_reg <= 1'b0;
+                                    top_state <= TS_MB_HDR;
+                                end else begin
+                                    is_b_bi_mb_reg <= 1'b0;
+                                    use_intra16_mb_reg <= 1'b0;
+                                    use_ipcm_mb_reg <= (ENABLE_P_IPCM != 0);
+                                    top_state <= TS_MB_HDR;
+                                end
                             end
                         end else begin
-                            ax = a_avail ? left_mvx : 8'sd0;
-                            ay = a_avail ? left_mvy : 8'sd0;
-                            a_match = a_avail && left_is_inter &&
-                                      (left_ref_idx == mb_ref_idx_reg);
+                            a_avail = (mb_x > 7'd0);
+                            b_avail = (mb_y > 6'd0);
+                            c_avail = (mb_y > 6'd0) && (mb_x < MB_COLS[6:0] - 7'd1);
+                            d_avail = (mb_y > 6'd0) && (mb_x > 7'd0);
 
-                            bx = b_avail ? top_mvx[mb_x] : 8'sd0;
-                            by = b_avail ? top_mvy[mb_x] : 8'sd0;
-                            b_match = b_avail && top_is_inter[mb_x] &&
-                                      (top_ref_idx[mb_x] == mb_ref_idx_reg);
+                            if (is_b_frame && is_b_l1_mb_reg) begin
+                                ax = a_avail ? left_mvx_l1 : 8'sd0;
+                                ay = a_avail ? left_mvy_l1 : 8'sd0;
+                                a_match = a_avail && left_is_inter_l1 &&
+                                          (left_ref_idx_l1 == mb_ref_idx_reg);
 
-                            if (c_avail) begin
-                                cx = top_mvx[mb_x + 7'd1];
-                                cy = top_mvy[mb_x + 7'd1];
-                                c_match = top_is_inter[mb_x + 7'd1] &&
-                                          (top_ref_idx[mb_x + 7'd1] == mb_ref_idx_reg);
-                            end else if (d_avail) begin
-                                cx = diag_mvx;
-                                cy = diag_mvy;
-                                c_match = diag_is_inter &&
-                                          (diag_ref_idx == mb_ref_idx_reg);
+                                bx = b_avail ? top_mvx_l1[mb_x] : 8'sd0;
+                                by = b_avail ? top_mvy_l1[mb_x] : 8'sd0;
+                                b_match = b_avail && top_is_inter_l1[mb_x] &&
+                                          (top_ref_idx_l1[mb_x] == mb_ref_idx_reg);
+
+                                if (c_avail) begin
+                                    cx = top_mvx_l1[mb_x + 7'd1];
+                                    cy = top_mvy_l1[mb_x + 7'd1];
+                                    c_match = top_is_inter_l1[mb_x + 7'd1] &&
+                                              (top_ref_idx_l1[mb_x + 7'd1] == mb_ref_idx_reg);
+                                end else if (d_avail) begin
+                                    cx = diag_mvx_l1;
+                                    cy = diag_mvy_l1;
+                                    c_match = diag_is_inter_l1 &&
+                                              (diag_ref_idx_l1 == mb_ref_idx_reg);
+                                end else begin
+                                    cx = 8'sd0;
+                                    cy = 8'sd0;
+                                    c_match = 1'b0;
+                                end
                             end else begin
-                                cx = 8'sd0;
-                                cy = 8'sd0;
-                                c_match = 1'b0;
-                            end
-                        end
+                                ax = a_avail ? left_mvx : 8'sd0;
+                                ay = a_avail ? left_mvy : 8'sd0;
+                                a_match = a_avail && left_is_inter &&
+                                          (left_ref_idx == mb_ref_idx_reg);
 
-                        if (!b_avail && !c_avail && !d_avail) begin
-                            bx = ax; by = ay; b_match = a_match;
-                            cx = ax; cy = ay; c_match = a_match;
-                        end
+                                bx = b_avail ? top_mvx[mb_x] : 8'sd0;
+                                by = b_avail ? top_mvy[mb_x] : 8'sd0;
+                                b_match = b_avail && top_is_inter[mb_x] &&
+                                          (top_ref_idx[mb_x] == mb_ref_idx_reg);
 
-                        match_cnt = {1'b0, a_match} + {1'b0, b_match} + {1'b0, c_match};
-                        med_x = (ax > bx && ax > cx) ? ((bx > cx) ? bx : cx) :
-                                (ax < bx && ax < cx) ? ((bx < cx) ? bx : cx) : ax;
-                        med_y = (ay > by && ay > cy) ? ((by > cy) ? by : cy) :
-                                (ay < by && ay < cy) ? ((by < cy) ? by : cy) : ay;
-
-                        if (match_cnt == 2'd1) begin
-                            if (a_match)      begin sel_mvp_x = ax; sel_mvp_y = ay; end
-                            else if (b_match) begin sel_mvp_x = bx; sel_mvp_y = by; end
-                            else              begin sel_mvp_x = cx; sel_mvp_y = cy; end
-                        end else begin
-                            sel_mvp_x = med_x;
-                            sel_mvp_y = med_y;
-                        end
-                        mvp_x <= sel_mvp_x;
-                        mvp_y <= sel_mvp_y;
-                        if (is_b_frame && is_b_l1_mb_reg) begin
-                            mvp_x_l0 <= 8'sd0;
-                            mvp_y_l0 <= 8'sd0;
-                            me_best_mvx_l0 <= 8'sd0;
-                            me_best_mvy_l0 <= 8'sd0;
-                            mvp_x_l1 <= sel_mvp_x;
-                            mvp_y_l1 <= sel_mvp_y;
-                            me_best_mvx_l1 <= (me_fullpel_mvx <<< 2) + best_dx_i;
-                            me_best_mvy_l1 <= (me_fullpel_mvy <<< 2) + best_dy_i;
-                        end else begin
-                            mvp_x_l0 <= sel_mvp_x;
-                            mvp_y_l0 <= sel_mvp_y;
-                            me_best_mvx_l0 <= (me_fullpel_mvx <<< 2) + best_dx_i;
-                            me_best_mvy_l0 <= (me_fullpel_mvy <<< 2) + best_dy_i;
-                            mvp_x_l1 <= 8'sd0;
-                            mvp_y_l1 <= 8'sd0;
-                            me_best_mvx_l1 <= 8'sd0;
-                            me_best_mvy_l1 <= 8'sd0;
-                        end
-
-                        pskip_luma_exact = 1'b1;
-                        for (pskip_idx = 0; pskip_idx < 256; pskip_idx = pskip_idx + 1) begin
-                            if (fetched_luma[pskip_idx*BD +: BD] != best_pred_buf_i[pskip_idx*BD +: BD])
-                                pskip_luma_exact = 1'b0;
-                        end
-
-                        if (!a_avail || !b_avail ||
-                            (a_avail && left_is_inter && (left_ref_idx == 2'd0) &&
-                             (left_mvx == 8'sd0) && (left_mvy == 8'sd0)) ||
-                            (b_avail && top_is_inter[mb_x] && (top_ref_idx[mb_x] == 2'd0) &&
-                             (top_mvx[mb_x] == 8'sd0) && (top_mvy[mb_x] == 8'sd0))) begin
-                            pskip_x = 8'sd0;
-                            pskip_y = 8'sd0;
-                        end else begin
-                            pskip_a_match = a_avail && left_is_inter && (left_ref_idx == 2'd0);
-                            pskip_b_match = b_avail && top_is_inter[mb_x] && (top_ref_idx[mb_x] == 2'd0);
-                            if (c_avail) begin
-                                pskip_c_match = top_is_inter[mb_x + 7'd1] && (top_ref_idx[mb_x + 7'd1] == 2'd0);
-                            end else if (d_avail) begin
-                                pskip_c_match = diag_is_inter && (diag_ref_idx == 2'd0);
-                            end else begin
-                                pskip_c_match = 1'b0;
+                                if (c_avail) begin
+                                    cx = top_mvx[mb_x + 7'd1];
+                                    cy = top_mvy[mb_x + 7'd1];
+                                    c_match = top_is_inter[mb_x + 7'd1] &&
+                                              (top_ref_idx[mb_x + 7'd1] == mb_ref_idx_reg);
+                                end else if (d_avail) begin
+                                    cx = diag_mvx;
+                                    cy = diag_mvy;
+                                    c_match = diag_is_inter &&
+                                              (diag_ref_idx == mb_ref_idx_reg);
+                                end else begin
+                                    cx = 8'sd0;
+                                    cy = 8'sd0;
+                                    c_match = 1'b0;
+                                end
                             end
 
-                            pskip_match_cnt = {1'b0, pskip_a_match} + {1'b0, pskip_b_match} + {1'b0, pskip_c_match};
-                            pskip_med_x = (ax > bx && ax > cx) ? ((bx > cx) ? bx : cx) :
-                                          (ax < bx && ax < cx) ? ((bx < cx) ? bx : cx) : ax;
-                            pskip_med_y = (ay > by && ay > cy) ? ((by > cy) ? by : cy) :
-                                          (ay < by && ay < cy) ? ((by < cy) ? by : cy) : ay;
-                            if (pskip_match_cnt == 2'd1) begin
-                                if (pskip_a_match)      begin pskip_x = ax; pskip_y = ay; end
-                                else if (pskip_b_match) begin pskip_x = bx; pskip_y = by; end
-                                else                    begin pskip_x = cx; pskip_y = cy; end
-                            end else begin
-                                pskip_x = pskip_med_x;
-                                pskip_y = pskip_med_y;
+                            if (!b_avail && !c_avail && !d_avail) begin
+                                bx = ax; by = ay; b_match = a_match;
+                                cx = ax; cy = ay; c_match = a_match;
                             end
-                        end
-                        pskip_syntax_eligible_reg <= is_p_frame && !use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
-                                                     ($signed((me_fullpel_mvx <<< 2) + best_dx_i) == pskip_x) &&
-                                                     ($signed((me_fullpel_mvy <<< 2) + best_dy_i) == pskip_y);
-                        /* verilator lint_off WIDTH */
-                        if (dbg_target_mb) begin
-                            $display("[SUBPEL] F%0d MB%0d mbx=%0d mby=%0d ref=%0d fullsad=%0d bestsad=%0d dxq=%0d dyq=%0d mv=(%0d,%0d)",
-                                dbg_frame_cnt, mb_count, mb_x, mb_y, mb_ref_idx_reg,
-                                me_fullpel_best_sad, best_sad_i, best_dx_i, best_dy_i,
-                                $signed((me_fullpel_mvx <<< 2) + best_dx_i),
-                                $signed((me_fullpel_mvy <<< 2) + best_dy_i));
-                        end
-                        if (dbg_target_mb) begin
-                            $display("[MVP] F%0d MB%0d mbx=%0d mby=%0d ref=%0d A(%0d,%0d,m=%0d) B(%0d,%0d,m=%0d) C(%0d,%0d,m=%0d) match=%0d med(%0d,%0d) sad=%0d inter=%0d",
-                                dbg_frame_cnt, mb_count, mb_x, mb_y, mb_ref_idx_reg,
-                                $signed(ax), $signed(ay), a_match,
-                                $signed(bx), $signed(by), b_match,
-                                $signed(cx), $signed(cy), c_match,
-                                match_cnt, $signed(med_x), $signed(med_y),
-                                best_sad_i, (best_sad_i < INTER_SAD_THRESHOLD));
-                        end
-                        /* verilator lint_on WIDTH */
 
-                        if (best_sad_i < INTER_SAD_THRESHOLD) begin
-                            use_intra16_mb_reg <= 1'b0;
-                            use_ipcm_mb_reg <= 1'b0;
-                            if (is_p_frame && !use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
-                                pskip_luma_exact &&
-                                ($signed((me_fullpel_mvx <<< 2) + best_dx_i) == pskip_x) &&
-                                ($signed((me_fullpel_mvy <<< 2) + best_dy_i) == pskip_y)) begin
-                                skip_probe_pending <= 1'b1;
-                                chr_fetch_cnt <= {CHR_FETCH_W{1'b0}};
-                                chr_fetch_started <= 1'b0;
-                                chr_raw_cb <= {(CHR_RAW_SAMPLES*BD){1'b0}};
-                                chr_raw_cr <= {(CHR_RAW_SAMPLES*BD){1'b0}};
-                                chr_f_row <= 5'd0;
-                                chr_f_col <= {CHR_FETCH_COL_W{1'b0}};
-                                b_bi_chr_fetch_l1_phase <= 1'b0;
-                                chr_frac_x <= (me_fullpel_mvx <<< 2) + best_dx_i;
-                                chr_frac_y <= (me_fullpel_mvy <<< 2) + best_dy_i;
-                                chr_fetch_cols <= ((((me_fullpel_mvx <<< 2) + best_dx_i) & 8'sd7) != 8'sd0) ? (CHR_MB_WIDTH[CHR_FETCH_COL_W-1:0] + {{(CHR_FETCH_COL_W-1){1'b0}}, 1'b1}) : CHR_MB_WIDTH[CHR_FETCH_COL_W-1:0];
-                                chr_fetch_rows <= ((((me_fullpel_mvy <<< 2) + best_dy_i) & 8'sd7) != 8'sd0) ? (CHR_MB_HEIGHT[4:0] + 5'd1) : CHR_MB_HEIGHT[4:0];
-                                top_state <= TS_CHR_FETCH;
+                            match_cnt = {1'b0, a_match} + {1'b0, b_match} + {1'b0, c_match};
+                            med_x = (ax > bx && ax > cx) ? ((bx > cx) ? bx : cx) :
+                                    (ax < bx && ax < cx) ? ((bx < cx) ? bx : cx) : ax;
+                            med_y = (ay > by && ay > cy) ? ((by > cy) ? by : cy) :
+                                    (ay < by && ay < cy) ? ((by < cy) ? by : cy) : ay;
+
+                            if (match_cnt == 2'd1) begin
+                                if (a_match)      begin sel_mvp_x = ax; sel_mvp_y = ay; end
+                                else if (b_match) begin sel_mvp_x = bx; sel_mvp_y = by; end
+                                else              begin sel_mvp_x = cx; sel_mvp_y = cy; end
                             end else begin
+                                sel_mvp_x = med_x;
+                                sel_mvp_y = med_y;
+                            end
+                            mvp_x <= sel_mvp_x;
+                            mvp_y <= sel_mvp_y;
+                            if (is_b_frame && is_b_l1_mb_reg) begin
+                                mvp_x_l0 <= 8'sd0;
+                                mvp_y_l0 <= 8'sd0;
+                                me_best_mvx_l0 <= 8'sd0;
+                                me_best_mvy_l0 <= 8'sd0;
+                                mvp_x_l1 <= sel_mvp_x;
+                                mvp_y_l1 <= sel_mvp_y;
+                                me_best_mvx_l1 <= (me_fullpel_mvx <<< 2) + best_dx_i;
+                                me_best_mvy_l1 <= (me_fullpel_mvy <<< 2) + best_dy_i;
+                            end else begin
+                                mvp_x_l0 <= sel_mvp_x;
+                                mvp_y_l0 <= sel_mvp_y;
+                                me_best_mvx_l0 <= (me_fullpel_mvx <<< 2) + best_dx_i;
+                                me_best_mvy_l0 <= (me_fullpel_mvy <<< 2) + best_dy_i;
+                                mvp_x_l1 <= 8'sd0;
+                                mvp_y_l1 <= 8'sd0;
+                                me_best_mvx_l1 <= 8'sd0;
+                                me_best_mvy_l1 <= 8'sd0;
+                            end
+
+                            pskip_luma_exact = 1'b1;
+                            for (pskip_idx = 0; pskip_idx < 256; pskip_idx = pskip_idx + 1) begin
+                                if (fetched_luma[pskip_idx*BD +: BD] != best_pred_buf_i[pskip_idx*BD +: BD])
+                                    pskip_luma_exact = 1'b0;
+                            end
+
+                            if (!a_avail || !b_avail ||
+                                (a_avail && left_is_inter && (left_ref_idx == 2'd0) &&
+                                 (left_mvx == 8'sd0) && (left_mvy == 8'sd0)) ||
+                                (b_avail && top_is_inter[mb_x] && (top_ref_idx[mb_x] == 2'd0) &&
+                                 (top_mvx[mb_x] == 8'sd0) && (top_mvy[mb_x] == 8'sd0))) begin
+                                pskip_x = 8'sd0;
+                                pskip_y = 8'sd0;
+                            end else begin
+                                pskip_a_match = a_avail && left_is_inter && (left_ref_idx == 2'd0);
+                                pskip_b_match = b_avail && top_is_inter[mb_x] && (top_ref_idx[mb_x] == 2'd0);
+                                if (c_avail) begin
+                                    pskip_c_match = top_is_inter[mb_x + 7'd1] && (top_ref_idx[mb_x + 7'd1] == 2'd0);
+                                end else if (d_avail) begin
+                                    pskip_c_match = diag_is_inter && (diag_ref_idx == 2'd0);
+                                end else begin
+                                    pskip_c_match = 1'b0;
+                                end
+
+                                pskip_match_cnt = {1'b0, pskip_a_match} + {1'b0, pskip_b_match} + {1'b0, pskip_c_match};
+                                pskip_med_x = (ax > bx && ax > cx) ? ((bx > cx) ? bx : cx) :
+                                              (ax < bx && ax < cx) ? ((bx < cx) ? bx : cx) : ax;
+                                pskip_med_y = (ay > by && ay > cy) ? ((by > cy) ? by : cy) :
+                                              (ay < by && ay < cy) ? ((by < cy) ? by : cy) : ay;
+                                if (pskip_match_cnt == 2'd1) begin
+                                    if (pskip_a_match)      begin pskip_x = ax; pskip_y = ay; end
+                                    else if (pskip_b_match) begin pskip_x = bx; pskip_y = by; end
+                                    else                    begin pskip_x = cx; pskip_y = cy; end
+                                end else begin
+                                    pskip_x = pskip_med_x;
+                                    pskip_y = pskip_med_y;
+                                end
+                            end
+                            pskip_syntax_eligible_reg <= is_p_frame && !use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
+                                                         ($signed((me_fullpel_mvx <<< 2) + best_dx_i) == pskip_x) &&
+                                                         ($signed((me_fullpel_mvy <<< 2) + best_dy_i) == pskip_y);
+                            /* verilator lint_off WIDTH */
+                            if (dbg_target_mb) begin
+                                $display("[SUBPEL] F%0d MB%0d mbx=%0d mby=%0d ref=%0d fullsad=%0d bestsad=%0d dxq=%0d dyq=%0d mv=(%0d,%0d)",
+                                    dbg_frame_cnt, mb_count, mb_x, mb_y, mb_ref_idx_reg,
+                                    me_fullpel_best_sad, best_sad_i, best_dx_i, best_dy_i,
+                                    $signed((me_fullpel_mvx <<< 2) + best_dx_i),
+                                    $signed((me_fullpel_mvy <<< 2) + best_dy_i));
+                            end
+                            if (dbg_target_mb) begin
+                                $display("[MVP] F%0d MB%0d mbx=%0d mby=%0d ref=%0d A(%0d,%0d,m=%0d) B(%0d,%0d,m=%0d) C(%0d,%0d,m=%0d) match=%0d med(%0d,%0d) sad=%0d inter=%0d",
+                                    dbg_frame_cnt, mb_count, mb_x, mb_y, mb_ref_idx_reg,
+                                    $signed(ax), $signed(ay), a_match,
+                                    $signed(bx), $signed(by), b_match,
+                                    $signed(cx), $signed(cy), c_match,
+                                    match_cnt, $signed(med_x), $signed(med_y),
+                                    best_sad_i, (best_sad_i < INTER_SAD_THRESHOLD));
+                            end
+                            /* verilator lint_on WIDTH */
+
+                            if (best_sad_i < INTER_SAD_THRESHOLD) begin
+                                use_intra16_mb_reg <= 1'b0;
+                                use_ipcm_mb_reg <= 1'b0;
+                                if (is_p_frame && !use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
+                                    pskip_luma_exact &&
+                                    ($signed((me_fullpel_mvx <<< 2) + best_dx_i) == pskip_x) &&
+                                    ($signed((me_fullpel_mvy <<< 2) + best_dy_i) == pskip_y)) begin
+                                    skip_probe_pending <= 1'b1;
+                                    chr_fetch_cnt <= {CHR_FETCH_W{1'b0}};
+                                    chr_fetch_started <= 1'b0;
+                                    chr_raw_cb <= {(CHR_RAW_SAMPLES*BD){1'b0}};
+                                    chr_raw_cr <= {(CHR_RAW_SAMPLES*BD){1'b0}};
+                                    chr_f_row <= 5'd0;
+                                    chr_f_col <= {CHR_FETCH_COL_W{1'b0}};
+                                    b_bi_chr_fetch_l1_phase <= 1'b0;
+                                    chr_frac_x <= (me_fullpel_mvx <<< 2) + best_dx_i;
+                                    chr_frac_y <= (me_fullpel_mvy <<< 2) + best_dy_i;
+                                    chr_fetch_cols <= ((((me_fullpel_mvx <<< 2) + best_dx_i) & 8'sd7) != 8'sd0) ? (CHR_MB_WIDTH[CHR_FETCH_COL_W-1:0] + {{(CHR_FETCH_COL_W-1){1'b0}}, 1'b1}) : CHR_MB_WIDTH[CHR_FETCH_COL_W-1:0];
+                                    chr_fetch_rows <= ((((me_fullpel_mvy <<< 2) + best_dy_i) & 8'sd7) != 8'sd0) ? (CHR_MB_HEIGHT[4:0] + 5'd1) : CHR_MB_HEIGHT[4:0];
+                                    top_state <= TS_CHR_FETCH;
+                                end else begin
+                                    top_state <= TS_MB_HDR;
+                                end
+                            end else begin
+                                use_intra16_mb_reg <= 1'b0;
+                                use_ipcm_mb_reg <= (ENABLE_P_IPCM != 0);
                                 top_state <= TS_MB_HDR;
                             end
-                        end else begin
-                            use_intra16_mb_reg <= 1'b0;
-                            use_ipcm_mb_reg <= (ENABLE_P_IPCM != 0);
-                            top_state <= TS_MB_HDR;
                         end
                     end
                 end
@@ -2493,7 +2556,16 @@ pred_buf = {(256*BD){1'b0}};
                     diag_ref_idx_l1 <= top_ref_idx_l1[mb_x];
                     // Store MV and inter status for neighbor prediction
                     if (is_inter_mb_reg) begin
-                        if (is_b_frame && is_b_l1_mb_reg) begin
+                        if (is_b_frame && is_b_bi_mb_reg) begin
+                            top_mvx[mb_x] <= me_best_mvx_l0;
+                            top_mvy[mb_x] <= me_best_mvy_l0;
+                            top_is_inter[mb_x] <= 1'b1;
+                            top_ref_idx[mb_x] <= mb_ref_idx_reg;
+                            top_mvx_l1[mb_x] <= me_best_mvx_l1;
+                            top_mvy_l1[mb_x] <= me_best_mvy_l1;
+                            top_is_inter_l1[mb_x] <= 1'b1;
+                            top_ref_idx_l1[mb_x] <= mb_ref_idx_l1_reg;
+                        end else if (is_b_frame && is_b_l1_mb_reg) begin
                             top_mvx[mb_x] <= 8'sd0;
                             top_mvy[mb_x] <= 8'sd0;
                             top_is_inter[mb_x] <= 1'b0;
@@ -2514,7 +2586,16 @@ pred_buf = {(256*BD){1'b0}};
                         end
                         top_is_b_l1[mb_x] <= is_b_frame && is_b_l1_mb_reg;
                         top_is_i16[mb_x] <= 1'b0;
-                        if (is_b_frame && is_b_l1_mb_reg) begin
+                        if (is_b_frame && is_b_bi_mb_reg) begin
+                            left_mvx <= me_best_mvx_l0;
+                            left_mvy <= me_best_mvy_l0;
+                            left_is_inter <= 1'b1;
+                            left_ref_idx <= mb_ref_idx_reg;
+                            left_mvx_l1 <= me_best_mvx_l1;
+                            left_mvy_l1 <= me_best_mvy_l1;
+                            left_is_inter_l1 <= 1'b1;
+                            left_ref_idx_l1 <= mb_ref_idx_l1_reg;
+                        end else if (is_b_frame && is_b_l1_mb_reg) begin
                             left_mvx <= 8'sd0;
                             left_mvy <= 8'sd0;
                             left_is_inter <= 1'b0;
