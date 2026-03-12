@@ -362,8 +362,8 @@ The testbench must not:
 - Current additional validated non-`I_PCM` coverage at `320x176`:
   - `10-bit 4:2:0` ten-frame strict-decode IDR+P run
   - `10-bit 4:2:2` ten-frame strict-decode IDR+P run
-  - `8-bit 4:4:4` ten-frame strict-decode IDR+P run
-  - `10-bit 4:4:4` ten-frame strict-decode IDR+P run
+  - `8-bit 4:4:4` twenty-four-frame strict-decode IDR+P run
+  - `10-bit 4:4:4` twenty-four-frame strict-decode IDR+P run
 
 - Current software comparison baseline:
   - local path: `references/software/x264/`
@@ -641,13 +641,15 @@ The testbench must not:
   `coded_block_pattern` table rather than the `4:2:x` inter code; the current
   RTL writer now emits the correct full-residual inter code on that path, and
   focused strict-decode reruns ending on the old bad picture re-close at
-  `320x176` for extracted `2`-frame and `4`-frame clips
+  `320x176` for extracted `2`-frame, `4`-frame, `6`-frame, and `8`-frame
+  clips, and the full current-tree `8-bit 4:4:4` and `10-bit 4:4:4`
+  `24`-frame runs now also re-close
 - The `Intra_16x16` luma-DC `nC` fix now also re-closes tiny strict-decode
   non-`I_PCM` probes at `32x16` for `10-bit 4:2:0`, `10-bit 4:2:2`,
   `8-bit 4:4:4`, and `10-bit 4:4:4`
 - The reopened non-`I_PCM` path now also closes strict-decode IDR+P runs at
-  `320x176` through `10` frames for `10-bit 4:2:0`, `10-bit 4:2:2`,
-  `8-bit 4:4:4`, and `10-bit 4:4:4`
+  `320x176` through `10` frames for `10-bit 4:2:0` and `10-bit 4:2:2`, and
+  through `24` frames for `8-bit 4:4:4` and `10-bit 4:4:4`
 - The current tree now also validates a non-reference `B`-slice on the RTL byte
   path at `320x176` with frame `0` on the IDR `I_PCM` path and frame `1` on
   the non-reference `B`-slice `I_PCM` path, exact decoded-YUV match, and
@@ -703,7 +705,8 @@ The testbench must not:
     quarter-pel luma / chroma fractional inter flow
   - No broader inter partition coverage or `8x8dct`-class transform support
   - No broader `4:4:4` support beyond the current `320x176` strict-decode
-    non-`I_PCM` path through `10` frames and spot `I_PCM` coverage
+    non-`I_PCM` path through `24` frames for `8-bit` and `10-bit`, plus spot
+    `I_PCM` coverage
   - No full in-loop deblocking engine
   - No full-standard profile/tool coverage yet
 
@@ -716,8 +719,8 @@ The testbench must not:
   - Broader sub-pel motion estimation / compensation support
   - Broader inter partition coverage and `8x8dct`-class transform coverage
   - Broader `4:4:4` support beyond the current `320x176` strict-decode
-    non-`I_PCM` path through `10` frames and spot `I_PCM` coverage if the
-    project is claiming full-standard feature coverage
+    non-`I_PCM` path through `24` frames for `8-bit` and `10-bit`, plus spot
+    `I_PCM` coverage if the project is claiming full-standard feature coverage
   - In-loop deblocking
   - Enough profile / level / tool coverage to stop calling the repo a subset
 
