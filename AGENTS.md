@@ -291,6 +291,9 @@ The testbench must not:
   - Current reordered B inter selection can choose past `List0`, future
     `List1`, or bidirectional `B_BI_16x16` prediction per macroblock on the
     current limited reordered dual-list `16x16` B path
+  - The current limited `B_BI_16x16` path now writes back both motion-vector
+    lists into neighbor state and refines each list through the quarter-pel
+    luma path before the bidirectional average is formed
   - Reordered GOP forcing can now emit reference-slot pictures as `BREF`
     instead of `P`, so encode orders such as `0,2,1,4,3` can be driven as
     all-BREF non-IDR GOPs for validation
@@ -597,19 +600,22 @@ The testbench must not:
     `--enable-idr-ipcm 1 --enable-p-ipcm 1` at `32x16`, `8-bit 4:4:4`,
     packaged MP4 output, and JSON summary in
     `output/validation_32x16_2f_444_ipcm_scripted.json`
-  - strict FFmpeg-decodable forced-`B_BI_16x16` reordered-B validation at
-    `32x16`, `3` frames, `output/validation_forcebbi_32x16_3f.h264`, and
-    `output/validation_forcebbi_32x16_3f.json`, with simulator logging showing
-    `b_bi_mbs=2` on the B picture
-  - strict FFmpeg-decodable forced-`B_BI_16x16` reordered all-`BREF`
-    validation at `320x176`, encode order `0,2,1,4,3`,
-    `output/validation_forcebbi_320x176_5f.h264`, and
-    `output/validation_forcebbi_320x176_5f.json`, with simulator logging
-    showing `b_bi_mbs=10`, `220`, and `220` across the three non-IDR pictures
-  - strict FFmpeg-decodable forced-`B_BI_16x16` reordered all-`BREF`
-    validation at `320x176`, `5` frames, `84,060,781` cycles, `11,969` bytes,
-    `output/validation_forcebbi_320x176_5f_mp4.h264`, and
-    `output/validation_forcebbi_320x176_5f_mp4.mp4`
+  - `autobi_qpelprobe_320x176_5f`: strict FFmpeg-decodable current-tree
+    reordered all-`BREF` validation at `320x176`, `5` frames, `93,525,885`
+    cycles, `4,761` bytes, RTL PSNR avg `32.579259`, RTL SSIM all `0.863570`,
+    and simulator logging showing `b_bi_mbs=0` on the three non-IDR pictures
+  - `forcebbi_qpelprobe_32x16_3f`: strict FFmpeg-decodable current-tree
+    forced-`B_BI_16x16` reordered-B validation at `32x16`, `3` frames,
+    `130,715` cycles, `150` bytes, RTL PSNR avg `30.120198`, RTL SSIM all
+    `0.774794`, `output/validation_forcebbi_qpelprobe_32x16_3f.h264`, and
+    `output/validation_forcebbi_qpelprobe_32x16_3f.json`
+  - `forcebbi_qpelprobe_320x176_5f`: strict FFmpeg-decodable current-tree
+    forced-`B_BI_16x16` reordered all-`BREF` validation at `320x176`, `5`
+    frames, `91,943,969` cycles, `10,281` bytes, RTL PSNR avg `15.889197`,
+    RTL SSIM all `0.837371`,
+    `output/validation_forcebbi_qpelprobe_320x176_5f.h264`, and
+    `output/validation_forcebbi_qpelprobe_320x176_5f.json`, with simulator
+    logging showing `b_bi_mbs=220` on the last two non-IDR pictures
 
 - A 720p chroma corruption bug was traced to raw input address overflow in the Cr plane fetch path and fixed by widening the raw input address width
 - A directional `Intra_4x4` top-right reference fetch bug was fixed in
@@ -700,8 +706,10 @@ The testbench must not:
   `weighted_bipred_idc = 1` in PPS and B-slice `pred_weight_table` entries for
   `List0` and `List1`
 - The current tree now also validates a limited `B_BI_16x16` path on reordered
-  B-picture GOPs, with explicit list0/list1 MVD syntax, simulator-side
-  `b_bi_mbs` logging, and forced validation at `32x16` and `320x176`
+  B-picture GOPs, with explicit list0/list1 neighbor state, list-specific MVD
+  syntax, simulator-side `b_bi_mbs` logging, and per-list quarter-pel luma
+  refinement before the bidirectional average; automatic BI mode selection is
+  still not closed on the real `320x176` reordered clip
 - `scripts/validate_clip.py` and `scripts/rtl_runner.py` now expose
   `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
   `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths
