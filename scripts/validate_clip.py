@@ -277,6 +277,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--force-b-slice", action="store_true")
     parser.add_argument("--force-bref-slice", action="store_true")
     parser.add_argument("--force-b-bi", action="store_true")
+    parser.add_argument("--force-b-direct", action="store_true")
     parser.add_argument("--reorder-b-gop", action="store_true")
     parser.add_argument("--decode-only", action="store_true")
     parser.add_argument("--skip-metrics", action="store_true")
@@ -334,6 +335,7 @@ def main() -> int:
         force_b_slice=1 if args.force_b_slice else 0,
         force_bref_slice=1 if args.force_bref_slice else 0,
         force_b_bi=1 if args.force_b_bi else 0,
+        force_b_direct=1 if args.force_b_direct else 0,
         reorder_b_gop=1 if args.reorder_b_gop else 0,
     )
     sim_bin = build_sim(workspace, config, build_log_path=build_log_path)
@@ -347,6 +349,7 @@ def main() -> int:
         force_b_slice=1 if args.force_b_slice else 0,
         force_bref_slice=1 if args.force_bref_slice else 0,
         force_b_bi=1 if args.force_b_bi else 0,
+        force_b_direct=1 if args.force_b_direct else 0,
         reorder_b_gop=1 if args.reorder_b_gop else 0,
         capture=True,
     )

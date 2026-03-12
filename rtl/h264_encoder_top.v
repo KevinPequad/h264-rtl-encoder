@@ -48,6 +48,9 @@ module h264_encoder_top #(
     // Validation override: force eligible reordered B inter MBs onto the
     // current B_BI_16x16 path.
     input  wire        force_b_bi_in,
+    // Validation override: force eligible reordered B inter MBs onto the
+    // current B_DIRECT_16x16 path.
+    input  wire        force_b_direct_in,
 
     // Raw frame memory read port (YUV420 planar)
     output wire [20:0] raw_mem_addr,
@@ -102,6 +105,7 @@ module h264_encoder_top #(
     localparam LUMA_RAW_ROWS        = 21;
     localparam LUMA_RAW_COLS        = 21;
     localparam LUMA_RAW_SAMPLES     = LUMA_RAW_ROWS * LUMA_RAW_COLS;
+    localparam TOTAL_MBS            = MB_COLS * MB_ROWS;
     localparam TOTAL_SUB_BLOCKS     = 16 + 2 * CHR_BLOCKS_PER_PLANE;
     localparam integer SUB_BLK_W    = (TOTAL_SUB_BLOCKS <= 1) ? 1 : $clog2(TOTAL_SUB_BLOCKS);
     localparam integer CHR_BLK_W    = (CHR_BLOCKS_PER_PLANE <= 1) ? 1 : $clog2(CHR_BLOCKS_PER_PLANE);
@@ -174,6 +178,7 @@ module h264_encoder_top #(
     reg        is_skip_mb_reg;     // 1 if current MB is emitted as P_SKIP
     reg        is_b_l1_mb_reg;     // 1 if current B inter MB uses List1 instead of List0
     reg        is_b_bi_mb_reg;     // 1 if current B inter MB uses bidirectional prediction
+    reg        is_b_direct_mb_reg; // 1 if current B inter MB uses B_DIRECT_16x16 syntax
     reg        use_intra16_mb_reg; // 1 if current intra MB uses Intra_16x16
     reg        use_ipcm_mb_reg;    // 1 if current intra MB uses I_PCM
     reg [7:0]  cur_frame_num;      // Latched frame number
@@ -201,6 +206,14 @@ module h264_encoder_top #(
     reg [17:0] b_bi_fullpel_sad_l1;
     reg [256*BIT_DEPTH-1:0] b_bi_luma_pred_l0;
     reg [17:0] b_bi_luma_sad_l0;
+    reg        b_direct_pending_valid;
+    reg        b_direct_pending_use_l1;
+    reg        b_direct_pending_use_bi;
+    reg [1:0]  b_direct_pending_ref_idx_l0, b_direct_pending_ref_idx_l1;
+    reg signed [7:0] b_direct_pending_mvx_l0, b_direct_pending_mvy_l0;
+    reg signed [7:0] b_direct_pending_mvx_l1, b_direct_pending_mvy_l1;
+    reg [256*BIT_DEPTH-1:0] b_direct_luma_pred_l0;
+    reg [17:0] b_direct_luma_sad_l0;
     reg signed [7:0] b_bi_mvp_x_l0_reg, b_bi_mvp_y_l0_reg;
     reg signed [7:0] b_bi_mvp_x_l1_reg, b_bi_mvp_y_l1_reg;
 
@@ -388,6 +401,18 @@ module h264_encoder_top #(
     reg [15:0] frame_skip_mb_count;
     reg [15:0] frame_b_l1_mb_count;
     reg [15:0] frame_b_bi_mb_count;
+    reg [15:0] frame_b_direct_mb_count;
+
+    // Reference-bank MB metadata for colocated/direct derivation.
+    reg        refmeta_is_intra [0:4][0:TOTAL_MBS-1];
+    reg        refmeta_has_l0   [0:4][0:TOTAL_MBS-1];
+    reg        refmeta_has_l1   [0:4][0:TOTAL_MBS-1];
+    reg [1:0]  refmeta_ref_idx_l0 [0:4][0:TOTAL_MBS-1];
+    reg [1:0]  refmeta_ref_idx_l1 [0:4][0:TOTAL_MBS-1];
+    reg signed [7:0] refmeta_mvx_l0 [0:4][0:TOTAL_MBS-1];
+    reg signed [7:0] refmeta_mvy_l0 [0:4][0:TOTAL_MBS-1];
+    reg signed [7:0] refmeta_mvx_l1 [0:4][0:TOTAL_MBS-1];
+    reg signed [7:0] refmeta_mvy_l1 [0:4][0:TOTAL_MBS-1];
     // Pre-computed chroma DC prediction values (one per 4x4 sub-block, per plane)
     reg [BIT_DEPTH-1:0] chr_dc_pred [0:CHR_BLOCKS_PER_PLANE-1];
     // Chroma residual override: when in chroma mode, bypass h264_intra_pred
@@ -719,6 +744,142 @@ module h264_encoder_top #(
         end
     endtask
 
+    task automatic calc_direct_list_candidate;
+        input        use_l1;
+        output       has_list;
+        output [1:0] ref_idx_out;
+        output signed [7:0] mvx_out;
+        output signed [7:0] mvy_out;
+        reg a_avail, b_avail, c_avail, d_avail;
+        reg a_valid, b_valid, c_valid;
+        reg [1:0] ref_a, ref_b, ref_c;
+        reg [1:0] min_ref;
+        begin
+            a_avail = (mb_x > 7'd0);
+            b_avail = (mb_y > 6'd0);
+            c_avail = (mb_y > 6'd0) && (mb_x < MB_COLS[6:0] - 7'd1);
+            d_avail = (mb_y > 6'd0) && (mb_x > 7'd0);
+
+            if (use_l1) begin
+                a_valid = a_avail && left_is_inter_l1;
+                b_valid = b_avail && top_is_inter_l1[mb_x];
+                if (c_avail) begin
+                    c_valid = top_is_inter_l1[mb_x + 7'd1];
+                    ref_c = top_ref_idx_l1[mb_x + 7'd1];
+                end else if (d_avail) begin
+                    c_valid = diag_is_inter_l1;
+                    ref_c = diag_ref_idx_l1;
+                end else begin
+                    c_valid = 1'b0;
+                    ref_c = 2'd0;
+                end
+                ref_a = left_ref_idx_l1;
+                ref_b = top_ref_idx_l1[mb_x];
+            end else begin
+                a_valid = a_avail && left_is_inter;
+                b_valid = b_avail && top_is_inter[mb_x];
+                if (c_avail) begin
+                    c_valid = top_is_inter[mb_x + 7'd1];
+                    ref_c = top_ref_idx[mb_x + 7'd1];
+                end else if (d_avail) begin
+                    c_valid = diag_is_inter;
+                    ref_c = diag_ref_idx;
+                end else begin
+                    c_valid = 1'b0;
+                    ref_c = 2'd0;
+                end
+                ref_a = left_ref_idx;
+                ref_b = top_ref_idx[mb_x];
+            end
+
+            if (!a_valid && !b_valid && !c_valid) begin
+                has_list = 1'b0;
+                ref_idx_out = 2'd0;
+                mvx_out = 8'sd0;
+                mvy_out = 8'sd0;
+            end else begin
+                has_list = 1'b1;
+                min_ref = a_valid ? ref_a : (b_valid ? ref_b : ref_c);
+                if (b_valid && (ref_b < min_ref))
+                    min_ref = ref_b;
+                if (c_valid && (ref_c < min_ref))
+                    min_ref = ref_c;
+                ref_idx_out = min_ref;
+                calc_inter_mvp(use_l1, min_ref, mvx_out, mvy_out);
+            end
+        end
+    endtask
+
+    task automatic calc_b_direct16x16;
+        output       direct_use_l1;
+        output       direct_use_bi;
+        output [1:0] direct_ref_idx_l0;
+        output [1:0] direct_ref_idx_l1;
+        output signed [7:0] direct_mvx_l0;
+        output signed [7:0] direct_mvy_l0;
+        output signed [7:0] direct_mvx_l1;
+        output signed [7:0] direct_mvy_l1;
+        reg has_l0, has_l1;
+        reg col_is_intra, col_has_l0, col_has_l1, col_zero_flag;
+        reg [1:0] col_ref_idx_l0, col_ref_idx_l1;
+        reg signed [7:0] col_mvx_l0, col_mvy_l0, col_mvx_l1, col_mvy_l1;
+        begin
+            calc_direct_list_candidate(1'b0, has_l0, direct_ref_idx_l0, direct_mvx_l0, direct_mvy_l0);
+            calc_direct_list_candidate(1'b1, has_l1, direct_ref_idx_l1, direct_mvx_l1, direct_mvy_l1);
+
+            if (!has_l0 && !has_l1) begin
+                has_l0 = 1'b1;
+                has_l1 = 1'b1;
+                direct_ref_idx_l0 = 2'd0;
+                direct_ref_idx_l1 = 2'd0;
+                direct_mvx_l0 = 8'sd0;
+                direct_mvy_l0 = 8'sd0;
+                direct_mvx_l1 = 8'sd0;
+                direct_mvy_l1 = 8'sd0;
+            end
+
+            col_is_intra = refmeta_is_intra[newest_ref_bank][mb_count];
+            col_has_l0   = refmeta_has_l0[newest_ref_bank][mb_count];
+            col_has_l1   = refmeta_has_l1[newest_ref_bank][mb_count];
+            col_ref_idx_l0 = refmeta_ref_idx_l0[newest_ref_bank][mb_count];
+            col_ref_idx_l1 = refmeta_ref_idx_l1[newest_ref_bank][mb_count];
+            col_mvx_l0 = refmeta_mvx_l0[newest_ref_bank][mb_count];
+            col_mvy_l0 = refmeta_mvy_l0[newest_ref_bank][mb_count];
+            col_mvx_l1 = refmeta_mvx_l1[newest_ref_bank][mb_count];
+            col_mvy_l1 = refmeta_mvy_l1[newest_ref_bank][mb_count];
+
+            if (!col_is_intra &&
+                !((direct_mvx_l0 == 8'sd0) && (direct_mvy_l0 == 8'sd0) &&
+                  (direct_mvx_l1 == 8'sd0) && (direct_mvy_l1 == 8'sd0)) &&
+                !((has_l0 && (direct_ref_idx_l0 != 2'd0)) &&
+                  (has_l1 && (direct_ref_idx_l1 != 2'd0)))) begin
+                col_zero_flag = 1'b0;
+                if (col_has_l0 && (col_ref_idx_l0 == 2'd0) &&
+                    ($signed(col_mvx_l0) >= -8'sd1) && ($signed(col_mvx_l0) <= 8'sd1) &&
+                    ($signed(col_mvy_l0) >= -8'sd1) && ($signed(col_mvy_l0) <= 8'sd1))
+                    col_zero_flag = 1'b1;
+                else if (!col_has_l0 && col_has_l1 && (col_ref_idx_l1 == 2'd0) &&
+                         ($signed(col_mvx_l1) >= -8'sd1) && ($signed(col_mvx_l1) <= 8'sd1) &&
+                         ($signed(col_mvy_l1) >= -8'sd1) && ($signed(col_mvy_l1) <= 8'sd1))
+                    col_zero_flag = 1'b1;
+
+                if (col_zero_flag) begin
+                    if (has_l0 && (direct_ref_idx_l0 == 2'd0)) begin
+                        direct_mvx_l0 = 8'sd0;
+                        direct_mvy_l0 = 8'sd0;
+                    end
+                    if (has_l1 && (direct_ref_idx_l1 == 2'd0)) begin
+                        direct_mvx_l1 = 8'sd0;
+                        direct_mvy_l1 = 8'sd0;
+                    end
+                end
+            end
+
+            direct_use_bi = has_l0 && has_l1;
+            direct_use_l1 = !has_l0 && has_l1;
+        end
+    endtask
+
     function integer clip_bd_sample;
         input integer sample_in;
         integer max_sample;
@@ -853,6 +1014,54 @@ module h264_encoder_top #(
         end
     endfunction
 
+    task automatic build_exact_luma_pred;
+        input signed [7:0] mvx_qpel;
+        input signed [7:0] mvy_qpel;
+        output [256*BD-1:0] pred_buf_out;
+        output integer sad_out;
+        integer px_i, py_i;
+        integer pred_sample_i, orig_sample_i, ref1_sample_i, ref2_sample_i;
+        integer frac_x_i, frac_y_i, base_x_i, base_y_i;
+        reg [3:0] qpel_idx_i;
+        reg [1:0] ref0_plane_i, ref1_plane_i;
+        begin
+            frac_x_i = mvx_qpel & 8'sd3;
+            frac_y_i = mvy_qpel & 8'sd3;
+            base_x_i = 3 + ($signed(mvx_qpel) >>> 2);
+            base_y_i = 3 + ($signed(mvy_qpel) >>> 2);
+            qpel_idx_i = ((frac_y_i & 3) << 2) | (frac_x_i & 3);
+            ref0_plane_i = qpel_ref0_plane(qpel_idx_i);
+            ref1_plane_i = qpel_ref1_plane(qpel_idx_i);
+            pred_buf_out = {(256*BD){1'b0}};
+            sad_out = 0;
+            for (py_i = 0; py_i < 16; py_i = py_i + 1) begin
+                for (px_i = 0; px_i < 16; px_i = px_i + 1) begin
+                    ref1_sample_i = qpel_plane_sample(
+                        ref0_plane_i,
+                        base_x_i + px_i,
+                        base_y_i + py_i + ((frac_y_i == 3) ? 1 : 0)
+                    );
+                    if (qpel_idx_i & 4'b0101) begin
+                        ref2_sample_i = qpel_plane_sample(
+                            ref1_plane_i,
+                            base_x_i + px_i + ((frac_x_i == 3) ? 1 : 0),
+                            base_y_i + py_i
+                        );
+                        pred_sample_i = (ref1_sample_i + ref2_sample_i + 1) >>> 1;
+                    end else begin
+                        pred_sample_i = ref1_sample_i;
+                    end
+                    pred_buf_out[((py_i*16)+px_i)*BD +: BD] = pred_sample_i[BD-1:0];
+                    orig_sample_i = fetched_luma[((py_i*16)+px_i)*BD +: BD];
+                    if (orig_sample_i >= pred_sample_i)
+                        sad_out = sad_out + (orig_sample_i - pred_sample_i);
+                    else
+                        sad_out = sad_out + (pred_sample_i - orig_sample_i);
+                end
+            end
+        end
+    endtask
+
     reg [256*BD-1:0] pred_buf;
     wire [3:0] mb_blk_idx = {sb_r, sb_c};
     wire [BD-1:0] intra16_top_left_w =
@@ -867,7 +1076,7 @@ module h264_encoder_top #(
                                   (use_intra16_mb_reg && is_luma) ? intra16_resid_4x4 :
                                   chr_pred_mode ? chr_resid_4x4 : resid_4x4_w;
 
-    integer idx_ei, idx_pi, idx_ir, idx_rb;
+    integer idx_ei, idx_pi, idx_ir, idx_rb, meta_bank_i, meta_mb_i;
     // Chroma pixel index helper for 4:2:0, 4:2:2, and 4:4:4.
     // The transformed chroma path still targets the current 4:2:0 / 4:2:2 flow;
     // this helper is widened so the tree also compiles for 4:4:4 I_PCM work.
@@ -1416,6 +1625,7 @@ pred_buf = {(256*BD){1'b0}};
         .is_p_slice(is_p_frame), .is_b_slice(is_b_frame), .is_b_ref_slice(is_b_ref_frame), .frame_num(cur_frame_num),
         .pic_order_cnt_lsb(cur_pic_order_cnt_lsb),
         .is_inter_mb(is_inter_mb_reg), .is_skip_mb(is_skip_mb_reg),
+        .is_b_direct_mb(is_b_direct_mb_reg),
         .is_b_l1_mb(is_b_l1_mb_reg), .is_b_bi_mb(is_b_bi_mb_reg),
         .mb_ref_idx_l0(mb_ref_idx_reg), .mb_ref_idx_l1(mb_ref_idx_l1_reg),
         .mvd_x_l0(mvd_x_l0_w), .mvd_y_l0(mvd_y_l0_w),
@@ -1450,7 +1660,7 @@ pred_buf = {(256*BD){1'b0}};
             blk_state <= BS_PRED; blk_started <= 1'b0; iq_done_latched <= 1'b0;
             recon_buf <= {(256*BD){1'b0}}; luma_recon_buf <= {(256*BD){1'b0}}; top_ref_flat <= {(MB_COLS*16*BD){1'b0}}; left_ref_flat <= {(16*BD){1'b0}};
             top_pixels_flat <= {(16*BD){1'b0}}; left_pixels_flat <= {(16*BD){1'b0}}; flush_pending <= 1'b0; flush_accepted <= 1'b0;
-            is_p_frame <= 1'b0; is_b_frame <= 1'b0; is_b_ref_frame <= 1'b0; is_inter_mb_reg <= 1'b0; is_skip_mb_reg <= 1'b0; is_b_l1_mb_reg <= 1'b0; is_b_bi_mb_reg <= 1'b0; use_intra16_mb_reg <= 1'b0; use_ipcm_mb_reg <= 1'b0; cur_frame_num <= 8'd0; cur_pic_order_cnt_lsb <= 9'd0;
+            is_p_frame <= 1'b0; is_b_frame <= 1'b0; is_b_ref_frame <= 1'b0; is_inter_mb_reg <= 1'b0; is_skip_mb_reg <= 1'b0; is_b_l1_mb_reg <= 1'b0; is_b_bi_mb_reg <= 1'b0; is_b_direct_mb_reg <= 1'b0; use_intra16_mb_reg <= 1'b0; use_ipcm_mb_reg <= 1'b0; cur_frame_num <= 8'd0; cur_pic_order_cnt_lsb <= 9'd0;
             me_best_mvx <= 8'sd0; me_best_mvy <= 8'sd0; me_best_mvx_l0 <= 8'sd0; me_best_mvy_l0 <= 8'sd0; me_best_mvx_l1 <= 8'sd0; me_best_mvy_l1 <= 8'sd0; me_best_sad <= 18'd0; me_fullpel_best_sad <= 18'd0;
             inter_pred_buf <= {(256*BD){1'b0}}; ref_wr_idx <= 9'd0;
             intra16_pred_buf <= {(256*BD){1'b0}}; intra16_mode_mb <= 2'd2;
@@ -1484,6 +1694,10 @@ pred_buf = {(256*BD){1'b0}};
             luma_fetch_started <= 1'b0; luma_fetch_cnt <= 9'd0; luma_f_row <= 5'd0; luma_f_col <= 5'd0;
             luma_raw <= {(LUMA_RAW_SAMPLES*BD){1'b0}};
             b_bi_luma_fetch_l1_phase <= 1'b0; b_bi_fullpel_ref_l1 <= {(256*BD){1'b0}}; b_bi_fullpel_sad_l1 <= 18'd0; b_bi_luma_pred_l0 <= {(256*BD){1'b0}}; b_bi_luma_sad_l0 <= 18'd0;
+            b_direct_pending_valid <= 1'b0; b_direct_pending_use_l1 <= 1'b0; b_direct_pending_use_bi <= 1'b0;
+            b_direct_pending_ref_idx_l0 <= 2'd0; b_direct_pending_ref_idx_l1 <= 2'd0;
+            b_direct_pending_mvx_l0 <= 8'sd0; b_direct_pending_mvy_l0 <= 8'sd0; b_direct_pending_mvx_l1 <= 8'sd0; b_direct_pending_mvy_l1 <= 8'sd0;
+            b_direct_luma_pred_l0 <= {(256*BD){1'b0}}; b_direct_luma_sad_l0 <= 18'd0;
             b_bi_mvp_x_l0_reg <= 8'sd0; b_bi_mvp_y_l0_reg <= 8'sd0; b_bi_mvp_x_l1_reg <= 8'sd0; b_bi_mvp_y_l1_reg <= 8'sd0;
             inter_chr_pred_cb <= {(CHR_MB_PIXELS*BD){1'b0}}; inter_chr_pred_cr <= {(CHR_MB_PIXELS*BD){1'b0}};
             b_bi_chr_pred_cb_l0 <= {(CHR_MB_PIXELS*BD){1'b0}}; b_bi_chr_pred_cr_l0 <= {(CHR_MB_PIXELS*BD){1'b0}};
@@ -1510,6 +1724,20 @@ pred_buf = {(256*BD){1'b0}};
             frame_skip_mb_count <= 16'd0;
             frame_b_l1_mb_count <= 16'd0;
             frame_b_bi_mb_count <= 16'd0;
+            frame_b_direct_mb_count <= 16'd0;
+            for (meta_bank_i = 0; meta_bank_i < 5; meta_bank_i = meta_bank_i + 1) begin
+                for (meta_mb_i = 0; meta_mb_i < TOTAL_MBS; meta_mb_i = meta_mb_i + 1) begin
+                    refmeta_is_intra[meta_bank_i][meta_mb_i] = 1'b1;
+                    refmeta_has_l0[meta_bank_i][meta_mb_i] = 1'b0;
+                    refmeta_has_l1[meta_bank_i][meta_mb_i] = 1'b0;
+                    refmeta_ref_idx_l0[meta_bank_i][meta_mb_i] = 2'd0;
+                    refmeta_ref_idx_l1[meta_bank_i][meta_mb_i] = 2'd0;
+                    refmeta_mvx_l0[meta_bank_i][meta_mb_i] = 8'sd0;
+                    refmeta_mvy_l0[meta_bank_i][meta_mb_i] = 8'sd0;
+                    refmeta_mvx_l1[meta_bank_i][meta_mb_i] = 8'sd0;
+                    refmeta_mvy_l1[meta_bank_i][meta_mb_i] = 8'sd0;
+                end
+            end
         end else begin
             fetch_start <= 1'b0; pred_start <= 1'b0; intra16_start <= 1'b0; xform_start <= 1'b0; quant_start <= 1'b0; zz_start <= 1'b0;
             cavlc_start <= 1'b0; iq_start <= 1'b0; it_start <= 1'b0; recon_start <= 1'b0; me_start <= 1'b0;
@@ -1534,6 +1762,7 @@ pred_buf = {(256*BD){1'b0}};
                     frame_skip_mb_count <= 16'd0;
                     frame_b_l1_mb_count <= 16'd0;
                     frame_b_bi_mb_count <= 16'd0;
+                    frame_b_direct_mb_count <= 16'd0;
                     if (is_idr_in) begin
                         valid_ref_count <= 3'd0;
                         newest_ref_bank <= 3'd0;
@@ -1574,6 +1803,18 @@ pred_buf = {(256*BD){1'b0}};
                     is_skip_mb_reg <= 1'b0;
                     is_b_l1_mb_reg <= 1'b0;
                     is_b_bi_mb_reg <= 1'b0;
+                    is_b_direct_mb_reg <= 1'b0;
+                    b_direct_pending_valid <= 1'b0;
+                    b_direct_pending_use_l1 <= 1'b0;
+                    b_direct_pending_use_bi <= 1'b0;
+                    b_direct_pending_ref_idx_l0 <= 2'd0;
+                    b_direct_pending_ref_idx_l1 <= 2'd0;
+                    b_direct_pending_mvx_l0 <= 8'sd0;
+                    b_direct_pending_mvy_l0 <= 8'sd0;
+                    b_direct_pending_mvx_l1 <= 8'sd0;
+                    b_direct_pending_mvy_l1 <= 8'sd0;
+                    b_direct_luma_pred_l0 <= {(256*BD){1'b0}};
+                    b_direct_luma_sad_l0 <= 18'd0;
                     b_bi_luma_fetch_l1_phase <= 1'b0;
                     b_bi_luma_sad_l0 <= 18'd0;
                     b_bi_mvp_x_l0_reg <= 8'sd0; b_bi_mvp_y_l0_reg <= 8'sd0; b_bi_mvp_x_l1_reg <= 8'sd0; b_bi_mvp_y_l1_reg <= 8'sd0;
@@ -1652,6 +1893,14 @@ pred_buf = {(256*BD){1'b0}};
                         reg [1:0] sel_ref_idx;
                         reg sel_is_b_l1;
                         reg sel_is_b_bi;
+                        reg direct_candidate_active;
+                        reg direct_force_active;
+                        reg direct_use_l1;
+                        reg direct_use_bi;
+                        reg [1:0] direct_ref_idx_l0;
+                        reg [1:0] direct_ref_idx_l1;
+                        reg signed [7:0] direct_mvx_l0, direct_mvy_l0;
+                        reg signed [7:0] direct_mvx_l1, direct_mvy_l1;
                         integer bi_idx, bi_pred_sample, bi_orig_sample, bi_sad_i;
                         reg [256*BIT_DEPTH-1:0] bi_pred_buf_i;
                         reg signed [7:0] bi_mvp_x_l0, bi_mvp_y_l0, bi_mvp_x_l1, bi_mvp_y_l1;
@@ -1663,6 +1912,16 @@ pred_buf = {(256*BD){1'b0}};
 
                         sel_is_b_l1 = 1'b0;
                         sel_is_b_bi = 1'b0;
+                        direct_candidate_active = 1'b0;
+                        direct_force_active = 1'b0;
+                        direct_use_l1 = 1'b0;
+                        direct_use_bi = 1'b0;
+                        direct_ref_idx_l0 = 2'd0;
+                        direct_ref_idx_l1 = 2'd0;
+                        direct_mvx_l0 = 8'sd0;
+                        direct_mvy_l0 = 8'sd0;
+                        direct_mvx_l1 = 8'sd0;
+                        direct_mvy_l1 = 8'sd0;
                         bi_pred_buf_i = {(256*BD){1'b0}};
                         bi_sad_i = 32'h7fffffff;
                         if (is_b_frame && (valid_ref_count >= 3'd2) && (me_search_pass == 2'd1)) begin
@@ -1737,6 +1996,17 @@ pred_buf = {(256*BD){1'b0}};
                             ref_rd_bank_sel <= b_l0_ref_bank_w;
                         end
 
+                        if (is_b_frame && (valid_ref_count >= 3'd2)) begin
+                            direct_candidate_active = 1'b1;
+                            calc_b_direct16x16(
+                                direct_use_l1, direct_use_bi,
+                                direct_ref_idx_l0, direct_ref_idx_l1,
+                                direct_mvx_l0, direct_mvy_l0,
+                                direct_mvx_l1, direct_mvy_l1
+                            );
+                            direct_force_active = force_b_direct_in;
+                        end
+
                         me_fullpel_mvx <= sel_fullpel_mvx;
                         me_fullpel_mvy <= sel_fullpel_mvy;
                         me_fullpel_best_sad <= sel_sad;
@@ -1745,7 +2015,90 @@ pred_buf = {(256*BD){1'b0}};
                         mb_ref_idx_l1_reg <= 2'd0;
                         is_b_l1_mb_reg <= sel_is_b_l1;
                         is_b_bi_mb_reg <= sel_is_b_bi;
-                        if (sel_is_b_bi) begin
+                        is_b_direct_mb_reg <= 1'b0;
+                        b_direct_pending_valid <= direct_candidate_active;
+                        b_direct_pending_use_l1 <= direct_use_l1;
+                        b_direct_pending_use_bi <= direct_use_bi;
+                        b_direct_pending_ref_idx_l0 <= direct_ref_idx_l0;
+                        b_direct_pending_ref_idx_l1 <= direct_ref_idx_l1;
+                        b_direct_pending_mvx_l0 <= direct_mvx_l0;
+                        b_direct_pending_mvy_l0 <= direct_mvy_l0;
+                        b_direct_pending_mvx_l1 <= direct_mvx_l1;
+                        b_direct_pending_mvy_l1 <= direct_mvy_l1;
+                        b_direct_luma_pred_l0 <= {(256*BD){1'b0}};
+                        b_direct_luma_sad_l0 <= 18'd0;
+                        if (direct_force_active) begin
+                            is_b_direct_mb_reg <= 1'b1;
+                            is_b_l1_mb_reg <= direct_use_l1;
+                            is_b_bi_mb_reg <= direct_use_bi;
+                            luma_fetch_started <= 1'b0;
+                            luma_fetch_cnt <= 9'd0;
+                            luma_f_row <= 5'd0;
+                            luma_f_col <= 5'd0;
+                            b_bi_luma_fetch_l1_phase <= 1'b0;
+                            if (direct_use_bi) begin
+                                mb_ref_idx_reg <= direct_ref_idx_l0;
+                                mb_ref_idx_l1_reg <= direct_ref_idx_l1;
+                                me_best_mvx <= direct_mvx_l0;
+                                me_best_mvy <= direct_mvy_l0;
+                                me_best_mvx_l0 <= direct_mvx_l0;
+                                me_best_mvy_l0 <= direct_mvy_l0;
+                                me_best_mvx_l1 <= direct_mvx_l1;
+                                me_best_mvy_l1 <= direct_mvy_l1;
+                                me_best_sad <= 18'd0;
+                                me_fullpel_mvx <= $signed(direct_mvx_l0) >>> 2;
+                                me_fullpel_mvy <= $signed(direct_mvy_l0) >>> 2;
+                                me_fullpel_best_sad <= 18'd0;
+                                mvp_x <= direct_mvx_l0;
+                                mvp_y <= direct_mvy_l0;
+                                mvp_x_l0 <= direct_mvx_l0;
+                                mvp_y_l0 <= direct_mvy_l0;
+                                mvp_x_l1 <= direct_mvx_l1;
+                                mvp_y_l1 <= direct_mvy_l1;
+                                ref_rd_bank_sel <= older_ref_bank;
+                            end else if (direct_use_l1) begin
+                                mb_ref_idx_reg <= direct_ref_idx_l1;
+                                mb_ref_idx_l1_reg <= 2'd0;
+                                me_best_mvx <= direct_mvx_l1;
+                                me_best_mvy <= direct_mvy_l1;
+                                me_best_mvx_l0 <= 8'sd0;
+                                me_best_mvy_l0 <= 8'sd0;
+                                me_best_mvx_l1 <= direct_mvx_l1;
+                                me_best_mvy_l1 <= direct_mvy_l1;
+                                me_best_sad <= 18'd0;
+                                me_fullpel_mvx <= $signed(direct_mvx_l1) >>> 2;
+                                me_fullpel_mvy <= $signed(direct_mvy_l1) >>> 2;
+                                me_fullpel_best_sad <= 18'd0;
+                                mvp_x <= direct_mvx_l1;
+                                mvp_y <= direct_mvy_l1;
+                                mvp_x_l0 <= 8'sd0;
+                                mvp_y_l0 <= 8'sd0;
+                                mvp_x_l1 <= direct_mvx_l1;
+                                mvp_y_l1 <= direct_mvy_l1;
+                                ref_rd_bank_sel <= newest_ref_bank;
+                            end else begin
+                                mb_ref_idx_reg <= direct_ref_idx_l0;
+                                mb_ref_idx_l1_reg <= 2'd0;
+                                me_best_mvx <= direct_mvx_l0;
+                                me_best_mvy <= direct_mvy_l0;
+                                me_best_mvx_l0 <= direct_mvx_l0;
+                                me_best_mvy_l0 <= direct_mvy_l0;
+                                me_best_mvx_l1 <= 8'sd0;
+                                me_best_mvy_l1 <= 8'sd0;
+                                me_best_sad <= 18'd0;
+                                me_fullpel_mvx <= $signed(direct_mvx_l0) >>> 2;
+                                me_fullpel_mvy <= $signed(direct_mvy_l0) >>> 2;
+                                me_fullpel_best_sad <= 18'd0;
+                                mvp_x <= direct_mvx_l0;
+                                mvp_y <= direct_mvy_l0;
+                                mvp_x_l0 <= direct_mvx_l0;
+                                mvp_y_l0 <= direct_mvy_l0;
+                                mvp_x_l1 <= 8'sd0;
+                                mvp_y_l1 <= 8'sd0;
+                                ref_rd_bank_sel <= older_ref_bank;
+                            end
+                            top_state <= TS_LUMA_FETCH;
+                        end else if (sel_is_b_bi) begin
                             calc_inter_mvp(1'b0, 2'd0, bi_mvp_x_l0, bi_mvp_y_l0);
                             calc_inter_mvp(1'b1, 2'd0, bi_mvp_x_l1, bi_mvp_y_l1);
                             me_best_mvx <= (me_pass0_mvx <<< 2);
@@ -1805,12 +2158,17 @@ pred_buf = {(256*BD){1'b0}};
                         integer cand_sad, pred_sample, ref1_sample, ref2_sample, orig_sample, pskip_idx;
                         integer best_sad_i, best_dx_i, best_dy_i;
                         integer bi_final_idx, bi_final_sample, bi_final_orig_sample, bi_final_sad_i;
+                        integer direct_sad_i;
+                        integer direct_final_sad_i;
+                        integer direct_final_idx, direct_final_sample, direct_final_orig_sample;
                         integer frac_x_i, frac_y_i, base_x_i, base_y_i;
                         reg [3:0] qpel_idx_i;
                         reg [1:0] ref0_plane_i, ref1_plane_i;
                         reg [256*BIT_DEPTH-1:0] best_pred_buf_i;
                         reg [256*BIT_DEPTH-1:0] cand_pred_buf_i;
                         reg [256*BIT_DEPTH-1:0] bi_final_pred_buf_i;
+                        reg [256*BIT_DEPTH-1:0] direct_pred_buf_i;
+                        reg [256*BIT_DEPTH-1:0] direct_final_pred_buf_i;
                         reg signed [7:0] ax, ay, bx, by, cx, cy;
                         reg a_avail, b_avail, c_avail, d_avail;
                         reg a_match, b_match, c_match;
@@ -1879,12 +2237,101 @@ pred_buf = {(256*BD){1'b0}};
                         me_best_sad <= best_sad_i;
                         inter_pred_buf <= best_pred_buf_i;
                         is_inter_mb_reg <= (best_sad_i < INTER_SAD_THRESHOLD);
-                        if (is_b_frame && is_b_bi_mb_reg) begin
+                        if (is_b_frame && is_b_direct_mb_reg) begin
+                            if (is_b_bi_mb_reg) begin
+                                if (!b_bi_luma_fetch_l1_phase) begin
+                                    build_exact_luma_pred(me_best_mvx_l0, me_best_mvy_l0, direct_pred_buf_i, direct_sad_i);
+                                    b_bi_luma_pred_l0 <= direct_pred_buf_i;
+                                    b_bi_luma_sad_l0 <= direct_sad_i[17:0];
+                                    me_fullpel_mvx <= $signed(me_best_mvx_l1) >>> 2;
+                                    me_fullpel_mvy <= $signed(me_best_mvy_l1) >>> 2;
+                                    b_bi_luma_fetch_l1_phase <= 1'b1;
+                                    luma_fetch_started <= 1'b0;
+                                    luma_fetch_cnt <= 9'd0;
+                                    luma_f_row <= 5'd0;
+                                    luma_f_col <= 5'd0;
+                                    ref_rd_bank_sel <= newest_ref_bank;
+                                    top_state <= TS_LUMA_FETCH;
+                                end else begin
+                                    build_exact_luma_pred(me_best_mvx_l1, me_best_mvy_l1, direct_pred_buf_i, direct_sad_i);
+                                    bi_final_sad_i = 0;
+                                    bi_final_pred_buf_i = {(256*BD){1'b0}};
+                                    for (bi_final_idx = 0; bi_final_idx < 256; bi_final_idx = bi_final_idx + 1) begin
+                                        bi_final_sample = use_weighted_pred_w ?
+                                            apply_luma_bi_weight(b_bi_luma_pred_l0[bi_final_idx*BD +: BD],
+                                                                 direct_pred_buf_i[bi_final_idx*BD +: BD]) :
+                                            ((b_bi_luma_pred_l0[bi_final_idx*BD +: BD] +
+                                              direct_pred_buf_i[bi_final_idx*BD +: BD] + 1) >>> 1);
+                                        bi_final_pred_buf_i[bi_final_idx*BD +: BD] = bi_final_sample[BD-1:0];
+                                        bi_final_orig_sample = fetched_luma[bi_final_idx*BD +: BD];
+                                        if (bi_final_orig_sample >= bi_final_sample)
+                                            bi_final_sad_i = bi_final_sad_i + (bi_final_orig_sample - bi_final_sample);
+                                        else
+                                            bi_final_sad_i = bi_final_sad_i + (bi_final_sample - bi_final_orig_sample);
+                                    end
+                                    b_bi_luma_fetch_l1_phase <= 1'b0;
+                                    me_best_mvx <= me_best_mvx_l0;
+                                    me_best_mvy <= me_best_mvy_l0;
+                                    me_best_sad <= bi_final_sad_i[17:0];
+                                    inter_pred_buf <= bi_final_pred_buf_i;
+                                    is_inter_mb_reg <= 1'b1;
+                                    is_b_l1_mb_reg <= 1'b0;
+                                    is_b_bi_mb_reg <= 1'b1;
+                                    is_b_direct_mb_reg <= 1'b1;
+                                    mvp_x <= me_best_mvx_l0;
+                                    mvp_y <= me_best_mvy_l0;
+                                    mvp_x_l0 <= me_best_mvx_l0;
+                                    mvp_y_l0 <= me_best_mvy_l0;
+                                    mvp_x_l1 <= me_best_mvx_l1;
+                                    mvp_y_l1 <= me_best_mvy_l1;
+                                    ref_rd_bank_sel <= older_ref_bank;
+                                    use_intra16_mb_reg <= 1'b0;
+                                    use_ipcm_mb_reg <= 1'b0;
+                                    top_state <= TS_MB_HDR;
+                                end
+                            end else begin
+                                build_exact_luma_pred(me_best_mvx, me_best_mvy, direct_pred_buf_i, direct_sad_i);
+                                if (is_b_l1_mb_reg) begin
+                                    me_best_mvx <= me_best_mvx_l1;
+                                    me_best_mvy <= me_best_mvy_l1;
+                                    mvp_x <= me_best_mvx_l1;
+                                    mvp_y <= me_best_mvy_l1;
+                                    mvp_x_l1 <= me_best_mvx_l1;
+                                    mvp_y_l1 <= me_best_mvy_l1;
+                                end else begin
+                                    me_best_mvx <= me_best_mvx_l0;
+                                    me_best_mvy <= me_best_mvy_l0;
+                                    mvp_x <= me_best_mvx_l0;
+                                    mvp_y <= me_best_mvy_l0;
+                                    mvp_x_l0 <= me_best_mvx_l0;
+                                    mvp_y_l0 <= me_best_mvy_l0;
+                                end
+                                me_best_sad <= direct_sad_i[17:0];
+                                inter_pred_buf <= direct_pred_buf_i;
+                                is_inter_mb_reg <= 1'b1;
+                                is_b_direct_mb_reg <= 1'b1;
+                                if (is_b_l1_mb_reg)
+                                    ref_rd_bank_sel <= newest_ref_bank;
+                                else
+                                    ref_rd_bank_sel <= older_ref_bank;
+                                use_intra16_mb_reg <= 1'b0;
+                                use_ipcm_mb_reg <= 1'b0;
+                                top_state <= TS_MB_HDR;
+                            end
+                        end else if (is_b_frame && is_b_bi_mb_reg) begin
                             if (!b_bi_luma_fetch_l1_phase) begin
                                 me_best_mvx_l0 <= (me_fullpel_mvx <<< 2) + best_dx_i;
                                 me_best_mvy_l0 <= (me_fullpel_mvy <<< 2) + best_dy_i;
                                 b_bi_luma_pred_l0 <= best_pred_buf_i;
                                 b_bi_luma_sad_l0 <= best_sad_i;
+                                if (b_direct_pending_valid && !b_direct_pending_use_l1) begin
+                                    build_exact_luma_pred(b_direct_pending_mvx_l0, b_direct_pending_mvy_l0, direct_pred_buf_i, direct_sad_i);
+                                    b_direct_luma_pred_l0 <= direct_pred_buf_i;
+                                    b_direct_luma_sad_l0 <= direct_sad_i[17:0];
+                                end else begin
+                                    b_direct_luma_pred_l0 <= {(256*BD){1'b0}};
+                                    b_direct_luma_sad_l0 <= 18'h3ffff;
+                                end
                                 me_fullpel_mvx <= $signed(me_best_mvx_l1) >>> 2;
                                 me_fullpel_mvy <= $signed(me_best_mvy_l1) >>> 2;
                                 me_fullpel_best_sad <= b_bi_fullpel_sad_l1;
@@ -1914,7 +2361,98 @@ pred_buf = {(256*BD){1'b0}};
                                 end
 
                                 b_bi_luma_fetch_l1_phase <= 1'b0;
-                                if (force_b_bi_in || ((bi_final_sad_i <= b_bi_luma_sad_l0) && (bi_final_sad_i <= best_sad_i))) begin
+                                direct_final_sad_i = 32'h7fffffff;
+                                direct_final_pred_buf_i = {(256*BD){1'b0}};
+                                if (b_direct_pending_valid) begin
+                                    if (b_direct_pending_use_bi) begin
+                                        build_exact_luma_pred(b_direct_pending_mvx_l1, b_direct_pending_mvy_l1, direct_pred_buf_i, direct_sad_i);
+                                        direct_final_sad_i = 0;
+                                        for (direct_final_idx = 0; direct_final_idx < 256; direct_final_idx = direct_final_idx + 1) begin
+                                            direct_final_sample = use_weighted_pred_w ?
+                                                apply_luma_bi_weight(b_direct_luma_pred_l0[direct_final_idx*BD +: BD],
+                                                                     direct_pred_buf_i[direct_final_idx*BD +: BD]) :
+                                                ((b_direct_luma_pred_l0[direct_final_idx*BD +: BD] +
+                                                  direct_pred_buf_i[direct_final_idx*BD +: BD] + 1) >>> 1);
+                                            direct_final_pred_buf_i[direct_final_idx*BD +: BD] = direct_final_sample[BD-1:0];
+                                            direct_final_orig_sample = fetched_luma[direct_final_idx*BD +: BD];
+                                            if (direct_final_orig_sample >= direct_final_sample)
+                                                direct_final_sad_i = direct_final_sad_i + (direct_final_orig_sample - direct_final_sample);
+                                            else
+                                                direct_final_sad_i = direct_final_sad_i + (direct_final_sample - direct_final_orig_sample);
+                                        end
+                                    end else if (b_direct_pending_use_l1) begin
+                                        build_exact_luma_pred(b_direct_pending_mvx_l1, b_direct_pending_mvy_l1, direct_final_pred_buf_i, direct_final_sad_i);
+                                    end else begin
+                                        direct_final_pred_buf_i = b_direct_luma_pred_l0;
+                                        direct_final_sad_i = b_direct_luma_sad_l0;
+                                    end
+                                end
+
+                                if (b_direct_pending_valid &&
+                                    (direct_final_sad_i < INTER_SAD_THRESHOLD) &&
+                                    (direct_final_sad_i <= bi_final_sad_i) &&
+                                    (direct_final_sad_i <= best_sad_i) &&
+                                    (direct_final_sad_i <= b_bi_luma_sad_l0)) begin
+                                    if (b_direct_pending_use_bi) begin
+                                        me_best_mvx <= b_direct_pending_mvx_l0;
+                                        me_best_mvy <= b_direct_pending_mvy_l0;
+                                        me_best_mvx_l0 <= b_direct_pending_mvx_l0;
+                                        me_best_mvy_l0 <= b_direct_pending_mvy_l0;
+                                        me_best_mvx_l1 <= b_direct_pending_mvx_l1;
+                                        me_best_mvy_l1 <= b_direct_pending_mvy_l1;
+                                        mb_ref_idx_reg <= b_direct_pending_ref_idx_l0;
+                                        mb_ref_idx_l1_reg <= b_direct_pending_ref_idx_l1;
+                                        mvp_x <= b_direct_pending_mvx_l0;
+                                        mvp_y <= b_direct_pending_mvy_l0;
+                                        mvp_x_l0 <= b_direct_pending_mvx_l0;
+                                        mvp_y_l0 <= b_direct_pending_mvy_l0;
+                                        mvp_x_l1 <= b_direct_pending_mvx_l1;
+                                        mvp_y_l1 <= b_direct_pending_mvy_l1;
+                                        ref_rd_bank_sel <= older_ref_bank;
+                                    end else if (b_direct_pending_use_l1) begin
+                                        me_best_mvx <= b_direct_pending_mvx_l1;
+                                        me_best_mvy <= b_direct_pending_mvy_l1;
+                                        me_best_mvx_l0 <= 8'sd0;
+                                        me_best_mvy_l0 <= 8'sd0;
+                                        me_best_mvx_l1 <= b_direct_pending_mvx_l1;
+                                        me_best_mvy_l1 <= b_direct_pending_mvy_l1;
+                                        mb_ref_idx_reg <= b_direct_pending_ref_idx_l1;
+                                        mb_ref_idx_l1_reg <= 2'd0;
+                                        mvp_x <= b_direct_pending_mvx_l1;
+                                        mvp_y <= b_direct_pending_mvy_l1;
+                                        mvp_x_l0 <= 8'sd0;
+                                        mvp_y_l0 <= 8'sd0;
+                                        mvp_x_l1 <= b_direct_pending_mvx_l1;
+                                        mvp_y_l1 <= b_direct_pending_mvy_l1;
+                                        ref_rd_bank_sel <= newest_ref_bank;
+                                    end else begin
+                                        me_best_mvx <= b_direct_pending_mvx_l0;
+                                        me_best_mvy <= b_direct_pending_mvy_l0;
+                                        me_best_mvx_l0 <= b_direct_pending_mvx_l0;
+                                        me_best_mvy_l0 <= b_direct_pending_mvy_l0;
+                                        me_best_mvx_l1 <= 8'sd0;
+                                        me_best_mvy_l1 <= 8'sd0;
+                                        mb_ref_idx_reg <= b_direct_pending_ref_idx_l0;
+                                        mb_ref_idx_l1_reg <= 2'd0;
+                                        mvp_x <= b_direct_pending_mvx_l0;
+                                        mvp_y <= b_direct_pending_mvy_l0;
+                                        mvp_x_l0 <= b_direct_pending_mvx_l0;
+                                        mvp_y_l0 <= b_direct_pending_mvy_l0;
+                                        mvp_x_l1 <= 8'sd0;
+                                        mvp_y_l1 <= 8'sd0;
+                                        ref_rd_bank_sel <= older_ref_bank;
+                                    end
+                                    me_best_sad <= direct_final_sad_i[17:0];
+                                    inter_pred_buf <= direct_final_pred_buf_i;
+                                    is_inter_mb_reg <= 1'b1;
+                                    is_b_l1_mb_reg <= b_direct_pending_use_l1;
+                                    is_b_bi_mb_reg <= b_direct_pending_use_bi;
+                                    is_b_direct_mb_reg <= 1'b1;
+                                    b_direct_pending_valid <= 1'b0;
+                                    use_intra16_mb_reg <= 1'b0;
+                                    use_ipcm_mb_reg <= 1'b0;
+                                    top_state <= TS_MB_HDR;
+                                end else if (force_b_bi_in || ((bi_final_sad_i <= b_bi_luma_sad_l0) && (bi_final_sad_i <= best_sad_i))) begin
                                     me_best_mvx <= me_best_mvx_l0;
                                     me_best_mvy <= me_best_mvy_l0;
                                     me_best_mvx_l1 <= (me_fullpel_mvx <<< 2) + best_dx_i;
@@ -1924,6 +2462,7 @@ pred_buf = {(256*BD){1'b0}};
                                     is_inter_mb_reg <= (bi_final_sad_i < INTER_SAD_THRESHOLD);
                                     is_b_l1_mb_reg <= 1'b0;
                                     is_b_bi_mb_reg <= 1'b1;
+                                    is_b_direct_mb_reg <= 1'b0;
                                     mvp_x <= b_bi_mvp_x_l0_reg;
                                     mvp_y <= b_bi_mvp_y_l0_reg;
                                     mvp_x_l0 <= b_bi_mvp_x_l0_reg;
@@ -1931,6 +2470,7 @@ pred_buf = {(256*BD){1'b0}};
                                     mvp_x_l1 <= b_bi_mvp_x_l1_reg;
                                     mvp_y_l1 <= b_bi_mvp_y_l1_reg;
                                     ref_rd_bank_sel <= older_ref_bank;
+                                    b_direct_pending_valid <= 1'b0;
                                     if (bi_final_sad_i < INTER_SAD_THRESHOLD) begin
                                         use_intra16_mb_reg <= 1'b0;
                                         use_ipcm_mb_reg <= 1'b0;
@@ -1953,6 +2493,7 @@ pred_buf = {(256*BD){1'b0}};
                                     is_inter_mb_reg <= (best_sad_i < INTER_SAD_THRESHOLD);
                                     is_b_l1_mb_reg <= 1'b1;
                                     is_b_bi_mb_reg <= 1'b0;
+                                    is_b_direct_mb_reg <= 1'b0;
                                     mvp_x <= b_bi_mvp_x_l1_reg;
                                     mvp_y <= b_bi_mvp_y_l1_reg;
                                     mvp_x_l0 <= 8'sd0;
@@ -1960,6 +2501,7 @@ pred_buf = {(256*BD){1'b0}};
                                     mvp_x_l1 <= b_bi_mvp_x_l1_reg;
                                     mvp_y_l1 <= b_bi_mvp_y_l1_reg;
                                     ref_rd_bank_sel <= newest_ref_bank;
+                                    b_direct_pending_valid <= 1'b0;
                                     if (best_sad_i < INTER_SAD_THRESHOLD) begin
                                         use_intra16_mb_reg <= 1'b0;
                                         use_ipcm_mb_reg <= 1'b0;
@@ -1980,6 +2522,7 @@ pred_buf = {(256*BD){1'b0}};
                                     is_inter_mb_reg <= (b_bi_luma_sad_l0 < INTER_SAD_THRESHOLD);
                                     is_b_l1_mb_reg <= 1'b0;
                                     is_b_bi_mb_reg <= 1'b0;
+                                    is_b_direct_mb_reg <= 1'b0;
                                     mvp_x <= b_bi_mvp_x_l0_reg;
                                     mvp_y <= b_bi_mvp_y_l0_reg;
                                     mvp_x_l0 <= b_bi_mvp_x_l0_reg;
@@ -1987,6 +2530,7 @@ pred_buf = {(256*BD){1'b0}};
                                     mvp_x_l1 <= 8'sd0;
                                     mvp_y_l1 <= 8'sd0;
                                     ref_rd_bank_sel <= older_ref_bank;
+                                    b_direct_pending_valid <= 1'b0;
                                     if (b_bi_luma_sad_l0 < INTER_SAD_THRESHOLD) begin
                                         use_intra16_mb_reg <= 1'b0;
                                         use_ipcm_mb_reg <= 1'b0;
@@ -2658,6 +3202,22 @@ pred_buf = {(256*BD){1'b0}};
                         frame_b_l1_mb_count <= frame_b_l1_mb_count + 16'd1;
                     if (is_b_frame && is_inter_mb_reg && is_b_bi_mb_reg)
                         frame_b_bi_mb_count <= frame_b_bi_mb_count + 16'd1;
+                    if (is_b_frame && is_inter_mb_reg && is_b_direct_mb_reg)
+                        frame_b_direct_mb_count <= frame_b_direct_mb_count + 16'd1;
+                    refmeta_is_intra[current_write_bank][mb_count] <= !is_inter_mb_reg;
+                    refmeta_has_l0[current_write_bank][mb_count] <= is_inter_mb_reg &&
+                                                                  (!is_b_frame || !is_b_l1_mb_reg || is_b_bi_mb_reg);
+                    refmeta_has_l1[current_write_bank][mb_count] <= is_inter_mb_reg &&
+                                                                  is_b_frame &&
+                                                                  (is_b_l1_mb_reg || is_b_bi_mb_reg);
+                    refmeta_ref_idx_l0[current_write_bank][mb_count] <= mb_ref_idx_reg;
+                    refmeta_ref_idx_l1[current_write_bank][mb_count] <= is_b_l1_mb_reg ? mb_ref_idx_reg : mb_ref_idx_l1_reg;
+                    refmeta_mvx_l0[current_write_bank][mb_count] <= is_b_frame && is_b_bi_mb_reg ? me_best_mvx_l0 : me_best_mvx;
+                    refmeta_mvy_l0[current_write_bank][mb_count] <= is_b_frame && is_b_bi_mb_reg ? me_best_mvy_l0 : me_best_mvy;
+                    refmeta_mvx_l1[current_write_bank][mb_count] <= is_b_frame && is_b_bi_mb_reg ? me_best_mvx_l1 :
+                                                                    ((is_b_frame && is_b_l1_mb_reg) ? me_best_mvx : 8'sd0);
+                    refmeta_mvy_l1[current_write_bank][mb_count] <= is_b_frame && is_b_bi_mb_reg ? me_best_mvy_l1 :
+                                                                    ((is_b_frame && is_b_l1_mb_reg) ? me_best_mvy : 8'sd0);
                     // Save top-left diagonal before overwriting (for D neighbor)
                     diag_mvx <= top_mvx[mb_x];
                     diag_mvy <= top_mvy[mb_x];
@@ -3733,7 +4293,8 @@ pred_buf = {(256*BD){1'b0}};
                          else if (!flush_accepted) flush_accepted <= 1'b1;
                          else if (bs_cmd_done) begin
                              done <= 1'b1;
-                             $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d", cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count);
+                             $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d",
+                                      cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count);
                              if (is_p_frame) begin
                                  ancient_ref_bank <= oldest_ref_bank;
                                  oldest_ref_bank <= older_ref_bank;

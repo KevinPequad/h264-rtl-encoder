@@ -282,6 +282,10 @@ The testbench must not:
   - Non-reference `B`-slice support on the current intra / `I_PCM` path
   - Limited non-reference inter-coded `B_L0_16x16`, `B_L1_16x16`, and
     `B_BI_16x16` support on the current reordered dual-list `16x16` B path
+  - Limited `B_DIRECT_16x16` support on the current reordered dual-list
+    `16x16` B path, with spatial direct derivation from neighbor state plus
+    colocated MB metadata captured per reference bank, automatic selection,
+    and a force hook for targeted validation
   - Limited reference-`B` / `BREF` support on the current reordered dual-list
     `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` path
   - Reordered `B`-GOP scheduling support in the testbench / validation flow
@@ -294,6 +298,12 @@ The testbench must not:
   - The current limited `B_BI_16x16` path now writes back both motion-vector
     lists into neighbor state and refines each list through the quarter-pel
     luma path before the bidirectional average is formed
+  - The current limited `B_DIRECT_16x16` path now derives decoder-matching
+    spatial direct vectors from neighbor state, applies the colocated zero-MV
+    rule from per-bank MB metadata, uses an exact direct interpolation path
+    instead of the normal qpel search loop, and can now win automatically
+    against the current reordered `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16`
+    candidates instead of only via a force flag
   - Reordered GOP forcing can now emit reference-slot pictures as `BREF`
     instead of `P`, so encode orders such as `0,2,1,4,3` can be driven as
     all-BREF non-IDR GOPs for validation
@@ -385,10 +395,16 @@ The testbench must not:
   - Non-reference `B`-picture syntax on the current intra / `I_PCM` path
   - Limited non-reference `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` inter
     coding on the current reordered dual-list `16x16` B path
+  - Limited `B_DIRECT_16x16` inter coding on the current reordered dual-list
+    `16x16` B path, with automatic selection plus a force hook for targeted
+    validation
   - Limited reference-`B` / `BREF` picture support on the current reordered
     dual-list `16x16` B path
   - Explicit weighted prediction on the current single-list reordered B
     subpaths
+  - Limited spatial direct prediction on the current reordered dual-list
+    `16x16` B path, with automatic selection plus a force hook for targeted
+    validation
   - Full directional `Intra_4x4` luma mode coverage
   - `Intra_16x16` luma prediction and syntax support
   - `Intra_16x16` luma-DC CAVLC now derives `nC` from the normal surrounding
@@ -426,10 +442,16 @@ The testbench must not:
     validation scripts for reordered B-picture encode order
   - Runtime-configurable `force_b_bi` support in the testbench and validation
     scripts for the current limited `B_BI_16x16` path
+  - Runtime-configurable `force_b_direct` support in the testbench and
+    validation scripts for targeted validation of the current limited
+    `B_DIRECT_16x16` path
   - Simulator-side per-frame `b_l1_mbs` logging so reordered B validation can
     prove that the future-reference `List1` path was actually selected
   - Simulator-side per-frame `b_bi_mbs` logging so reordered B validation can
     prove that the bidirectional `B_BI_16x16` path was actually selected
+  - Simulator-side per-frame `b_direct_mbs` logging so reordered B validation
+    can prove that the current limited `B_DIRECT_16x16` path was actually
+    selected, whether automatically or via force
   - Reordered validation can now combine `--reorder-b-gop` and
     `--force-bref-slice` so the reference slots are emitted as `BREF`
     pictures
@@ -437,9 +459,11 @@ The testbench must not:
     path
 
 - Use `scripts/regress_smoke_matrix.py` to keep the current smoke matrix
-  reproducible, including simulator logs and cycle counts
+  reproducible, including simulator logs, cycle counts, and per-case
+  `b_mode_summary` counters
   - Treat it as a fast strict-decode/profile sanity matrix on tiny `I_PCM`
-    cases, not the final decode-quality gate
+    cases plus a tiny forced `B_DIRECT_16x16` case, not the final
+    decode-quality gate
   - It now emits both `.build.log` and `.sim.log` artifacts per case
 
 - Use `scripts/validate_clip.py` for staged multi-frame validation, PSNR / SSIM,
@@ -630,6 +654,29 @@ The testbench must not:
     `18,872` bytes, RTL PSNR avg `32.421436`, RTL SSIM all `0.86191`, with
     simulator logging still showing `b_l1_mbs=220` on the two middle non-IDR
     pictures and `b_bi_mbs=0` across the run
+  - `bdirect_force_32x16_3f`: strict FFmpeg-decodable forced-`B_DIRECT_16x16`
+    reordered-`BREF` validation at `32x16`, `3` frames, `131,068` cycles,
+    `265` bytes, RTL PSNR avg `27.36622`, RTL SSIM all `0.554193`,
+    `output/validation_bdirect_force_32x16_3f.h264`,
+    `output/validation_bdirect_force_32x16_3f.mp4`, and simulator logging
+    showing `b_direct_mbs=2` on the last picture
+  - `bdirect_force_320x176_5f`: strict FFmpeg-decodable forced-`B_DIRECT_16x16`
+    reordered all-`BREF` validation at `320x176`, `5` frames, `97,641,789`
+    cycles, `25,505` bytes, RTL PSNR avg `13.670634`, RTL SSIM all `0.668749`,
+    `output/validation_bdirect_force_320x176_5f.h264`,
+    `output/validation_bdirect_force_320x176_5f.mp4`, and simulator logging
+    showing `b_direct_mbs=220` on each non-IDR picture
+  - `bdirect_auto_probe_32x16_3f`: strict FFmpeg-decodable non-forced auto
+    `B_DIRECT_16x16` reordered-B validation at `32x16`, `3` frames, `130,756`
+    cycles, `122` bytes, RTL PSNR avg `30.120198`, RTL SSIM all `0.774794`,
+    `output/validation_bdirect_auto_probe_32x16_3f.h264`, and simulator
+    logging showing `b_direct_mbs=1` on the last picture
+  - `bdirect_auto_probe_320x176_5f`: strict FFmpeg-decodable non-forced
+    decode-only reordered all-`BREF` validation at `320x176`, `5` frames,
+    `93,162,228` cycles, `4,666` bytes,
+    `output/validation_bdirect_auto_probe_320x176_5f.h264`, and simulator
+    logging showing nonzero `b_direct_mbs` across all three non-IDR pictures
+    (`219`, `148`, and `31`)
 
 - A 720p chroma corruption bug was traced to raw input address overflow in the Cr plane fetch path and fixed by widening the raw input address width
 - A directional `Intra_4x4` top-right reference fetch bug was fixed in
@@ -745,7 +792,8 @@ The testbench must not:
   - No broader `B` / `BREF` picture support beyond the current limited
     reordered dual-list `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` `16x16`
     path
-  - No direct motion-vector prediction modes
+  - No broader direct prediction modes beyond the current limited
+    `B_DIRECT_16x16` reordered-`BREF` path
   - No reference management beyond the current four-reference P-slice subset
   - No broader full-standard sub-pel motion path beyond the current `16x16`
     quarter-pel luma / chroma fractional inter flow
@@ -761,7 +809,8 @@ The testbench must not:
   - `B` / `BREF` picture support
   - Reference-picture management beyond the current four-reference P-slice subset
   - Weighted bipred support beyond the current limited `B_BI_16x16` path
-  - Direct motion-vector prediction support
+  - Broader direct prediction support beyond the current limited
+    `B_DIRECT_16x16` reordered-`BREF` path
   - Broader sub-pel motion estimation / compensation support
   - Broader inter partition coverage and `8x8dct`-class transform coverage
   - Broader `4:4:4` support beyond the current `320x176` strict-decode

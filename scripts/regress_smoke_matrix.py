@@ -18,6 +18,10 @@ DEFAULT_HEIGHT = 16
 DEFAULT_FRAMES = 2
 DEFAULT_TIMEOUT = 20_000_000
 SIM_SUMMARY_RE = re.compile(r"\[TB\]\s+(?P<frames>\d+)\s+frames encoded,\s+(?P<cycles>\d+)\s+cycles,\s+(?P<bytes>\d+)\s+bytes")
+PSKIP_RE = re.compile(
+    r"\[PSKIP\]\s+Frame\s+(?P<frame>\d+)\s+skip_mbs=(?P<skip>\d+)\s+"
+    r"b_l1_mbs=(?P<b_l1>\d+)\s+b_bi_mbs=(?P<b_bi>\d+)\s+b_direct_mbs=(?P<b_direct>\d+)"
+)
 DECODE_ERROR_PATTERNS = (
     "error while decoding",
     "mb_type ",
@@ -56,6 +60,12 @@ class SmokeCase:
     enable_p_ipcm: int = 0
     ipcm_sad_threshold: int = 18000
     inter_sad_threshold: int = 8000
+    idr_interval: int = 12
+    force_b_slice: int = 0
+    force_bref_slice: int = 0
+    force_b_bi: int = 0
+    force_b_direct: int = 0
+    reorder_b_gop: int = 0
 
 
 CASES = [
@@ -124,6 +134,17 @@ CASES = [
         enable_p_ipcm=1,
         ipcm_sad_threshold=0,
         inter_sad_threshold=0,
+    ),
+    SmokeCase(
+        "smoke_8b_420_bdirect",
+        8,
+        1,
+        "smoke_32x16_3f_bdirect.yuv",
+        "smoke_32x16_3f_bdirect.h264",
+        frames=3,
+        force_bref_slice=1,
+        force_b_direct=1,
+        reorder_b_gop=1,
     ),
 ]
 
@@ -246,6 +267,47 @@ def parse_sim_summary(sim_log: str) -> dict[str, int]:
     }
 
 
+def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
+    frames_with_l1 = 0
+    frames_with_bi = 0
+    frames_with_direct = 0
+    max_l1 = 0
+    max_bi = 0
+    max_direct = 0
+    total_l1 = 0
+    total_bi = 0
+    total_direct = 0
+
+    for match in PSKIP_RE.finditer(sim_log):
+        l1 = int(match.group("b_l1"))
+        bi = int(match.group("b_bi"))
+        direct = int(match.group("b_direct"))
+        total_l1 += l1
+        total_bi += bi
+        total_direct += direct
+        if l1:
+            frames_with_l1 += 1
+        if bi:
+            frames_with_bi += 1
+        if direct:
+            frames_with_direct += 1
+        max_l1 = max(max_l1, l1)
+        max_bi = max(max_bi, bi)
+        max_direct = max(max_direct, direct)
+
+    return {
+        "frames_with_l1": frames_with_l1,
+        "frames_with_bi": frames_with_bi,
+        "frames_with_direct": frames_with_direct,
+        "max_l1": max_l1,
+        "max_bi": max_bi,
+        "max_direct": max_direct,
+        "total_l1": total_l1,
+        "total_bi": total_bi,
+        "total_direct": total_direct,
+    }
+
+
 def main() -> int:
     require_tool("ffmpeg")
     require_tool("ffprobe")
@@ -283,12 +345,32 @@ def main() -> int:
             chroma_offset_cb=case.chroma_offset_cb,
             chroma_weight_cr=case.chroma_weight_cr,
             chroma_offset_cr=case.chroma_offset_cr,
+            idr_interval=case.idr_interval,
+            force_b_slice=case.force_b_slice,
+            force_bref_slice=case.force_bref_slice,
+            force_b_bi=case.force_b_bi,
+            force_b_direct=case.force_b_direct,
+            reorder_b_gop=case.reorder_b_gop,
         )
         sim_bin = build_sim(workspace, config, build_log_path=build_log_path)
-        sim_proc = run_sim(sim_bin, case.frames, case.timeout, input_path, output_path, capture=True)
+        sim_proc = run_sim(
+            sim_bin,
+            case.frames,
+            case.timeout,
+            input_path,
+            output_path,
+            idr_interval=case.idr_interval,
+            force_b_slice=case.force_b_slice,
+            force_bref_slice=case.force_bref_slice,
+            force_b_bi=case.force_b_bi,
+            force_b_direct=case.force_b_direct,
+            reorder_b_gop=case.reorder_b_gop,
+            capture=True,
+        )
         sim_log = (sim_proc.stdout or "") + (sim_proc.stderr or "")
         log_path.write_text(sim_log, encoding="utf-8")
         sim_summary = parse_sim_summary(sim_log)
+        b_mode_summary = parse_b_mode_summary(sim_log)
         decode_check(output_path)
         stream = ffprobe_stream(output_path)
 
@@ -300,12 +382,14 @@ def main() -> int:
             "build_log": str(build_log_path),
             "sim_log": str(log_path),
             "sim_summary": sim_summary,
+            "b_mode_summary": b_mode_summary,
             "stream": stream,
         }
         results.append(result)
         print(
             f"[PASS] {case.name}: profile={stream.get('profile')} "
-            f"pix_fmt={stream.get('pix_fmt')} {stream.get('width')}x{stream.get('height')}"
+            f"pix_fmt={stream.get('pix_fmt')} {stream.get('width')}x{stream.get('height')} "
+            f"b_direct_max={b_mode_summary.get('max_direct', 0)}"
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)

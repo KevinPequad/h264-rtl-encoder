@@ -45,6 +45,7 @@ module h264_bitstream #(
     input  wire [8:0]  pic_order_cnt_lsb,
     input  wire        is_inter_mb,
     input  wire        is_skip_mb,
+    input  wire        is_b_direct_mb,
     input  wire        is_b_l1_mb,
     input  wire        is_b_bi_mb,
     input  wire [1:0]  mb_ref_idx_l0,
@@ -1082,13 +1083,20 @@ module h264_bitstream #(
                             6'd24: begin
                                 if (is_inter_mb) begin
                                     if (is_b_slice) begin
-                                        // Current B inter path supports 16x16 single-list and
-                                        // bidirectional coding:
+                                        // Current B inter path supports B_DIRECT_16x16 plus
+                                        // 16x16 single-list and bidirectional coding:
+                                        // B_DIRECT_16x16 -> codeNum 0
                                         // B_L0_16x16 -> codeNum 1
                                         // B_L1_16x16 -> codeNum 2
                                         // B_BI_16x16 -> codeNum 3
-                                        ue_input <= is_b_bi_mb ? 9'd3 : (is_b_l1_mb ? 9'd2 : 9'd1);
-                                        sub <= 6'd22;
+                                        if (is_b_direct_mb) begin
+                                            bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
+                                            bit_cnt <= bit_cnt + 7'd1;
+                                            sub <= 6'd15;
+                                        end else begin
+                                            ue_input <= is_b_bi_mb ? 9'd3 : (is_b_l1_mb ? 9'd2 : 9'd1);
+                                            sub <= 6'd22;
+                                        end
                                     end else begin
                                         // Current P inter path uses P_L0_16x16, which is mb_type=0.
                                         bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
