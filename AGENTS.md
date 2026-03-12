@@ -280,17 +280,17 @@ The testbench must not:
   - I-frame support
   - P-frame support
   - Non-reference `B`-slice support on the current intra / `I_PCM` path
-  - Limited non-reference inter-coded `B_L0_16x16` and `B_L1_16x16` support
-    on the current reordered single-list B path
-  - Limited reference-`B` / `BREF` support on the current reordered
-    single-list `B_L0_16x16` / `B_L1_16x16` path
+  - Limited non-reference inter-coded `B_L0_16x16`, `B_L1_16x16`, and
+    `B_BI_16x16` support on the current reordered dual-list `16x16` B path
+  - Limited reference-`B` / `BREF` support on the current reordered dual-list
+    `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` path
   - Reordered `B`-GOP scheduling support in the testbench / validation flow
     for encode orders such as `0,2,1,4,3`, with non-reference `B` pictures
     reusing the same `frame_num` as the surrounding reference pair while
     carrying their own `pic_order_cnt_lsb`
-  - Current reordered B inter selection can choose past `List0` or future
-    `List1` prediction per macroblock, with `B_L1_16x16` emitted through the
-    RTL bitstream path when the future reference wins
+  - Current reordered B inter selection can choose past `List0`, future
+    `List1`, or bidirectional `B_BI_16x16` prediction per macroblock on the
+    current limited reordered dual-list `16x16` B path
   - Reordered GOP forcing can now emit reference-slot pictures as `BREF`
     instead of `P`, so encode orders such as `0,2,1,4,3` can be driven as
     all-BREF non-IDR GOPs for validation
@@ -317,8 +317,9 @@ The testbench must not:
   - Chroma fractional interpolation on the current inter path
   - Weighted P prediction for inter luma and chroma on the RTL path
   - `pred_weight_table` slice signaling in RTL for weighted P slices
-  - Explicit weighted B prediction on the current single-list B path,
-    including B-slice `pred_weight_table` signaling for `List0` and `List1`
+  - Explicit weighted B prediction on the current single-list reordered B
+    subpaths, including B-slice `pred_weight_table` signaling for `List0` and
+    `List1`
   - Full directional `Intra_4x4` mode support
   - `Intra_16x16` luma prediction with `Vertical`, `Horizontal`, `DC`, and
     `Plane` mode search
@@ -379,11 +380,12 @@ The testbench must not:
   - CAVLC entropy path owned by RTL
   - I-picture and P-picture coding
   - Non-reference `B`-picture syntax on the current intra / `I_PCM` path
-  - Limited non-reference `B_L0_16x16` and `B_L1_16x16` inter coding on the
-    current reordered single-list B path
+  - Limited non-reference `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` inter
+    coding on the current reordered dual-list `16x16` B path
   - Limited reference-`B` / `BREF` picture support on the current reordered
-    single-list B path
-  - Explicit weighted prediction on the current single-list B path
+    dual-list `16x16` B path
+  - Explicit weighted prediction on the current single-list reordered B
+    subpaths
   - Full directional `Intra_4x4` luma mode coverage
   - `Intra_16x16` luma prediction and syntax support
   - `Intra_16x16` luma-DC CAVLC now derives `nC` from the normal surrounding
@@ -419,8 +421,12 @@ The testbench must not:
     validation scripts for the current limited reference-`B` path
   - Runtime-configurable `reorder_b_gop` support in the testbench and
     validation scripts for reordered B-picture encode order
+  - Runtime-configurable `force_b_bi` support in the testbench and validation
+    scripts for the current limited `B_BI_16x16` path
   - Simulator-side per-frame `b_l1_mbs` logging so reordered B validation can
     prove that the future-reference `List1` path was actually selected
+  - Simulator-side per-frame `b_bi_mbs` logging so reordered B validation can
+    prove that the bidirectional `B_BI_16x16` path was actually selected
   - Reordered validation can now combine `--reorder-b-gop` and
     `--force-bref-slice` so the reference slots are emitted as `BREF`
     pictures
@@ -591,6 +597,19 @@ The testbench must not:
     `--enable-idr-ipcm 1 --enable-p-ipcm 1` at `32x16`, `8-bit 4:4:4`,
     packaged MP4 output, and JSON summary in
     `output/validation_32x16_2f_444_ipcm_scripted.json`
+  - strict FFmpeg-decodable forced-`B_BI_16x16` reordered-B validation at
+    `32x16`, `3` frames, `output/validation_forcebbi_32x16_3f.h264`, and
+    `output/validation_forcebbi_32x16_3f.json`, with simulator logging showing
+    `b_bi_mbs=2` on the B picture
+  - strict FFmpeg-decodable forced-`B_BI_16x16` reordered all-`BREF`
+    validation at `320x176`, encode order `0,2,1,4,3`,
+    `output/validation_forcebbi_320x176_5f.h264`, and
+    `output/validation_forcebbi_320x176_5f.json`, with simulator logging
+    showing `b_bi_mbs=10`, `220`, and `220` across the three non-IDR pictures
+  - strict FFmpeg-decodable forced-`B_BI_16x16` reordered all-`BREF`
+    validation at `320x176`, `5` frames, `84,060,781` cycles, `11,969` bytes,
+    `output/validation_forcebbi_320x176_5f_mp4.h264`, and
+    `output/validation_forcebbi_320x176_5f_mp4.mp4`
 
 - A 720p chroma corruption bug was traced to raw input address overflow in the Cr plane fetch path and fixed by widening the raw input address width
 - A directional `Intra_4x4` top-right reference fetch bug was fixed in
@@ -680,6 +699,9 @@ The testbench must not:
   reordered `B_L1_16x16` path, with `trace_headers` confirming
   `weighted_bipred_idc = 1` in PPS and B-slice `pred_weight_table` entries for
   `List0` and `List1`
+- The current tree now also validates a limited `B_BI_16x16` path on reordered
+  B-picture GOPs, with explicit list0/list1 MVD syntax, simulator-side
+  `b_bi_mbs` logging, and forced validation at `32x16` and `320x176`
 - `scripts/validate_clip.py` and `scripts/rtl_runner.py` now expose
   `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
   `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths
@@ -697,7 +719,8 @@ The testbench must not:
   H.264 encoder yet:
   - No CABAC syntax integration into the final RTL bitstream path yet
   - No broader `B` / `BREF` picture support beyond the current limited
-    reordered single-list `B_L0_16x16` / `B_L1_16x16` path
+    reordered dual-list `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` `16x16`
+    path
   - No weighted bipred on bidirectional B macroblocks
   - No direct motion-vector prediction modes
   - No reference management beyond the current four-reference P-slice subset
@@ -714,7 +737,8 @@ The testbench must not:
   - CABAC integrated into real RTL slice syntax, not only a standalone core
   - `B` / `BREF` picture support
   - Reference-picture management beyond the current four-reference P-slice subset
-  - Weighted bipred support beyond the current weighted P path
+  - Weighted bipred support beyond the current weighted P path and single-list
+    weighted B subpaths
   - Direct motion-vector prediction support
   - Broader sub-pel motion estimation / compensation support
   - Broader inter partition coverage and `8x8dct`-class transform coverage

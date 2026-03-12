@@ -38,6 +38,7 @@ class BuildConfig:
     idr_interval: int = 12
     force_b_slice: int = 0
     force_bref_slice: int = 0
+    force_b_bi: int = 0
     reorder_b_gop: int = 0
 
 
@@ -135,6 +136,7 @@ def run_sim(
     idr_interval: int = 12,
     force_b_slice: int = 0,
     force_bref_slice: int = 0,
+    force_b_bi: int = 0,
     reorder_b_gop: int = 0,
     trace: bool = False,
     trace_file: Path | None = None,
@@ -153,6 +155,8 @@ def run_sim(
         cmd.append("+force_b_slice=1")
     if force_bref_slice:
         cmd.append("+force_bref_slice=1")
+    if force_b_bi:
+        cmd.append("+force_b_bi=1")
     if reorder_b_gop:
         cmd.append("+reorder_b_gop=1")
     if trace:
