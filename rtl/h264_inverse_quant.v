@@ -1,7 +1,6 @@
-// h264_inverse_quant.v — Inverse Quantization
-// For QP=26: QP/6=4, QP%6=2
-// H.264 spec 8.5.8: d_ij = (level_ij * LevelScale(QP%6, i, j)) << (QP/6)
-// For QP=26, QP/6=4, so shift is << 4.
+// h264_inverse_quant.v — Inverse Quantization for the fixed-QP RTL path.
+// The effective QP must include QpBdOffset so the encoder reconstruction path
+// matches the decoder's derived QP at high bit depth.
 
 module h264_inverse_quant #(
     parameter BIT_DEPTH = 8
@@ -20,6 +19,9 @@ module h264_inverse_quant #(
 );
 
     localparam CW = BIT_DEPTH + 8;
+    localparam integer QP_BD_OFFSET = 6 * (BIT_DEPTH - 8);
+    localparam integer FIXED_QP = 26 + QP_BD_OFFSET;
+    localparam integer IQ_SHIFT = (FIXED_QP / 6) - 4;
 
     reg [2:0] state;
     localparam S_IDLE    = 3'd0;
@@ -31,18 +33,64 @@ module h264_inverse_quant #(
     function signed [15:0] get_scale;
         input [3:0] pos;
         begin
-            if (pos[2] == 1'b0 && pos[0] == 1'b0)
-                get_scale = 16'sd13; // Index 0
-            else if (pos[2] == 1'b1 && pos[0] == 1'b1)
-                get_scale = 16'sd20; // Index 1
-            else
-                get_scale = 16'sd16; // Index 2
+            case (FIXED_QP % 6)
+                0: begin
+                    if (pos[2] == 1'b0 && pos[0] == 1'b0)
+                        get_scale = 16'sd10;
+                    else if (pos[2] == 1'b1 && pos[0] == 1'b1)
+                        get_scale = 16'sd16;
+                    else
+                        get_scale = 16'sd13;
+                end
+                1: begin
+                    if (pos[2] == 1'b0 && pos[0] == 1'b0)
+                        get_scale = 16'sd11;
+                    else if (pos[2] == 1'b1 && pos[0] == 1'b1)
+                        get_scale = 16'sd18;
+                    else
+                        get_scale = 16'sd14;
+                end
+                2: begin
+                    if (pos[2] == 1'b0 && pos[0] == 1'b0)
+                        get_scale = 16'sd13;
+                    else if (pos[2] == 1'b1 && pos[0] == 1'b1)
+                        get_scale = 16'sd20;
+                    else
+                        get_scale = 16'sd16;
+                end
+                3: begin
+                    if (pos[2] == 1'b0 && pos[0] == 1'b0)
+                        get_scale = 16'sd14;
+                    else if (pos[2] == 1'b1 && pos[0] == 1'b1)
+                        get_scale = 16'sd23;
+                    else
+                        get_scale = 16'sd18;
+                end
+                4: begin
+                    if (pos[2] == 1'b0 && pos[0] == 1'b0)
+                        get_scale = 16'sd16;
+                    else if (pos[2] == 1'b1 && pos[0] == 1'b1)
+                        get_scale = 16'sd25;
+                    else
+                        get_scale = 16'sd20;
+                end
+                default: begin
+                    if (pos[2] == 1'b0 && pos[0] == 1'b0)
+                        get_scale = 16'sd18;
+                    else if (pos[2] == 1'b1 && pos[0] == 1'b1)
+                        get_scale = 16'sd29;
+                    else
+                        get_scale = 16'sd23;
+                end
+            endcase
         end
     endfunction
 
     reg signed [15:0] level;
     reg signed [15:0] scale;
     reg signed [31:0] product;
+    reg signed [47:0] scaled;
+    reg signed [31:0] round_bias;
 
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
@@ -64,9 +112,15 @@ module h264_inverse_quant #(
                 S_DEQUANT: begin
                     level   = $signed(quant_flat[idx*16 +: 16]);
                     scale   = get_scale(idx);
-                    product = level * scale;
+                    product = level * (scale <<< 4);
+                    if (IQ_SHIFT >= 0) begin
+                        scaled = product <<< IQ_SHIFT;
+                    end else begin
+                        round_bias = 32'sd1 <<< ((-IQ_SHIFT) - 1);
+                        scaled = (product + round_bias) >>> (-IQ_SHIFT);
+                    end
                 // verilator lint_on BLKSEQ
-                    dequant_flat[idx*CW +: CW] <= (product <<< 4);
+                    dequant_flat[idx*CW +: CW] <= scaled[CW-1:0];
 
                     if (idx == 4'd15)
                         state <= S_DONE;

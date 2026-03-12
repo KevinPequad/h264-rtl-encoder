@@ -205,6 +205,8 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - full directional `Intra_4x4` mode support
 - `Intra_16x16` luma prediction with `Vertical`, `Horizontal`, `DC`, and
   `Plane` mode search
+- `Intra_16x16` luma-DC CAVLC now derives `nC` from the normal surrounding
+  `4x4` nnz context instead of a special neighbor luma-DC count path
 - current IDR-path and P-slice intra-path `I_PCM` macroblock coding with raw
   luma / Cb / Cr sample emission owned by the RTL writer
 - chroma intra prediction: DC-style path
@@ -259,6 +261,20 @@ Current additional validated `I_PCM`-only coverage:
 - `8-bit 4:4:4`
 - `10-bit 4:4:4`
 
+Current additional validated tiny non-`I_PCM` coverage at `32x16`:
+
+- `10-bit 4:2:0` one-frame and two-frame IDR / P probes
+- `10-bit 4:2:2` two-frame IDR / P probes
+- `8-bit 4:4:4` two-frame IDR / P probes
+- `10-bit 4:4:4` one-frame and two-frame IDR / P probes
+
+Current additional validated non-`I_PCM` coverage at `320x176`:
+
+- `10-bit 4:2:0` four-frame strict-decode IDR+P run
+- `10-bit 4:2:2` four-frame strict-decode IDR+P run
+- `8-bit 4:4:4` four-frame strict-decode IDR+P run
+- `10-bit 4:4:4` four-frame strict-decode IDR+P run
+
 ## Validated Capabilities
 
 Verified validation and tooling coverage around the encoder flow:
@@ -294,6 +310,44 @@ Verified validation and tooling coverage around the encoder flow:
 Measured validation points:
 
 - `docker_320x176_1f`: `816,975` cycles
+- `32x16_1f_nonipcm_10b420_main_ncfix`: strict FFmpeg-decodable one-frame
+  non-`I_PCM` `10-bit 4:2:0` probe, RTL PSNR avg `7.9009`, RTL SSIM
+  `0.345989`
+- `32x16_2f_nonipcm_10b420_idr1_ncfix`: strict FFmpeg-decodable two-frame
+  all-IDR non-`I_PCM` `10-bit 4:2:0` probe, RTL PSNR avg `9.8896`, RTL SSIM
+  `0.469719`
+- `32x16_2f_nonipcm_10b420_p_ncfix`: strict FFmpeg-decodable two-frame IDR+P
+  non-`I_PCM` `10-bit 4:2:0` probe, RTL PSNR avg `10.9076`, RTL SSIM
+  `0.643681`
+- `32x16_2f_nonipcm_10b422_idr1_ncfix`: strict FFmpeg-decodable two-frame
+  all-IDR non-`I_PCM` `10-bit 4:2:2` probe, RTL PSNR avg `11.1312`, RTL SSIM
+  `0.544361`
+- `32x16_2f_nonipcm_10b422_p_ncfix`: strict FFmpeg-decodable two-frame IDR+P
+  non-`I_PCM` `10-bit 4:2:2` probe, RTL PSNR avg `12.1470`, RTL SSIM
+  `0.674832`
+- `32x16_2f_nonipcm_8b444_idr1_ncfix`: strict FFmpeg-decodable two-frame
+  all-IDR non-`I_PCM` `8-bit 4:4:4` probe, RTL PSNR avg `35.8758`, RTL SSIM
+  `0.968007`
+- `32x16_2f_nonipcm_8b444_p_ncfix`: strict FFmpeg-decodable two-frame IDR+P
+  non-`I_PCM` `8-bit 4:4:4` probe, RTL PSNR avg `24.2915`, RTL SSIM
+  `0.827152`
+- `32x16_1f_nonipcm_10b444_probe_ncfix`: strict FFmpeg-decodable one-frame
+  non-`I_PCM` `10-bit 4:4:4` probe, RTL PSNR avg `38.5022`, RTL SSIM
+  `0.897306`
+- `32x16_2f_nonipcm_10b444_idr1_ncfix`: strict FFmpeg-decodable two-frame
+  all-IDR non-`I_PCM` `10-bit 4:4:4` probe, RTL PSNR avg `38.5059`, RTL SSIM
+  `0.899397`
+- `32x16_2f_nonipcm_10b444_p_ncfix`: strict FFmpeg-decodable two-frame IDR+P
+  non-`I_PCM` `10-bit 4:4:4` probe, RTL PSNR avg `28.3215`, RTL SSIM
+  `0.886921`
+- `320x176_4f_nonipcm_10b420_p`: strict FFmpeg-decodable four-frame IDR+P
+  non-`I_PCM` `10-bit 4:2:0` validation, `82,912,587` cycles, `3,391` bytes
+- `320x176_4f_nonipcm_10b422_p`: strict FFmpeg-decodable four-frame IDR+P
+  non-`I_PCM` `10-bit 4:2:2` validation, `83,862,691` cycles, `3,612` bytes
+- `320x176_4f_nonipcm_8b444_p`: strict FFmpeg-decodable four-frame IDR+P
+  non-`I_PCM` `8-bit 4:4:4` validation, `94,712,740` cycles, `2,437` bytes
+- `320x176_4f_nonipcm_10b444_p`: strict FFmpeg-decodable four-frame IDR+P
+  non-`I_PCM` `10-bit 4:4:4` validation, `93,663,754` cycles, `2,254` bytes
 - `320x176_1f_vui`: strict FFmpeg-decodable one-frame SPS/VUI timing smoke,
   `732,748` cycles, FFmpeg `level=12`, and raw-stream timing metadata behavior
   matching a one-frame `x264` elementary stream at the same settings
@@ -541,7 +595,8 @@ H.264 encoder yet:
 - broader full-standard sub-pel motion handling beyond the current `16x16`
   quarter-pel luma path
 - broader inter partition coverage and `8x8dct`-class transform support
-- broader `4:4:4` chroma support beyond the current `I_PCM` path
+- broader `4:4:4` chroma support beyond the current `320x176` strict-decode
+  non-`I_PCM` path and spot `I_PCM` coverage
 - full in-loop deblocking engine
 - full-standard profile / level / tool coverage
 
@@ -556,7 +611,8 @@ Still missing relative to the chosen `x264` software baseline:
 - direct prediction modes
 - broader sub-pel motion estimation / compensation and richer mode decision
 - broader partition / transform coverage including `8x8dct`-class tools
-- broader `I444` / `4:4:4` format coverage beyond the current `I_PCM` path
+- broader `I444` / `4:4:4` format coverage beyond the current `320x176`
+  strict-decode non-`I_PCM` path and spot `I_PCM` coverage
 - in-loop deblocking
 - enough profile / level / tool coverage to stop calling the repo a subset
 

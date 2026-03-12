@@ -14,6 +14,19 @@ verified and the byte stream came from the RTL output path.
 Full completion now means **full H.264 standard capability**, not a permanently
 restricted subset.
 
+Full completion also includes a repo that is documented, organized, and clean
+enough to look like a serious professional implementation rather than an
+accumulation of ad-hoc experiments. As the encoder grows, the documentation,
+feature inventory, scripts, and repo layout must become clearer and more
+maintainable, not less.
+
+The agent must proactively check for missing H.264 feature classes, partial
+implementations, incorrect syntax coverage, and silently unimplemented corners.
+Do not assume a feature is "covered" just because a nearby subset works or a
+small smoke test passes. A feature only counts as done when the required RTL
+implementation, bitstream ownership, reconstruction behavior, and validation
+evidence exist for that feature class.
+
 Do not stop at partial subset milestones, decode-only smoke wins, or
 documentation updates. Keep going until the remaining full-standard feature
 gaps are implemented in the RTL-owned encoder path, or there is a real,
@@ -163,6 +176,43 @@ The testbench must not:
 - Do not treat the current subset support as final completion if major H.264
   standard features are still missing
 
+## Documentation And Repo Hygiene
+
+- As new codec features, syntax paths, or validation flows are implemented,
+  update `README.md` and `STATUS.md` in the same session so the repo records
+  what changed, how it works at a high level, how it was validated, and what
+  still remains.
+- Keep the implemented-feature lists, missing-feature lists, and validation
+  evidence synchronized with the actual RTL tree. Remove stale claims, stale
+  blockers, and obsolete workaround notes when the code changes.
+- Treat every major H.264 feature class as missing until it has been explicitly
+  audited, implemented in RTL where required, and validated. Do not let silent
+  omissions survive just because they were not exercised by the latest test.
+- Prefer concise design documentation for non-obvious architectural choices,
+  especially for entropy coding, reference management, reordered GOP behavior,
+  prediction modes, chroma-format handling, reconstruction state, and
+  bitstream ownership boundaries.
+- Keep helper scripts, validation artifacts, and directory layout organized.
+  Rename ad-hoc outputs to durable names when they become important, and do
+  not leave scratch files or one-off experimental debris as the repo's lasting
+  public shape.
+- When a feature lands, capture the exact validation command, artifact paths,
+  and the key proof points in the status docs so later sessions can continue
+  without rediscovering the same context.
+- Regularly review the full H.264 feature surface, not just the current local
+  bug. The agent must keep a living mental and documented checklist of major
+  tool classes such as entropy modes, slice types, picture types, prediction
+  modes, motion partitions, reference-picture management, deblocking,
+  transform/tool coverage, chroma formats, bit depths, profile coverage,
+  VUI/HRD signaling where relevant, and any other feature classes needed to
+  honestly claim full-standard RTL coverage.
+- Do not treat repo cleanup as a substitute for implementation progress, but do
+  not defer all cleanup to the very end either. The repository should become
+  clearer, more concise, and more professional as the implementation matures.
+- Before declaring completion, perform an explicit repo-cleanliness pass:
+  tighten docs, trim stale clutter, reduce ambiguity in scripts and comments,
+  and leave the repository in a clear, reproducible, professional state.
+
 ## Working Priorities
 
 1. Keep the encoder end to end through the RTL bitstream path
@@ -180,6 +230,16 @@ The testbench must not:
    default unless the user has redirected the work or a concrete blocker exists
 10. Never use a progress report, commit, push, milestone, or turn boundary as a
     passive stopping point when more safe work remains in the current session
+11. Keep `README.md`, `STATUS.md`, and the feature-gap inventories accurate as
+    the implementation changes so repo state and code state do not drift apart
+12. Periodically audit the remaining H.264 / AVC feature matrix against the
+    spec and the chosen `x264` baseline so no major feature class is forgotten
+13. As the repo approaches completion, actively improve organization,
+    cleanliness, and conciseness so the final tree looks deliberate,
+    professional, and maintainable
+14. Do not declare any H.264 feature complete until the RTL implementation,
+    syntax ownership, reconstruction behavior, and validation evidence prove
+    that nothing required for that feature class is still missing
 
 ## Current Practical Notes
 
@@ -293,6 +353,18 @@ The testbench must not:
   - `8-bit 4:4:4`
   - `10-bit 4:4:4`
 
+- Current additional validated tiny non-`I_PCM` coverage at `32x16`:
+  - `10-bit 4:2:0` one-frame and two-frame IDR / P probes
+  - `10-bit 4:2:2` two-frame IDR / P probes
+  - `8-bit 4:4:4` two-frame IDR / P probes
+  - `10-bit 4:4:4` one-frame and two-frame IDR / P probes
+
+- Current additional validated non-`I_PCM` coverage at `320x176`:
+  - `10-bit 4:2:0` four-frame strict-decode IDR+P run
+  - `10-bit 4:2:2` four-frame strict-decode IDR+P run
+  - `8-bit 4:4:4` four-frame strict-decode IDR+P run
+  - `10-bit 4:4:4` four-frame strict-decode IDR+P run
+
 - Current software comparison baseline:
   - local path: `references/software/x264/`
   - upstream: `https://code.videolan.org/videolan/x264`
@@ -314,6 +386,9 @@ The testbench must not:
   - Explicit weighted prediction on the current single-list B path
   - Full directional `Intra_4x4` luma mode coverage
   - `Intra_16x16` luma prediction and syntax support
+  - `Intra_16x16` luma-DC CAVLC now derives `nC` from the normal surrounding
+    `4x4` nnz context, which re-opened the tiny non-`I_PCM` high-bit-depth
+    decode path
   - Current IDR-path and P-slice intra-path `I_PCM` macroblock coding and
     syntax support
   - Exact `4:4:4 I_PCM` coverage on the current IDR and P-slice intra path at
@@ -562,6 +637,12 @@ The testbench must not:
 - The current tree now also validates exact RTL-owned `4:4:4 I_PCM` output on
   the IDR path and current P-slice intra path at `32x16` for `8-bit` and
   `10-bit`, with SPS/profile signaling decoding as `High 4:4:4 Predictive`
+- The `Intra_16x16` luma-DC `nC` fix now also re-closes tiny strict-decode
+  non-`I_PCM` probes at `32x16` for `10-bit 4:2:0`, `10-bit 4:2:2`,
+  `8-bit 4:4:4`, and `10-bit 4:4:4`
+- The reopened non-`I_PCM` path now also closes strict-decode IDR+P runs at
+  `320x176` through `4` frames for `10-bit 4:2:0`, `10-bit 4:2:2`,
+  `8-bit 4:4:4`, and `10-bit 4:4:4`
 - The current tree now also validates a non-reference `B`-slice on the RTL byte
   path at `320x176` with frame `0` on the IDR `I_PCM` path and frame `1` on
   the non-reference `B`-slice `I_PCM` path, exact decoded-YUV match, and
@@ -616,7 +697,8 @@ The testbench must not:
   - No broader full-standard sub-pel motion path beyond the current `16x16`
     quarter-pel luma / chroma fractional inter flow
   - No broader inter partition coverage or `8x8dct`-class transform support
-  - No broader `4:4:4` support beyond the current `I_PCM` path
+  - No broader `4:4:4` support beyond the current `320x176` strict-decode
+    non-`I_PCM` path and spot `I_PCM` coverage
   - No full in-loop deblocking engine
   - No full-standard profile/tool coverage yet
 
@@ -628,8 +710,9 @@ The testbench must not:
   - Direct motion-vector prediction support
   - Broader sub-pel motion estimation / compensation support
   - Broader inter partition coverage and `8x8dct`-class transform coverage
-  - Broader `4:4:4` support beyond the current `I_PCM` path if the project is
-    claiming full-standard feature coverage
+  - Broader `4:4:4` support beyond the current `320x176` strict-decode
+    non-`I_PCM` path and spot `I_PCM` coverage if the project is claiming
+    full-standard feature coverage
   - In-loop deblocking
   - Enough profile / level / tool coverage to stop calling the repo a subset
 
@@ -649,5 +732,11 @@ The testbench must not:
   support are closed
 - Full completion also means the major `x264` baseline feature gaps are closed,
   not merely documented
+- Full completion also means the repository has been cleaned up, documented,
+  and organized so the implementation is understandable and professionally
+  presented
+- Full completion also means there are no known missing H.264 feature classes
+  hiding behind partial implementations, subset-only smoke coverage, or stale
+  assumptions about what the RTL already supports
 - Use **24 threads**
 - Be wary of simulation time before scaling up
