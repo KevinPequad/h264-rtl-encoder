@@ -22,6 +22,8 @@ Implemented and validated now:
 - limited non-reference `B`-slice support on the current intra / `I_PCM` path
 - limited inter-coded `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` support on
   the current reordered dual-list `16x16` B path
+- limited `B_DIRECT_16x16` support on the current reordered dual-list `16x16`
+  B path, with automatic selection plus a force hook for targeted validation
 - limited reference-`B` / `BREF` support on the current reordered dual-list
   `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` path
 - full directional `Intra_4x4` mode support in RTL
@@ -43,7 +45,7 @@ Still missing before full-standard completion, using the current `x264`
 software encoder as the implementation baseline:
 
 - CABAC syntax integration into the final RTL bitstream path
-- broader `B` / `BREF` picture support, direct-mode handling, and the
+- broader `B` / `BREF` picture support, broader direct-mode handling, and the
   associated reference management
 - broader standards-complete sub-pel motion handling across richer inter modes
 - broader inter partition and transform coverage including `8x8dct`-class tools
@@ -182,6 +184,9 @@ Current implemented features:
 - non-reference `B`-slice support on the current intra / `I_PCM` path
 - limited inter-coded non-reference `B_L0_16x16`, `B_L1_16x16`, and
   `B_BI_16x16` support on the current reordered dual-list `16x16` B path
+- limited `B_DIRECT_16x16` support on the current reordered dual-list `16x16`
+  B path, with spatial direct derivation from neighbor state plus colocated MB
+  metadata captured per reference bank
 - limited reference-`B` / `BREF` support on the current reordered dual-list
   `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` path
 - reordered `B`-GOP scheduling support in the testbench / validation flow for
@@ -194,6 +199,12 @@ Current implemented features:
 - the current limited `B_BI_16x16` path now writes back both motion-vector
   lists into neighbor state and refines each list through the quarter-pel luma
   path before the bidirectional average is formed
+- the current limited `B_DIRECT_16x16` path now derives decoder-matching
+  spatial direct vectors from neighbor state, applies the colocated zero-MV
+  rule from per-bank MB metadata, uses an exact direct interpolation path
+  instead of the normal qpel search loop, and can now win automatically
+  against the current reordered `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16`
+  candidates instead of only via a force flag
 - reordered GOP forcing can now emit reference-slot pictures as `BREF` instead
   of `P`, so encode orders such as `0,2,1,4,3` can be driven as all-BREF
   non-IDR GOPs for validation
@@ -255,9 +266,14 @@ Implemented now relative to the chosen `x264` baseline:
 - non-reference `B`-picture syntax on the current intra / `I_PCM` path
 - limited non-reference `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` inter
   coding on the current reordered dual-list `16x16` B path
+- limited `B_DIRECT_16x16` inter coding on the current reordered dual-list
+  `16x16` B path, with automatic selection plus a force hook for targeted
+  validation
 - limited reference-`B` / `BREF` picture support on the current reordered
   dual-list `16x16` B path
 - explicit weighted prediction on the current single-list reordered B subpaths
+- limited forced spatial direct prediction on the current reordered dual-list
+  `16x16` B path
 - full `Intra_4x4` directional luma mode coverage
 - `Intra_16x16` luma prediction and syntax support
 - `I_PCM` macroblock coding on the current IDR path and current P-slice intra
@@ -305,7 +321,8 @@ Important non-completion gaps:
 - broader inter-coded `B` / `BREF` picture handling is not implemented beyond
   the current limited reordered dual-list `B_L0_16x16` / `B_L1_16x16` /
   `B_BI_16x16` `16x16` path
-- direct motion-vector prediction modes are not implemented
+- direct prediction modes are not fully implemented beyond the current limited
+  `B_DIRECT_16x16` reordered-`BREF` path
 - reference-picture management beyond the current four-reference P-slice subset
   is not implemented
 - broader full-standard sub-pel motion handling beyond the current `16x16`
@@ -329,7 +346,7 @@ Verified validation/features around the current encoder flow:
 - MP4 remux of the RTL-generated stream
 - Docker one-frame smoke run producing RTL-generated `.h264` and `.mp4`
 - reproducible smoke matrix for fast strict-decode/profile sanity on generated
-  tiny `I_PCM` inputs
+  tiny `I_PCM` inputs plus a tiny forced `B_DIRECT_16x16` case
 - multi-frame validation at `320x176`
 - multi-frame validation at `1280x720`
 - PSNR / SSIM comparison scripts
@@ -347,10 +364,16 @@ Verified validation/features around the current encoder flow:
   scripts for reordered B-picture encode order
 - runtime-configurable `force_b_bi` support in the testbench and validation
   scripts for the current limited `B_BI_16x16` path
+- runtime-configurable `force_b_direct` support in the testbench and
+  validation scripts for targeted validation of the current limited
+  `B_DIRECT_16x16` path
 - simulator-side per-frame `b_l1_mbs` logging so reordered B validation can
   prove that the future-reference `List1` path was actually selected
 - simulator-side per-frame `b_bi_mbs` logging so reordered B validation can
   prove that the bidirectional `B_BI_16x16` path was actually selected
+- simulator-side per-frame `b_direct_mbs` logging so reordered B validation can
+  prove that the current limited `B_DIRECT_16x16` path was actually selected,
+  whether automatically or via force
 - reordered validation can now combine `--reorder-b-gop` and
   `--force-bref-slice` so the reference slots are emitted as `BREF` pictures
 - fast strict-decode-only validation mode in `validate_clip.py` for longer
@@ -549,6 +572,29 @@ Measured validation points:
   `output/validation_autobi_qpelcmp_weightedbi5_320x176_5f.json`, with
   simulator logging still showing `b_l1_mbs=220` on the two middle non-IDR
   pictures and `b_bi_mbs=0` across the run
+- `bdirect_force_32x16_3f`: strict FFmpeg-decodable forced-`B_DIRECT_16x16`
+  reordered-`BREF` validation at `32x16`, `3` frames, `131,068` cycles,
+  `265` bytes, RTL PSNR avg `27.36622`, RTL SSIM all `0.554193`,
+  `output/validation_bdirect_force_32x16_3f.h264`,
+  `output/validation_bdirect_force_32x16_3f.mp4`, and simulator logging
+  showing `b_direct_mbs=2` on the last picture
+- `bdirect_force_320x176_5f`: strict FFmpeg-decodable forced-`B_DIRECT_16x16`
+  reordered all-`BREF` validation at `320x176`, `5` frames, `97,641,789`
+  cycles, `25,505` bytes, RTL PSNR avg `13.670634`, RTL SSIM all `0.668749`,
+  `output/validation_bdirect_force_320x176_5f.h264`,
+  `output/validation_bdirect_force_320x176_5f.mp4`, and simulator logging
+  showing `b_direct_mbs=220` on each non-IDR picture
+- `bdirect_auto_probe_32x16_3f`: strict FFmpeg-decodable non-forced auto
+  `B_DIRECT_16x16` reordered-B validation at `32x16`, `3` frames, `130,756`
+  cycles, `122` bytes, RTL PSNR avg `30.120198`, RTL SSIM all `0.774794`,
+  `output/validation_bdirect_auto_probe_32x16_3f.h264`, and simulator logging
+  showing `b_direct_mbs=1` on the last picture
+- `bdirect_auto_probe_320x176_5f`: strict FFmpeg-decodable non-forced
+  decode-only reordered all-`BREF` validation at `320x176`, `5` frames,
+  `93,162,228` cycles, `4,666` bytes,
+  `output/validation_bdirect_auto_probe_320x176_5f.h264`, and simulator
+  logging showing nonzero `b_direct_mbs` across all three non-IDR pictures
+  (`219`, `148`, and `31`)
 - `32x16_2f_444_ipcm_scripted`: strict staged validation through
   `scripts/validate_clip.py` with `--enable-idr-ipcm 1 --enable-p-ipcm 1`
   at `32x16`, `8-bit 4:4:4`, packaged MP4 output, and JSON summary in
