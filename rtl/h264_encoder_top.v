@@ -200,6 +200,9 @@ module h264_encoder_top #(
     reg [256*BIT_DEPTH-1:0] b_bi_fullpel_ref_l1;
     reg [17:0] b_bi_fullpel_sad_l1;
     reg [256*BIT_DEPTH-1:0] b_bi_luma_pred_l0;
+    reg [17:0] b_bi_luma_sad_l0;
+    reg signed [7:0] b_bi_mvp_x_l0_reg, b_bi_mvp_y_l0_reg;
+    reg signed [7:0] b_bi_mvp_x_l1_reg, b_bi_mvp_y_l1_reg;
 
     // Inter chroma prediction buffers (8x8 for 4:2:0, 8x16 for 4:2:2)
     reg [CHR_MB_PIXELS*BIT_DEPTH-1:0] inter_chr_pred_cb, inter_chr_pred_cr;
@@ -1480,7 +1483,8 @@ pred_buf = {(256*BD){1'b0}};
             me_fullpel_mvx <= 8'sd0; me_fullpel_mvy <= 8'sd0;
             luma_fetch_started <= 1'b0; luma_fetch_cnt <= 9'd0; luma_f_row <= 5'd0; luma_f_col <= 5'd0;
             luma_raw <= {(LUMA_RAW_SAMPLES*BD){1'b0}};
-            b_bi_luma_fetch_l1_phase <= 1'b0; b_bi_fullpel_ref_l1 <= {(256*BD){1'b0}}; b_bi_fullpel_sad_l1 <= 18'd0; b_bi_luma_pred_l0 <= {(256*BD){1'b0}};
+            b_bi_luma_fetch_l1_phase <= 1'b0; b_bi_fullpel_ref_l1 <= {(256*BD){1'b0}}; b_bi_fullpel_sad_l1 <= 18'd0; b_bi_luma_pred_l0 <= {(256*BD){1'b0}}; b_bi_luma_sad_l0 <= 18'd0;
+            b_bi_mvp_x_l0_reg <= 8'sd0; b_bi_mvp_y_l0_reg <= 8'sd0; b_bi_mvp_x_l1_reg <= 8'sd0; b_bi_mvp_y_l1_reg <= 8'sd0;
             inter_chr_pred_cb <= {(CHR_MB_PIXELS*BD){1'b0}}; inter_chr_pred_cr <= {(CHR_MB_PIXELS*BD){1'b0}};
             b_bi_chr_pred_cb_l0 <= {(CHR_MB_PIXELS*BD){1'b0}}; b_bi_chr_pred_cr_l0 <= {(CHR_MB_PIXELS*BD){1'b0}};
             inter_chr_mode <= 1'b0;
@@ -1571,6 +1575,8 @@ pred_buf = {(256*BD){1'b0}};
                     is_b_l1_mb_reg <= 1'b0;
                     is_b_bi_mb_reg <= 1'b0;
                     b_bi_luma_fetch_l1_phase <= 1'b0;
+                    b_bi_luma_sad_l0 <= 18'd0;
+                    b_bi_mvp_x_l0_reg <= 8'sd0; b_bi_mvp_y_l0_reg <= 8'sd0; b_bi_mvp_x_l1_reg <= 8'sd0; b_bi_mvp_y_l1_reg <= 8'sd0;
                     skip_probe_pending <= 1'b0;
                     inter_chr_prefetched_valid <= 1'b0;
                     mb_has_residual <= 1'b0;
@@ -1674,24 +1680,15 @@ pred_buf = {(256*BD){1'b0}};
                             end
                         end
 
-                        if (is_b_frame && (valid_ref_count >= 3'd2) && (me_search_pass == 2'd1) &&
-                            (force_b_bi_in || ((bi_sad_i < me_pass0_sad) && (bi_sad_i < me_sad_w)))) begin
+                        if (is_b_frame && (valid_ref_count >= 3'd2) && (me_search_pass == 2'd1)) begin
                             sel_fullpel_mvx = me_pass0_mvx;
                             sel_fullpel_mvy = me_pass0_mvy;
-                            sel_sad = bi_sad_i;
-                            sel_ref_mb = bi_pred_buf_i;
+                            sel_sad = me_pass0_sad;
+                            sel_ref_mb = me_pass0_ref_mb;
                             sel_ref_idx = 2'd0;
                             sel_is_b_l1 = 1'b0;
                             sel_is_b_bi = 1'b1;
                             ref_rd_bank_sel <= older_ref_bank;
-                        end else if (is_b_frame && (valid_ref_count >= 3'd2) && (me_search_pass == 2'd1) && (me_sad_w < me_pass0_sad)) begin
-                            sel_fullpel_mvx = me_mvx_w;
-                            sel_fullpel_mvy = me_mvy_w;
-                            sel_sad = me_sad_w;
-                            sel_ref_mb = me_ref_mb_w;
-                            sel_ref_idx = 2'd0;
-                            sel_is_b_l1 = 1'b1;
-                            ref_rd_bank_sel <= newest_ref_bank;
                         end else if (is_b_frame && (valid_ref_count >= 3'd2) && (me_search_pass != 2'd0)) begin
                             sel_fullpel_mvx = me_pass0_mvx;
                             sel_fullpel_mvy = me_pass0_mvy;
@@ -1767,6 +1764,10 @@ pred_buf = {(256*BD){1'b0}};
                             mvp_y_l0 <= bi_mvp_y_l0;
                             mvp_x_l1 <= bi_mvp_x_l1;
                             mvp_y_l1 <= bi_mvp_y_l1;
+                            b_bi_mvp_x_l0_reg <= bi_mvp_x_l0;
+                            b_bi_mvp_y_l0_reg <= bi_mvp_y_l0;
+                            b_bi_mvp_x_l1_reg <= bi_mvp_x_l1;
+                            b_bi_mvp_y_l1_reg <= bi_mvp_y_l1;
                             luma_fetch_started <= 1'b0;
                             luma_fetch_cnt <= 9'd0;
                             luma_f_row <= 5'd0;
@@ -1883,6 +1884,7 @@ pred_buf = {(256*BD){1'b0}};
                                 me_best_mvx_l0 <= (me_fullpel_mvx <<< 2) + best_dx_i;
                                 me_best_mvy_l0 <= (me_fullpel_mvy <<< 2) + best_dy_i;
                                 b_bi_luma_pred_l0 <= best_pred_buf_i;
+                                b_bi_luma_sad_l0 <= best_sad_i;
                                 me_fullpel_mvx <= $signed(me_best_mvx_l1) >>> 2;
                                 me_fullpel_mvy <= $signed(me_best_mvy_l1) >>> 2;
                                 me_fullpel_best_sad <= b_bi_fullpel_sad_l1;
@@ -1911,23 +1913,89 @@ pred_buf = {(256*BD){1'b0}};
                                         bi_final_sad_i = bi_final_sad_i + (bi_final_sample - bi_final_orig_sample);
                                 end
 
-                                me_best_mvx <= me_best_mvx_l0;
-                                me_best_mvy <= me_best_mvy_l0;
-                                me_best_mvx_l1 <= (me_fullpel_mvx <<< 2) + best_dx_i;
-                                me_best_mvy_l1 <= (me_fullpel_mvy <<< 2) + best_dy_i;
-                                me_best_sad <= bi_final_sad_i;
-                                inter_pred_buf <= bi_final_pred_buf_i;
-                                is_inter_mb_reg <= (bi_final_sad_i < INTER_SAD_THRESHOLD);
                                 b_bi_luma_fetch_l1_phase <= 1'b0;
-                                if (bi_final_sad_i < INTER_SAD_THRESHOLD) begin
-                                    use_intra16_mb_reg <= 1'b0;
-                                    use_ipcm_mb_reg <= 1'b0;
-                                    top_state <= TS_MB_HDR;
-                                end else begin
+                                if (force_b_bi_in || ((bi_final_sad_i <= b_bi_luma_sad_l0) && (bi_final_sad_i <= best_sad_i))) begin
+                                    me_best_mvx <= me_best_mvx_l0;
+                                    me_best_mvy <= me_best_mvy_l0;
+                                    me_best_mvx_l1 <= (me_fullpel_mvx <<< 2) + best_dx_i;
+                                    me_best_mvy_l1 <= (me_fullpel_mvy <<< 2) + best_dy_i;
+                                    me_best_sad <= bi_final_sad_i;
+                                    inter_pred_buf <= bi_final_pred_buf_i;
+                                    is_inter_mb_reg <= (bi_final_sad_i < INTER_SAD_THRESHOLD);
+                                    is_b_l1_mb_reg <= 1'b0;
+                                    is_b_bi_mb_reg <= 1'b1;
+                                    mvp_x <= b_bi_mvp_x_l0_reg;
+                                    mvp_y <= b_bi_mvp_y_l0_reg;
+                                    mvp_x_l0 <= b_bi_mvp_x_l0_reg;
+                                    mvp_y_l0 <= b_bi_mvp_y_l0_reg;
+                                    mvp_x_l1 <= b_bi_mvp_x_l1_reg;
+                                    mvp_y_l1 <= b_bi_mvp_y_l1_reg;
+                                    ref_rd_bank_sel <= older_ref_bank;
+                                    if (bi_final_sad_i < INTER_SAD_THRESHOLD) begin
+                                        use_intra16_mb_reg <= 1'b0;
+                                        use_ipcm_mb_reg <= 1'b0;
+                                        top_state <= TS_MB_HDR;
+                                    end else begin
+                                        is_b_bi_mb_reg <= 1'b0;
+                                        use_intra16_mb_reg <= 1'b0;
+                                        use_ipcm_mb_reg <= (ENABLE_P_IPCM != 0);
+                                        top_state <= TS_MB_HDR;
+                                    end
+                                end else if (best_sad_i < b_bi_luma_sad_l0) begin
+                                    me_best_mvx <= (me_fullpel_mvx <<< 2) + best_dx_i;
+                                    me_best_mvy <= (me_fullpel_mvy <<< 2) + best_dy_i;
+                                    me_best_mvx_l0 <= 8'sd0;
+                                    me_best_mvy_l0 <= 8'sd0;
+                                    me_best_mvx_l1 <= (me_fullpel_mvx <<< 2) + best_dx_i;
+                                    me_best_mvy_l1 <= (me_fullpel_mvy <<< 2) + best_dy_i;
+                                    me_best_sad <= best_sad_i;
+                                    inter_pred_buf <= best_pred_buf_i;
+                                    is_inter_mb_reg <= (best_sad_i < INTER_SAD_THRESHOLD);
+                                    is_b_l1_mb_reg <= 1'b1;
                                     is_b_bi_mb_reg <= 1'b0;
-                                    use_intra16_mb_reg <= 1'b0;
-                                    use_ipcm_mb_reg <= (ENABLE_P_IPCM != 0);
-                                    top_state <= TS_MB_HDR;
+                                    mvp_x <= b_bi_mvp_x_l1_reg;
+                                    mvp_y <= b_bi_mvp_y_l1_reg;
+                                    mvp_x_l0 <= 8'sd0;
+                                    mvp_y_l0 <= 8'sd0;
+                                    mvp_x_l1 <= b_bi_mvp_x_l1_reg;
+                                    mvp_y_l1 <= b_bi_mvp_y_l1_reg;
+                                    ref_rd_bank_sel <= newest_ref_bank;
+                                    if (best_sad_i < INTER_SAD_THRESHOLD) begin
+                                        use_intra16_mb_reg <= 1'b0;
+                                        use_ipcm_mb_reg <= 1'b0;
+                                        top_state <= TS_MB_HDR;
+                                    end else begin
+                                        is_b_l1_mb_reg <= 1'b0;
+                                        use_intra16_mb_reg <= 1'b0;
+                                        use_ipcm_mb_reg <= (ENABLE_P_IPCM != 0);
+                                        top_state <= TS_MB_HDR;
+                                    end
+                                end else begin
+                                    me_best_mvx <= me_best_mvx_l0;
+                                    me_best_mvy <= me_best_mvy_l0;
+                                    me_best_mvx_l1 <= 8'sd0;
+                                    me_best_mvy_l1 <= 8'sd0;
+                                    me_best_sad <= b_bi_luma_sad_l0;
+                                    inter_pred_buf <= b_bi_luma_pred_l0;
+                                    is_inter_mb_reg <= (b_bi_luma_sad_l0 < INTER_SAD_THRESHOLD);
+                                    is_b_l1_mb_reg <= 1'b0;
+                                    is_b_bi_mb_reg <= 1'b0;
+                                    mvp_x <= b_bi_mvp_x_l0_reg;
+                                    mvp_y <= b_bi_mvp_y_l0_reg;
+                                    mvp_x_l0 <= b_bi_mvp_x_l0_reg;
+                                    mvp_y_l0 <= b_bi_mvp_y_l0_reg;
+                                    mvp_x_l1 <= 8'sd0;
+                                    mvp_y_l1 <= 8'sd0;
+                                    ref_rd_bank_sel <= older_ref_bank;
+                                    if (b_bi_luma_sad_l0 < INTER_SAD_THRESHOLD) begin
+                                        use_intra16_mb_reg <= 1'b0;
+                                        use_ipcm_mb_reg <= 1'b0;
+                                        top_state <= TS_MB_HDR;
+                                    end else begin
+                                        use_intra16_mb_reg <= 1'b0;
+                                        use_ipcm_mb_reg <= (ENABLE_P_IPCM != 0);
+                                        top_state <= TS_MB_HDR;
+                                    end
                                 end
                             end
                         end else begin

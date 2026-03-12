@@ -616,14 +616,20 @@ The testbench must not:
     `output/validation_forcebbi_qpelprobe_320x176_5f.h264`, and
     `output/validation_forcebbi_qpelprobe_320x176_5f.json`, with simulator
     logging showing `b_bi_mbs=220` on the last two non-IDR pictures
-  - `forcebbi_weightedbi5_320x176_5f`: strict FFmpeg-decodable current-tree
-    forced-`B_BI_16x16` reordered all-`BREF` validation at `320x176`, `5`
-    frames, non-default explicit B weights (`5` with denom `2`), `92,405,579`
-    cycles, `19,258` bytes, RTL PSNR avg `32.63735`, RTL SSIM all `0.864016`,
-    with simulator logging showing `b_bi_mbs=220` on the last two non-IDR
-    pictures and `trace_headers` confirmation of `weighted_bipred_idc = 1`,
-    `luma_log2_weight_denom = 2`, `chroma_log2_weight_denom = 2`, and
-    list0/list1 luma/chroma weights of `5`
+  - `forcebbi_qpelcmp_weightedbi5_320x176_5f`: strict FFmpeg-decodable
+    current-tree forced-`B_BI_16x16` reordered all-`BREF` validation at
+    `320x176`, `5` frames, non-default explicit B weights (`5` with denom
+    `2`), `92,405,579` cycles, `19,258` bytes, RTL PSNR avg `32.63735`, RTL
+    SSIM all `0.864016`, with simulator logging showing `b_bi_mbs=220` on the
+    last two non-IDR pictures and `trace_headers` confirmation of
+    `weighted_bipred_idc = 1`, `luma_log2_weight_denom = 2`,
+    `chroma_log2_weight_denom = 2`, and list0/list1 luma/chroma weights of `5`
+  - `autobi_qpelcmp_weightedbi5_320x176_5f`: strict FFmpeg-decodable
+    current-tree reordered all-`BREF` validation at `320x176`, `5` frames,
+    non-default explicit B weights (`5` with denom `2`), `97,793,335` cycles,
+    `18,872` bytes, RTL PSNR avg `32.421436`, RTL SSIM all `0.86191`, with
+    simulator logging still showing `b_l1_mbs=220` on the two middle non-IDR
+    pictures and `b_bi_mbs=0` across the run
 
 - A 720p chroma corruption bug was traced to raw input address overflow in the Cr plane fetch path and fixed by widening the raw input address width
 - A directional `Intra_4x4` top-right reference fetch bug was fixed in
@@ -716,9 +722,10 @@ The testbench must not:
 - The current tree now also validates a limited `B_BI_16x16` path on reordered
   B-picture GOPs, with explicit list0/list1 neighbor state, list-specific MVD
   syntax, simulator-side `b_bi_mbs` logging, per-list quarter-pel luma
-  refinement, and explicit weighted bipred combine on the limited
-  `B_BI_16x16` path; automatic BI mode selection is still not closed on the
-  real `320x176` reordered clip
+  refinement, qpel-aware final `B_L0` / `B_L1` / `B_BI` luma comparison on the
+  dual-ref B path, and explicit weighted bipred combine on the limited
+  `B_BI_16x16` path; the real `320x176` weighted reordered clip still selects
+  `B_L1_16x16` automatically rather than `B_BI_16x16`
 - `scripts/validate_clip.py` and `scripts/rtl_runner.py` now expose
   `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
   `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths
