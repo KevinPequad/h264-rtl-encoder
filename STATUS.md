@@ -515,16 +515,26 @@ Measured validation points:
   `output/validation_forcebbi_qpelprobe_320x176_5f.h264`, and
   `output/validation_forcebbi_qpelprobe_320x176_5f.json`, with simulator
   logging showing `b_bi_mbs=220` on the last two non-IDR pictures
-- `forcebbi_weightedbi5_320x176_5f`: strict FFmpeg-decodable current-tree
-  forced-`B_BI_16x16` reordered all-`BREF` validation at `320x176`, `5`
-  frames, non-default explicit B weights (`5` with denom `2`), `92,405,579`
-  cycles, `19,258` bytes, RTL PSNR avg `32.63735`, RTL SSIM all `0.864016`,
-  `output/validation_forcebbi_weightedbi5_320x176_5f.h264`, and
-  `output/validation_forcebbi_weightedbi5_320x176_5f.json`, with simulator
-  logging showing `b_bi_mbs=220` on the last two non-IDR pictures and
-  `output/validation_forcebbi_weightedbi5_320x176_5f.trace.txt` confirming
+- `forcebbi_qpelcmp_weightedbi5_320x176_5f`: strict FFmpeg-decodable
+  current-tree forced-`B_BI_16x16` reordered all-`BREF` validation at
+  `320x176`, `5` frames, non-default explicit B weights (`5` with denom `2`),
+  `92,405,579` cycles, `19,258` bytes, RTL PSNR avg `32.63735`, RTL SSIM all
+  `0.864016`,
+  `output/validation_forcebbi_qpelcmp_weightedbi5_320x176_5f.h264`, and
+  `output/validation_forcebbi_qpelcmp_weightedbi5_320x176_5f.json`, with
+  simulator logging showing `b_bi_mbs=220` on the last two non-IDR pictures
+  and `output/validation_forcebbi_qpelcmp_weightedbi5_320x176_5f.trace.txt`
+  confirming
   `weighted_bipred_idc = 1`, `luma_log2_weight_denom = 2`,
   `chroma_log2_weight_denom = 2`, and list0/list1 luma/chroma weights of `5`
+- `autobi_qpelcmp_weightedbi5_320x176_5f`: strict FFmpeg-decodable
+  current-tree reordered all-`BREF` validation at `320x176`, `5` frames,
+  non-default explicit B weights (`5` with denom `2`), `97,793,335` cycles,
+  `18,872` bytes, RTL PSNR avg `32.421436`, RTL SSIM all `0.86191`,
+  `output/validation_autobi_qpelcmp_weightedbi5_320x176_5f.h264`, and
+  `output/validation_autobi_qpelcmp_weightedbi5_320x176_5f.json`, with
+  simulator logging still showing `b_l1_mbs=220` on the two middle non-IDR
+  pictures and `b_bi_mbs=0` across the run
 - `32x16_2f_444_ipcm_scripted`: strict staged validation through
   `scripts/validate_clip.py` with `--enable-idr-ipcm 1 --enable-p-ipcm 1`
   at `32x16`, `8-bit 4:4:4`, packaged MP4 output, and JSON summary in
@@ -629,11 +639,12 @@ Current verified milestone outputs:
   focused strict-decode reruns ending on the old bad picture re-close at
   `320x176` for extracted `2`-frame and `4`-frame clips
 - the current reordered B path now carries explicit list0/list1 neighbor MV
-  state, list-specific MVD syntax, per-list quarter-pel luma refinement, and
-  explicit weighted bipred combine on the limited `B_BI_16x16` path, which
-  re-opened forced strict-decode validation at `32x16` and `320x176`;
-  automatic BI mode selection is still not closed on the real `320x176`
-  reordered clip
+  state, list-specific MVD syntax, per-list quarter-pel luma refinement,
+  qpel-aware final `B_L0` / `B_L1` / `B_BI` luma comparison on the dual-ref B
+  path, and explicit weighted bipred combine on the limited `B_BI_16x16`
+  path, which re-opened forced strict-decode validation at `32x16` and
+  `320x176`; the real `320x176` weighted reordered clip still selects
+  `B_L1_16x16` automatically rather than `B_BI_16x16`
 - `scripts/validate_clip.py` and `scripts/rtl_runner.py` now expose
   `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
   `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths
