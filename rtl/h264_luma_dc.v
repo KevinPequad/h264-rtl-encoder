@@ -11,9 +11,11 @@ module h264_luma_dc #(
 );
 
     localparam CW = BIT_DEPTH + 8;
-    localparam QBITS = 19;
-    localparam [31:0] F_INTRA = 32'd174763;
-    localparam signed [15:0] LEVEL_SCALE_DC = 16'sd13;
+    localparam integer QP_BD_OFFSET = 6 * (BIT_DEPTH - 8);
+    localparam integer FIXED_QP = 26 + QP_BD_OFFSET;
+    localparam integer QBITS = 15 + (FIXED_QP / 6);
+    localparam integer IQ_SHIFT = (FIXED_QP / 6) - 6;
+    localparam [31:0] F_INTRA = ((32'd1 << QBITS) + 32'd1) / 32'd3;
 
     localparam S_IDLE = 2'd0;
     localparam S_EXEC = 2'd1;
@@ -30,6 +32,32 @@ module h264_luma_dc #(
         end
     endgenerate
 
+    function [15:0] get_mf;
+        begin
+            case (FIXED_QP % 6)
+                0: get_mf = 16'd13107;
+                1: get_mf = 16'd11916;
+                2: get_mf = 16'd10082;
+                3: get_mf = 16'd9362;
+                4: get_mf = 16'd8192;
+                default: get_mf = 16'd7282;
+            endcase
+        end
+    endfunction
+
+    function signed [15:0] get_scale_dc;
+        begin
+            case (FIXED_QP % 6)
+                0: get_scale_dc = 16'sd10;
+                1: get_scale_dc = 16'sd11;
+                2: get_scale_dc = 16'sd13;
+                3: get_scale_dc = 16'sd14;
+                4: get_scale_dc = 16'sd16;
+                default: get_scale_dc = 16'sd18;
+            endcase
+        end
+    endfunction
+
     function signed [15:0] fwd_quant;
         input signed [CW+4:0] val;
         reg [CW+4:0] abs_val;
@@ -39,7 +67,7 @@ module h264_luma_dc #(
         begin
             sign = val[CW+4];
             abs_val = sign ? (~val + {{(CW+4){1'b0}}, 1'b1}) : val;
-            product = ({{16{1'b0}}, abs_val} * 16'd10082) + F_INTRA;
+            product = ({{16{1'b0}}, abs_val} * get_mf()) + F_INTRA;
             level = product[QBITS +: 16];
             fwd_quant = sign ? (~level + 16'd1) : level;
         end
@@ -48,9 +76,15 @@ module h264_luma_dc #(
     function signed [15:0] scale_dc;
         input signed [CW+3:0] val;
         reg signed [CW+19:0] product;
+        reg signed [31:0] round_bias;
         begin
-            product = val * LEVEL_SCALE_DC;
-            scale_dc = (product + 22'sd2) >>> 2;
+            product = val * get_scale_dc();
+            if (IQ_SHIFT >= 0) begin
+                scale_dc = product <<< IQ_SHIFT;
+            end else begin
+                round_bias = 32'sd1 <<< ((-IQ_SHIFT) - 1);
+                scale_dc = (product + round_bias) >>> (-IQ_SHIFT);
+            end
         end
     endfunction
 

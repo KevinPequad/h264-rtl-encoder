@@ -110,13 +110,21 @@ module h264_bitstream #(
     
     // =====================================================================
     // CAVLC Output FIFO (absorbs bursty bit emission)
+    //
+    // Deferred intra MB header emission can hold draining for an entire MB.
+    // The previous 64-entry FIFO overflowed on 4:4:4 residual bursts and
+    // silently dropped later CAVLC fragments, corrupting the slice RBSP.
     // =====================================================================
-    reg [37:0] cavlc_fifo [0:63]; // 32 bits data + 6 bits count
-    reg [5:0]  fifo_wr_ptr;
-    reg [5:0]  fifo_rd_ptr;
-    wire [5:0] fifo_count = fifo_wr_ptr - fifo_rd_ptr;
+    localparam integer CAVLC_FIFO_DEPTH = 2048;
+    localparam integer CAVLC_FIFO_LAST  = CAVLC_FIFO_DEPTH - 1;
+    localparam integer CAVLC_FIFO_PTR_W = 11;
+
+    reg [37:0] cavlc_fifo [0:CAVLC_FIFO_LAST]; // 32 bits data + 6 bits count
+    reg [CAVLC_FIFO_PTR_W-1:0] fifo_wr_ptr;
+    reg [CAVLC_FIFO_PTR_W-1:0] fifo_rd_ptr;
+    wire [CAVLC_FIFO_PTR_W-1:0] fifo_count = fifo_wr_ptr - fifo_rd_ptr;
     wire       fifo_empty = (fifo_wr_ptr == fifo_rd_ptr);
-    wire       fifo_full  = (fifo_count == 6'd63);
+    wire       fifo_full  = (fifo_count == CAVLC_FIFO_LAST);
 
     wire [37:0] fifo_rd_data = cavlc_fifo[fifo_rd_ptr];
     wire [31:0] fifo_rd_bits  = fifo_rd_data[37:6];
@@ -124,6 +132,9 @@ module h264_bitstream #(
     reg        cavlc_buf_valid;
     reg [31:0] cavlc_buf_bits;
     reg [5:0]  cavlc_buf_count;
+`ifdef VERILATOR
+    integer dbg_fifo_deq_idx;
+`endif
 
     wire use_high_profile = (BIT_DEPTH > 8) || (CHROMA_FORMAT_IDC != 1);
     wire use_high444_profile = (CHROMA_FORMAT_IDC == 3);
@@ -390,11 +401,14 @@ module h264_bitstream #(
             sub              <= 6'd0;
             do_write         <= 1'b0;
             write_byte       <= 8'd0;
-            fifo_wr_ptr      <= 6'd0;
-            fifo_rd_ptr      <= 6'd0;
+            fifo_wr_ptr      <= {CAVLC_FIFO_PTR_W{1'b0}};
+            fifo_rd_ptr      <= {CAVLC_FIFO_PTR_W{1'b0}};
             cavlc_buf_valid  <= 1'b0;
             cavlc_buf_bits   <= 32'd0;
             cavlc_buf_count  <= 6'd0;
+`ifdef VERILATOR
+            dbg_fifo_deq_idx <= 0;
+`endif
             skip_ep          <= 1'b0;
             se_input         <= 8'sd0;
             ue_input         <= 10'd0;
@@ -408,18 +422,26 @@ module h264_bitstream #(
             if (cavlc_valid && cavlc_count > 6'd0) begin
                 if (!fifo_full) begin
                     cavlc_fifo[fifo_wr_ptr] <= {cavlc_bits, cavlc_count};
-                    fifo_wr_ptr <= fifo_wr_ptr + 6'd1;
+                    fifo_wr_ptr <= fifo_wr_ptr + {{(CAVLC_FIFO_PTR_W-1){1'b0}}, 1'b1};
                 end
             end
 
             if (do_write) begin
                 if (zero_cnt >= 2'd2 && write_byte <= 8'h03) begin
+`ifdef VERILATOR
+                    if (dbg_fifo_deq_idx >= 1470 && dbg_fifo_deq_idx <= 1495)
+                        $display("[BSWR] epb byte=03 bitcnt=%0d bytes=%0d", bit_cnt, bs_bytes_written);
+`endif
                     bs_mem_data      <= 8'h03;
                     bs_mem_wr        <= 1'b1;
                     bs_mem_addr      <= bs_bytes_written;
                     bs_bytes_written <= bs_bytes_written + 24'd1;
                     zero_cnt         <= 2'd0;
                 end else begin
+`ifdef VERILATOR
+                    if (dbg_fifo_deq_idx >= 1470 && dbg_fifo_deq_idx <= 1495)
+                        $display("[BSWR] byte=%02x bitcnt=%0d bytes=%0d", write_byte, bit_cnt, bs_bytes_written);
+`endif
                     bs_mem_data      <= write_byte;
                     bs_mem_wr        <= 1'b1;
                     bs_mem_addr      <= bs_bytes_written;
@@ -448,9 +470,14 @@ module h264_bitstream #(
                         end else if (cmd_flush) begin
                             state <= S_FLUSH; busy <= 1'b1;
                         end else if (!hold_fifo_drain && !fifo_empty) begin
+`ifdef VERILATOR
+                            if (dbg_fifo_deq_idx >= 1470 && dbg_fifo_deq_idx <= 1495)
+                                $display("[BSDQ] idx=%0d rdptr=%0d cnt=%0d bitcnt=%0d bits=%08x bytes=%0d", dbg_fifo_deq_idx, fifo_rd_ptr, fifo_rd_count, bit_cnt, fifo_rd_bits, bs_bytes_written);
+                            dbg_fifo_deq_idx <= dbg_fifo_deq_idx + 1;
+`endif
                             bit_buf <= bit_buf | (({fifo_rd_bits, 64'd0} >> bit_cnt[6:0]));
                             bit_cnt <= bit_cnt + {1'b0, fifo_rd_count};
-                            fifo_rd_ptr <= fifo_rd_ptr + 6'd1;
+                            fifo_rd_ptr <= fifo_rd_ptr + {{(CAVLC_FIFO_PTR_W-1){1'b0}}, 1'b1};
                             state   <= S_EMIT;
                             return_state <= S_IDLE;
                             busy <= 1'b1;
@@ -1073,9 +1100,17 @@ module h264_bitstream #(
                                         bit_buf <= bit_buf | ({2'b11, 94'd0} >> bit_cnt[6:0]);
                                         bit_cnt <= bit_cnt + 7'd2;
                                     end else if (mb_has_residual) begin
-                                        // intra_chroma_pred_mode=UE(0)='1', coded_block_pattern=UE(0)='1', qp_delta=SE(0)='1'
-                                        bit_buf <= bit_buf | ({3'b111, 93'd0} >> bit_cnt[6:0]);
-                                        bit_cnt <= bit_cnt + 7'd3;
+                                        if (CHROMA_FORMAT_IDC == 3) begin
+                                            // High 4:4:4 Predictive uses luma-style plane residuals here,
+                                            // so this path emits coded_block_pattern=UE(0) and qp_delta=SE(0)
+                                            // without the 4:2:0/4:2:2 intra_chroma_pred_mode syntax element.
+                                            bit_buf <= bit_buf | ({2'b11, 94'd0} >> bit_cnt[6:0]);
+                                            bit_cnt <= bit_cnt + 7'd2;
+                                        end else begin
+                                            // intra_chroma_pred_mode=UE(0)='1', coded_block_pattern=UE(0)='1', qp_delta=SE(0)='1'
+                                            bit_buf <= bit_buf | ({3'b111, 93'd0} >> bit_cnt[6:0]);
+                                            bit_cnt <= bit_cnt + 7'd3;
+                                        end
                                     end else begin
                                         bit_buf <= bit_buf | ({2'b11, 94'd0} >> bit_cnt[6:0]);
                                         bit_cnt <= bit_cnt + 7'd2;

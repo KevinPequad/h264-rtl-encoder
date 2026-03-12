@@ -1,5 +1,5 @@
 /*
- * parse_422.c -- Minimal H.264 bitstream parser for High 4:2:2 profile
+ * parse_422.c -- Minimal H.264 bitstream parser for RTL debug
  *
  * Purpose: Find exactly where an RTL encoder's bitstream diverges from
  *          what the decoder expects, by parsing each field and printing it.
@@ -7,7 +7,8 @@
  * Compile:  gcc -o parse_422 parse_422.c -lm
  * Run:      ./parse_422
  *
- * Hardcoded to open "bright_422.h264" in the current directory.
+ * Defaults to "bright_422.h264" in the current directory unless a path is
+ * provided on the command line.
  */
 
 #include <stdio.h>
@@ -669,6 +670,15 @@ static const uint8_t cbp_intra_table[48] = {
      8, 17, 18, 20, 24,  6,  9, 22, 25, 32, 33, 34, 36, 40, 38, 41
 };
 
+/* Intra / inter CBP tables for ChromaArrayType 0 or 3 (4:0:0 / 4:4:4). */
+static const uint8_t cbp_intra_table_400[16] = {
+    15, 0, 7, 11, 13, 14, 3, 5, 10, 12, 1, 2, 4, 8, 6, 9
+};
+
+static const uint8_t cbp_inter_table_400[16] = {
+    0, 1, 2, 4, 8, 3, 5, 10, 12, 15, 7, 11, 13, 14, 6, 9
+};
+
 /* ================================================================
  * nC prediction for luma and chroma
  * ================================================================ */
@@ -684,66 +694,51 @@ static const uint8_t cbp_intra_table[48] = {
 #define MAX_MB_COLS 120  /* support up to 1920 wide */
 #define MAX_MBS     200  /* parse up to 200 MBs */
 
-/* Store total_coeffs for each 4x4 luma block */
-static int tc_luma[MAX_MBS][16];   /* [mb_idx][block_idx] */
-/* Store total_coeffs for each 4x4 chroma block */
-static int tc_chroma_cb[MAX_MBS][8]; /* up to 8 for 4:2:2 */
-static int tc_chroma_cr[MAX_MBS][8];
+/* Store total_coeffs for each 4x4 plane block. 4:2:0 uses the first 4 chroma
+ * entries, 4:2:2 uses the first 8, and 4:4:4 uses all 16. */
+static int tc_luma[MAX_MBS][16];
+static int tc_chroma_cb[MAX_MBS][16];
+static int tc_chroma_cr[MAX_MBS][16];
 
-/* Get nC for luma block using Table 9-11 neighbor prediction */
-static int get_nC_luma(int mb_idx, int block_idx, int mb_cols) {
-    /* 4x4 block raster scan order within MB:
-     *  0  1  4  5
-     *  2  3  6  7
-     *  8  9 12 13
-     * 10 11 14 15
-     */
-    /* Map block_idx to (bx, by) in 4x4-block units within the MB */
-    static const int blk_x[16] = {0,1,0,1,2,3,2,3,0,1,0,1,2,3,2,3};
-    static const int blk_y[16] = {0,0,1,1,0,0,1,1,2,2,3,3,2,2,3,3};
+static const int blk_x_4x4[16] = {0,1,0,1,2,3,2,3,0,1,0,1,2,3,2,3};
+static const int blk_y_4x4[16] = {0,0,1,1,0,0,1,1,2,2,3,3,2,2,3,3};
 
-    int bx = blk_x[block_idx];
-    int by = blk_y[block_idx];
-
+static int get_nC_blocks16(int (*tc_arr)[16], int mb_idx, int block_idx, int mb_cols) {
+    int bx = blk_x_4x4[block_idx];
+    int by = blk_y_4x4[block_idx];
     int mb_col = mb_idx % mb_cols;
 
-    int nA = -1, nB = -1;  /* -1 = not available */
+    int nA = -1, nB = -1;
 
-    /* Left neighbor (A): same by, bx-1 */
     if (bx > 0) {
-        /* Same MB -- find block at (bx-1, by) */
         for (int i = 0; i < 16; i++) {
-            if (blk_x[i] == bx - 1 && blk_y[i] == by) {
-                nA = tc_luma[mb_idx][i];
+            if (blk_x_4x4[i] == bx - 1 && blk_y_4x4[i] == by) {
+                nA = tc_arr[mb_idx][i];
                 break;
             }
         }
     } else if (mb_col > 0) {
-        /* Left MB, rightmost column (bx=3) */
         int left_mb = mb_idx - 1;
         for (int i = 0; i < 16; i++) {
-            if (blk_x[i] == 3 && blk_y[i] == by) {
-                nA = tc_luma[left_mb][i];
+            if (blk_x_4x4[i] == 3 && blk_y_4x4[i] == by) {
+                nA = tc_arr[left_mb][i];
                 break;
             }
         }
     }
 
-    /* Top neighbor (B): same bx, by-1 */
     if (by > 0) {
-        /* Same MB */
         for (int i = 0; i < 16; i++) {
-            if (blk_x[i] == bx && blk_y[i] == by - 1) {
-                nB = tc_luma[mb_idx][i];
+            if (blk_x_4x4[i] == bx && blk_y_4x4[i] == by - 1) {
+                nB = tc_arr[mb_idx][i];
                 break;
             }
         }
     } else if (mb_idx >= mb_cols) {
-        /* Top MB, bottom row (by=3) */
         int top_mb = mb_idx - mb_cols;
         for (int i = 0; i < 16; i++) {
-            if (blk_x[i] == bx && blk_y[i] == 3) {
-                nB = tc_luma[top_mb][i];
+            if (blk_x_4x4[i] == bx && blk_y_4x4[i] == 3) {
+                nB = tc_arr[top_mb][i];
                 break;
             }
         }
@@ -753,6 +748,11 @@ static int get_nC_luma(int mb_idx, int block_idx, int mb_cols) {
     if (nA >= 0) return nA;
     if (nB >= 0) return nB;
     return 0;
+}
+
+/* Get nC for luma block using Table 9-11 neighbor prediction */
+static int get_nC_luma(int mb_idx, int block_idx, int mb_cols) {
+    return get_nC_blocks16(tc_luma, mb_idx, block_idx, mb_cols);
 }
 
 /* Get nC for chroma AC block using neighbors.
@@ -797,6 +797,10 @@ static int get_nC_chroma(int mb_idx, int block_idx, int mb_cols, int is_cr) {
     if (nA >= 0) return nA;
     if (nB >= 0) return nB;
     return 0;
+}
+
+static int get_nC_chroma_444(int mb_idx, int block_idx, int mb_cols, int is_cr) {
+    return get_nC_blocks16(is_cr ? tc_chroma_cr : tc_chroma_cb, mb_idx, block_idx, mb_cols);
 }
 
 /* ================================================================
@@ -1148,6 +1152,7 @@ int main(int argc, char **argv) {
 
             int mb_cols = sps.pic_width_in_mbs;
             int is_422 = (sps.chroma_format_idc == 2);
+            int is_444 = (sps.chroma_format_idc == 3);
             int current_qp = pps.pic_init_qp + qp_delta;
 
             /* Parse MBs */
@@ -1213,7 +1218,7 @@ int main(int argc, char **argv) {
                         if (bs_bit_pos % 8 != 0)
                             bs_bit_pos = (bs_bit_pos + 7) & ~7;
                         /* Skip 256 luma + chroma samples */
-                        int chroma_samples = is_422 ? 256 : 128;
+                        int chroma_samples = is_444 ? 512 : (is_422 ? 256 : 128);
                         int pcm_bits = (256 + chroma_samples) * sps.bit_depth_luma;
                         bs_bit_pos += pcm_bits;
                         printf("  Skipped PCM: %d bits\n", pcm_bits);
@@ -1286,13 +1291,13 @@ int main(int argc, char **argv) {
 
                     int cbp_code = bs_read_ue();
                     int cbp;
-                    if (sps.chroma_format_idc == 0) {
-                        cbp = (cbp_code < 16) ? cbp_code : 0; /* simplified */
+                    if (sps.chroma_format_idc == 0 || is_444) {
+                        cbp = (cbp_code < 16) ? cbp_inter_table_400[cbp_code] : 0;
                     } else {
                         cbp = (cbp_code < 48) ? cbp_inter_table[cbp_code] : 0;
                     }
                     int cbp_luma = cbp & 15;
-                    int cbp_chroma = cbp >> 4;
+                    int cbp_chroma = is_444 ? 0 : (cbp >> 4);
                     printf("  CBP: codeNum=%d -> value=%d (luma=%d, chroma=%d)\n",
                            cbp_code, cbp, cbp_luma, cbp_chroma);
 
@@ -1329,8 +1334,46 @@ int main(int argc, char **argv) {
                     }
                     if (parse_error) break;
 
+                    if (is_444) {
+                        printf("  Plane Cb residual (4:4:4):\n");
+                        for (int blk = 0; blk < 16 && !parse_error; blk++) {
+                            int luma_8x8 = blk / 4;
+                            if (!((cbp_luma >> luma_8x8) & 1)) {
+                                tc_chroma_cb[mb_idx][blk] = 0;
+                                continue;
+                            }
+                            int nC = get_nC_chroma_444(mb_idx, blk, mb_cols, 0);
+                            char label[32];
+                            snprintf(label, sizeof(label), "cb444[%d]", blk);
+                            int tc;
+                            if (parse_cavlc_block(nC, BLOCK_LUMA, label, &tc) < 0) {
+                                parse_error = 1;
+                                break;
+                            }
+                            tc_chroma_cb[mb_idx][blk] = tc;
+                        }
+                        if (parse_error) break;
+
+                        printf("  Plane Cr residual (4:4:4):\n");
+                        for (int blk = 0; blk < 16 && !parse_error; blk++) {
+                            int luma_8x8 = blk / 4;
+                            if (!((cbp_luma >> luma_8x8) & 1)) {
+                                tc_chroma_cr[mb_idx][blk] = 0;
+                                continue;
+                            }
+                            int nC = get_nC_chroma_444(mb_idx, blk, mb_cols, 1);
+                            char label[32];
+                            snprintf(label, sizeof(label), "cr444[%d]", blk);
+                            int tc;
+                            if (parse_cavlc_block(nC, BLOCK_LUMA, label, &tc) < 0) {
+                                parse_error = 1;
+                                break;
+                            }
+                            tc_chroma_cr[mb_idx][blk] = tc;
+                        }
+                    }
                     /* Chroma */
-                    if (sps.chroma_format_idc > 0 && cbp_chroma > 0) {
+                    else if (sps.chroma_format_idc > 0 && cbp_chroma > 0) {
                         /* Chroma DC (4:2:2 = 8 coeffs, 4:2:0 = 4 coeffs per plane) */
                         block_type_t dc_type = is_422 ? BLOCK_CHROMA_DC_422 : BLOCK_CHROMA_DC_420;
                         int tc;
@@ -1393,20 +1436,21 @@ int main(int argc, char **argv) {
                         }
                     }
 
-                    /* intra_chroma_pred_mode */
-                    int chroma_pred = bs_read_ue();
-                    printf("  intra_chroma_pred_mode=%d\n", chroma_pred);
+                    if (!is_444) {
+                        int chroma_pred = bs_read_ue();
+                        printf("  intra_chroma_pred_mode=%d\n", chroma_pred);
+                    }
 
                     /* coded_block_pattern */
                     int cbp_code = bs_read_ue();
                     int cbp;
-                    if (sps.chroma_format_idc == 0) {
-                        cbp = (cbp_code < 16) ? cbp_code : 0;
+                    if (sps.chroma_format_idc == 0 || is_444) {
+                        cbp = (cbp_code < 16) ? cbp_intra_table_400[cbp_code] : 0;
                     } else {
                         cbp = (cbp_code < 48) ? cbp_intra_table[cbp_code] : 0;
                     }
                     int cbp_luma = cbp & 15;
-                    int cbp_chroma = cbp >> 4;
+                    int cbp_chroma = is_444 ? 0 : (cbp >> 4);
                     printf("  CBP: codeNum=%d -> value=%d (luma=%d, chroma=%d)\n",
                            cbp_code, cbp, cbp_luma, cbp_chroma);
 
@@ -1439,8 +1483,46 @@ int main(int argc, char **argv) {
                         }
                         if (parse_error) break;
 
+                        if (is_444) {
+                            printf("  Plane Cb residual (4:4:4):\n");
+                            for (int blk = 0; blk < 16 && !parse_error; blk++) {
+                                int luma_8x8 = blk / 4;
+                                if (!((cbp_luma >> luma_8x8) & 1)) {
+                                    tc_chroma_cb[mb_idx][blk] = 0;
+                                    continue;
+                                }
+                                int nC = get_nC_chroma_444(mb_idx, blk, mb_cols, 0);
+                                char label[32];
+                                snprintf(label, sizeof(label), "cb444[%d]", blk);
+                                int tc2;
+                                if (parse_cavlc_block(nC, BLOCK_LUMA, label, &tc2) < 0) {
+                                    parse_error = 1;
+                                    break;
+                                }
+                                tc_chroma_cb[mb_idx][blk] = tc2;
+                            }
+                            if (parse_error) break;
+
+                            printf("  Plane Cr residual (4:4:4):\n");
+                            for (int blk = 0; blk < 16 && !parse_error; blk++) {
+                                int luma_8x8 = blk / 4;
+                                if (!((cbp_luma >> luma_8x8) & 1)) {
+                                    tc_chroma_cr[mb_idx][blk] = 0;
+                                    continue;
+                                }
+                                int nC = get_nC_chroma_444(mb_idx, blk, mb_cols, 1);
+                                char label[32];
+                                snprintf(label, sizeof(label), "cr444[%d]", blk);
+                                int tc2;
+                                if (parse_cavlc_block(nC, BLOCK_LUMA, label, &tc2) < 0) {
+                                    parse_error = 1;
+                                    break;
+                                }
+                                tc_chroma_cr[mb_idx][blk] = tc2;
+                            }
+                        }
                         /* Chroma */
-                        if (sps.chroma_format_idc > 0 && cbp_chroma > 0) {
+                        else if (sps.chroma_format_idc > 0 && cbp_chroma > 0) {
                             /* Chroma DC */
                             block_type_t dc_type = is_422 ? BLOCK_CHROMA_DC_422 : BLOCK_CHROMA_DC_420;
                             int tc;
@@ -1489,6 +1571,12 @@ int main(int argc, char **argv) {
                     }
 
                 } else if (is_I_16x16) {
+                    if (is_444) {
+                        printf("  I_16x16 4:4:4 parse not implemented in this debug parser\n");
+                        parse_error = 1;
+                        break;
+                    }
+
                     /* I_16x16: intra_chroma_pred_mode */
                     int chroma_pred = bs_read_ue();
                     printf("  intra_chroma_pred_mode=%d\n", chroma_pred);

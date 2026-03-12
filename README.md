@@ -28,6 +28,12 @@ Implemented and validated now:
 - `Intra_16x16` luma prediction and syntax support in RTL
 - current IDR path now routes through RTL `Intra_16x16` macroblock coding
   rather than leaving the feature smoke-only
+- `Intra_16x16` luma-DC CAVLC now derives `nC` from the normal surrounding
+  `4x4` nnz context, which re-closed the tiny non-`I_PCM` high-bit-depth
+  decode path
+- current non-`I_PCM` strict-decode validation now reaches `320x176` through
+  `4` frames for `10-bit 4:2:0`, `10-bit 4:2:2`, `8-bit 4:4:4`, and
+  `10-bit 4:4:4`
 - limited quarter-pel luma refinement and chroma fractional interpolation on the
   current inter path
 - validated multi-frame subset runs plus current-tree `Intra_16x16` decode smoke
@@ -41,7 +47,8 @@ software encoder as the implementation baseline:
 - weighted bipred and direct-mode handling
 - broader standards-complete sub-pel motion handling across richer inter modes
 - broader inter partition and transform coverage including `8x8dct`-class tools
-- `4:4:4` support
+- broader validated `4:4:4` support beyond the current `320x176`
+  strict-decode non-`I_PCM` path and spot `I_PCM` coverage
 - full in-loop deblocking
 - broader profile and tool coverage
 - final `1280x720 @ 24 fps`, `10`-second RTL-path completion run
@@ -272,6 +279,20 @@ Current additional validated `I_PCM`-only coverage:
 - `8-bit 4:4:4`
 - `10-bit 4:4:4`
 
+Current additional validated tiny non-`I_PCM` coverage at `32x16`:
+
+- `10-bit 4:2:0` one-frame and two-frame IDR / P probes
+- `10-bit 4:2:2` two-frame IDR / P probes
+- `8-bit 4:4:4` two-frame IDR / P probes
+- `10-bit 4:4:4` one-frame and two-frame IDR / P probes
+
+Current additional validated non-`I_PCM` coverage at `320x176`:
+
+- `10-bit 4:2:0` four-frame strict-decode IDR+P run
+- `10-bit 4:2:2` four-frame strict-decode IDR+P run
+- `8-bit 4:4:4` four-frame strict-decode IDR+P run
+- `10-bit 4:4:4` four-frame strict-decode IDR+P run
+
 ## What Is Not Done Yet
 
 Important non-completion gaps:
@@ -287,8 +308,8 @@ Important non-completion gaps:
   quarter-pel luma path is not implemented
 - broader inter partition coverage and `8x8dct`-class transform support are not
   implemented
-- broader `4:4:4` chroma-format support beyond the current `I_PCM` path is not
-  implemented
+- broader `4:4:4` chroma-format support beyond the current `320x176`
+  strict-decode non-`I_PCM` path and spot `I_PCM` coverage is not implemented
 - full in-loop deblocking is not implemented
 - full-standard profile / level / tool coverage is not implemented
 - the final `240`-frame `1280x720 @ 24 fps` run is not closed yet
@@ -331,6 +352,14 @@ Verified validation/features around the current encoder flow:
 Measured validation points:
 
 - `docker_320x176_1f`: `816,975` cycles
+- `32x16_nonipcm_ncfix`: the `Intra_16x16` luma-DC `nC` fix re-opened strict
+  decode on tiny non-`I_PCM` high-bit-depth probes, covering `10-bit 4:2:0`,
+  `10-bit 4:2:2`, `8-bit 4:4:4`, and `10-bit 4:4:4` through the
+  `validation_nonipcm_*_ncfix.json` artifacts
+- `320x176_nonipcm_4f`: strict-decode IDR+P validation now also closes at
+  `320x176` for `10-bit 4:2:0`, `10-bit 4:2:2`, `8-bit 4:4:4`, and
+  `10-bit 4:4:4` through the `validation_nonipcm_*_320x176_4f_p.json`
+  artifacts
 - `320x176_10f_tefix`: strict FFmpeg-decodable multi-frame validation on the
   current tree, `253,064,186` cycles, RTL PSNR avg `45.745576`, RTL SSIM all
   `0.994893`

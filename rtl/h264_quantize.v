@@ -1,7 +1,7 @@
-// h264_quantize.v — Forward Quantization for QP=26
-// level = (|coeff| * MF + f) >> 19
-// QP=26: QBITS=19, F_INTRA=174763
-// MF values for QP%6=2: Index 0=10082, Index 1=4194, Index 2=6554
+// h264_quantize.v — Forward Quantization for a fixed intra QP.
+// The effective QP must include the H.264 high-bit-depth QpBdOffset so the
+// RTL reconstruction math matches what a standards-compliant decoder derives
+// from SPS/PPS when BIT_DEPTH > 8.
 
 module h264_quantize #(
     parameter BIT_DEPTH = 8
@@ -20,8 +20,10 @@ module h264_quantize #(
 );
 
     localparam CW = BIT_DEPTH + 8;
-    localparam QBITS = 19;
-    localparam [31:0] F_INTRA = 32'd174763;
+    localparam integer QP_BD_OFFSET = 6 * (BIT_DEPTH - 8);
+    localparam integer FIXED_QP = 26 + QP_BD_OFFSET;
+    localparam integer QBITS = 15 + (FIXED_QP / 6);
+    localparam [31:0] F_INTRA = ((32'd1 << QBITS) + 32'd1) / 32'd3;
 
     reg [2:0] state;
     localparam S_IDLE  = 3'd0;
@@ -33,19 +35,63 @@ module h264_quantize #(
     function [15:0] get_mf;
         input [3:0] pos;
         begin
-            if (pos[2] == 1'b0 && pos[0] == 1'b0)
-                get_mf = 16'd10082; // Index 0
-            else if (pos[2] == 1'b1 && pos[0] == 1'b1)
-                get_mf = 16'd4194;  // Index 1
-            else
-                get_mf = 16'd6554;  // Index 2
+            case (FIXED_QP % 6)
+                0: begin
+                    if (pos[2] == 1'b0 && pos[0] == 1'b0)
+                        get_mf = 16'd13107;
+                    else if (pos[2] == 1'b1 && pos[0] == 1'b1)
+                        get_mf = 16'd5243;
+                    else
+                        get_mf = 16'd8066;
+                end
+                1: begin
+                    if (pos[2] == 1'b0 && pos[0] == 1'b0)
+                        get_mf = 16'd11916;
+                    else if (pos[2] == 1'b1 && pos[0] == 1'b1)
+                        get_mf = 16'd4660;
+                    else
+                        get_mf = 16'd7490;
+                end
+                2: begin
+                    if (pos[2] == 1'b0 && pos[0] == 1'b0)
+                        get_mf = 16'd10082;
+                    else if (pos[2] == 1'b1 && pos[0] == 1'b1)
+                        get_mf = 16'd4194;
+                    else
+                        get_mf = 16'd6554;
+                end
+                3: begin
+                    if (pos[2] == 1'b0 && pos[0] == 1'b0)
+                        get_mf = 16'd9362;
+                    else if (pos[2] == 1'b1 && pos[0] == 1'b1)
+                        get_mf = 16'd3647;
+                    else
+                        get_mf = 16'd5825;
+                end
+                4: begin
+                    if (pos[2] == 1'b0 && pos[0] == 1'b0)
+                        get_mf = 16'd8192;
+                    else if (pos[2] == 1'b1 && pos[0] == 1'b1)
+                        get_mf = 16'd3355;
+                    else
+                        get_mf = 16'd5243;
+                end
+                default: begin
+                    if (pos[2] == 1'b0 && pos[0] == 1'b0)
+                        get_mf = 16'd7282;
+                    else if (pos[2] == 1'b1 && pos[0] == 1'b1)
+                        get_mf = 16'd2893;
+                    else
+                        get_mf = 16'd4559;
+                end
+            endcase
         end
     endfunction
 
     reg signed [CW-1:0] coeff;
     reg [CW-1:0] coeff_abs;
     reg          coeff_sign;
-    reg [CW+15:0] product;  // coeff_abs * MF (CW + 16 bits)
+    reg [47:0] product;
     reg [15:0] level;
 
     // Unpack inputs
@@ -78,8 +124,8 @@ module h264_quantize #(
                     coeff      = inp[idx];
                     coeff_sign = coeff[CW-1];
                     coeff_abs  = coeff_sign ? (~coeff + {{(CW-1){1'b0}}, 1'b1}) : coeff;
-                    product    = ({{16{1'b0}}, coeff_abs} * {{CW{1'b0}}, get_mf(idx)}) + {{(CW-16){1'b0}}, F_INTRA};
-                    level      = product[QBITS +: 16];
+                    product    = ({{32{1'b0}}, coeff_abs} * get_mf(idx)) + F_INTRA;
+                    level      = product >> QBITS;
                 // verilator lint_on BLKSEQ
 
                     quant_flat[idx*16 +: 16] <= coeff_sign ? (~level + 16'd1) : level;

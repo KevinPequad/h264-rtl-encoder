@@ -17,6 +17,8 @@ module h264_intra_pred #(
     input  wire [4*BIT_DEPTH-1:0]    top_4,
     input  wire [4*BIT_DEPTH-1:0]    top_right_4,
     input  wire [4*BIT_DEPTH-1:0]    left_4,
+    input  wire                      force_mode_en,
+    input  wire [3:0]                force_mode,
     output reg  [16*BIT_DEPTH-1:0]   pred_4x4,
     output reg  [16*(BIT_DEPTH+1)-1:0] resid_4x4,
     output reg  [3:0]                pred_mode
@@ -95,8 +97,28 @@ module h264_intra_pred #(
     reg [2:0] ddr_d_c;
     reg [2:0] vr_n_c;
     reg [2:0] hd_n_c;
-    reg [2:0] hu_z_c;
-    reg [2:0] hu_idx_c;
+    reg [3:0] hu_z_c;
+
+    function automatic [BD-1:0] avg2_pix;
+        input [BD-1:0] a;
+        input [BD-1:0] b;
+        reg [BD:0] sum;
+        begin
+            sum = {1'b0, a} + {1'b0, b} + {{BD{1'b0}}, 1'b1};
+            avg2_pix = sum[BD:1];
+        end
+    endfunction
+
+    function automatic [BD-1:0] avg3_pix;
+        input [BD-1:0] a;
+        input [BD-1:0] b;
+        input [BD-1:0] c;
+        reg [BD+1:0] sum;
+        begin
+            sum = {2'b00, a} + {1'b0, b, 1'b0} + {2'b00, c} + {{BD{1'b0}}, 2'd2};
+            avg3_pix = sum[BD+1:2];
+        end
+    endfunction
 
     genvar gi;
     generate
@@ -211,9 +233,9 @@ module h264_intra_pred #(
                 sad_d_c = sad_d_c + abs_diff_c[SAD_W-1:0];
 
                 if (row_idx == 3 && col_idx == 3)
-                    pred_pix_c = (top_full[6] + (top_full[7] * 2'd3) + 2'd2) >> 2;
+                    pred_pix_c = avg3_pix(top_full[6], top_full[7], top_full[7]);
                 else
-                    pred_pix_c = (top_full[row_idx + col_idx] + (top_full[row_idx + col_idx + 1] << 1) + top_full[row_idx + col_idx + 2] + 2'd2) >> 2;
+                    pred_pix_c = avg3_pix(top_full[row_idx + col_idx], top_full[row_idx + col_idx + 1], top_full[row_idx + col_idx + 2]);
                 pred_ddl_c[flat_idx*BD +: BD] = pred_pix_c;
                 resid_ddl_c[flat_idx*BD1 +: BD1] = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
                 if (orig_pix_c >= pred_pix_c)
@@ -225,12 +247,12 @@ module h264_intra_pred #(
 
                 ddr_d_c = col_idx[2:0] - row_idx[2:0];
                 if (col_idx > row_idx)
-                    pred_pix_c = (top_ext[ddr_d_c - 3'd1] + (top_ext[ddr_d_c] << 1) + top_ext[ddr_d_c + 3'd1] + 2'd2) >> 2;
+                    pred_pix_c = avg3_pix(top_ext[ddr_d_c - 3'd1], top_ext[ddr_d_c], top_ext[ddr_d_c + 3'd1]);
                 else if (col_idx < row_idx) begin
                     ddr_d_c = row_idx[2:0] - col_idx[2:0];
-                    pred_pix_c = (left_ext[ddr_d_c - 3'd1] + (left_ext[ddr_d_c] << 1) + left_ext[ddr_d_c + 3'd1] + 2'd2) >> 2;
+                    pred_pix_c = avg3_pix(left_ext[ddr_d_c - 3'd1], left_ext[ddr_d_c], left_ext[ddr_d_c + 3'd1]);
                 end else
-                    pred_pix_c = (top_pix[0] + (top_left << 1) + left_pix[0] + 2'd2) >> 2;
+                    pred_pix_c = avg3_pix(top_pix[0], top_left, left_pix[0]);
                 pred_ddr_c[flat_idx*BD +: BD] = pred_pix_c;
                 resid_ddr_c[flat_idx*BD1 +: BD1] = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
                 if (orig_pix_c >= pred_pix_c)
@@ -243,13 +265,13 @@ module h264_intra_pred #(
                 z_vr_c = {col_idx[2:0], 1'b0} - {2'b00, row_idx[1:0]};
                 vr_n_c = col_idx[2:0] - row_idx[1:0];
                 if (z_vr_c == 4'sd0 || z_vr_c == 4'sd2 || z_vr_c == 4'sd4 || z_vr_c == 4'sd6)
-                    pred_pix_c = (top_ext[vr_n_c] + top_ext[vr_n_c + 3'd1] + 1'b1) >> 1;
+                    pred_pix_c = avg2_pix(top_ext[vr_n_c], top_ext[vr_n_c + 3'd1]);
                 else if (z_vr_c == 4'sd1 || z_vr_c == 4'sd3 || z_vr_c == 4'sd5)
-                    pred_pix_c = (top_ext[vr_n_c - 3'd1] + (top_ext[vr_n_c] << 1) + top_ext[vr_n_c + 3'd1] + 2'd2) >> 2;
+                    pred_pix_c = avg3_pix(top_ext[vr_n_c], top_ext[vr_n_c + 3'd1], top_ext[vr_n_c + 3'd2]);
                 else if (z_vr_c == -4'sd1)
-                    pred_pix_c = (left_pix[0] + (top_left << 1) + top_pix[0] + 2'd2) >> 2;
+                    pred_pix_c = avg3_pix(left_pix[0], top_left, top_pix[0]);
                 else
-                    pred_pix_c = (left_ext[row_idx[2:0]] + (left_ext[row_idx[2:0] - 3'd1] << 1) + left_ext[row_idx[2:0] - 3'd2] + 2'd2) >> 2;
+                    pred_pix_c = avg3_pix(left_ext[row_idx[2:0]], left_ext[row_idx[2:0] - 3'd1], left_ext[row_idx[2:0] - 3'd2]);
                 pred_vr_c[flat_idx*BD +: BD] = pred_pix_c;
                 resid_vr_c[flat_idx*BD1 +: BD1] = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
                 if (orig_pix_c >= pred_pix_c)
@@ -262,13 +284,13 @@ module h264_intra_pred #(
                 z_hd_c = {row_idx[2:0], 1'b0} - {2'b00, col_idx[1:0]};
                 hd_n_c = row_idx[2:0] - col_idx[1:0];
                 if (z_hd_c == 4'sd0 || z_hd_c == 4'sd2 || z_hd_c == 4'sd4 || z_hd_c == 4'sd6)
-                    pred_pix_c = (left_ext[hd_n_c] + left_ext[hd_n_c + 3'd1] + 1'b1) >> 1;
+                    pred_pix_c = avg2_pix(left_ext[hd_n_c], left_ext[hd_n_c + 3'd1]);
                 else if (z_hd_c == 4'sd1 || z_hd_c == 4'sd3 || z_hd_c == 4'sd5)
-                    pred_pix_c = (left_ext[hd_n_c - 3'd1] + (left_ext[hd_n_c] << 1) + left_ext[hd_n_c + 3'd1] + 2'd2) >> 2;
+                    pred_pix_c = avg3_pix(left_ext[hd_n_c], left_ext[hd_n_c + 3'd1], left_ext[hd_n_c + 3'd2]);
                 else if (z_hd_c == -4'sd1)
-                    pred_pix_c = (left_pix[0] + (top_left << 1) + top_pix[0] + 2'd2) >> 2;
+                    pred_pix_c = avg3_pix(left_pix[0], top_left, top_pix[0]);
                 else
-                    pred_pix_c = (top_ext[col_idx[2:0]] + (top_ext[col_idx[2:0] - 3'd1] << 1) + top_ext[col_idx[2:0] - 3'd2] + 2'd2) >> 2;
+                    pred_pix_c = avg3_pix(top_ext[col_idx[2:0]], top_ext[col_idx[2:0] - 3'd1], top_ext[col_idx[2:0] - 3'd2]);
                 pred_hd_c[flat_idx*BD +: BD] = pred_pix_c;
                 resid_hd_c[flat_idx*BD1 +: BD1] = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
                 if (orig_pix_c >= pred_pix_c)
@@ -279,9 +301,9 @@ module h264_intra_pred #(
                     sad_hd_c = sad_hd_c + abs_diff_c[SAD_W-1:0];
 
                 if (row_idx[0] == 1'b0)
-                    pred_pix_c = (top_full[col_idx + row_idx[2:1]] + top_full[col_idx + row_idx[2:1] + 1] + 1'b1) >> 1;
+                    pred_pix_c = avg2_pix(top_full[col_idx + row_idx[2:1]], top_full[col_idx + row_idx[2:1] + 1]);
                 else
-                    pred_pix_c = (top_full[col_idx + row_idx[2:1]] + (top_full[col_idx + row_idx[2:1] + 1] << 1) + top_full[col_idx + row_idx[2:1] + 2] + 2'd2) >> 2;
+                    pred_pix_c = avg3_pix(top_full[col_idx + row_idx[2:1]], top_full[col_idx + row_idx[2:1] + 1], top_full[col_idx + row_idx[2:1] + 2]);
                 pred_vl_c[flat_idx*BD +: BD] = pred_pix_c;
                 resid_vl_c[flat_idx*BD1 +: BD1] = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
                 if (orig_pix_c >= pred_pix_c)
@@ -291,14 +313,19 @@ module h264_intra_pred #(
                 if (top_avail)
                     sad_vl_c = sad_vl_c + abs_diff_c[SAD_W-1:0];
 
-                hu_z_c = col_idx[2:0] + {row_idx[1:0], 1'b0};
-                hu_idx_c = row_idx[2:0] + {2'b00, col_idx[0]};
-                if (hu_z_c == 3'd0 || hu_z_c == 3'd2 || hu_z_c == 3'd4)
-                    pred_pix_c = (left_pix[hu_idx_c] + left_pix[hu_idx_c + 3'd1] + 1'b1) >> 1;
-                else if (hu_z_c == 3'd1 || hu_z_c == 3'd3)
-                    pred_pix_c = (left_pix[hu_idx_c] + (left_pix[hu_idx_c + 3'd1] << 1) + left_pix[hu_idx_c + 3'd2] + 2'd2) >> 2;
-                else if (hu_z_c == 3'd5)
-                    pred_pix_c = (left_pix[3'd2] + (left_pix[3'd3] * 2'd3) + 2'd2) >> 2;
+                hu_z_c = {1'b0, col_idx[2:0]} + {row_idx[2:0], 1'b0};
+                if (hu_z_c == 4'd0)
+                    pred_pix_c = avg2_pix(left_pix[0], left_pix[1]);
+                else if (hu_z_c == 4'd1)
+                    pred_pix_c = avg3_pix(left_pix[0], left_pix[1], left_pix[2]);
+                else if (hu_z_c == 4'd2)
+                    pred_pix_c = avg2_pix(left_pix[1], left_pix[2]);
+                else if (hu_z_c == 4'd3)
+                    pred_pix_c = avg3_pix(left_pix[1], left_pix[2], left_pix[3]);
+                else if (hu_z_c == 4'd4)
+                    pred_pix_c = avg2_pix(left_pix[2], left_pix[3]);
+                else if (hu_z_c == 4'd5)
+                    pred_pix_c = avg3_pix(left_pix[3'd2], left_pix[3'd3], left_pix[3'd3]);
                 else
                     pred_pix_c = left_pix[3'd3];
                 pred_hu_c[flat_idx*BD +: BD] = pred_pix_c;
@@ -371,6 +398,56 @@ module h264_intra_pred #(
             best_sad_c = sad_hu_c;
             best_pred_c = pred_hu_c;
             best_resid_c = resid_hu_c;
+        end
+
+        if (force_mode_en) begin
+            case (force_mode)
+                MODE_VERT: begin
+                    best_mode_c = MODE_VERT;
+                    best_pred_c = pred_v_c;
+                    best_resid_c = resid_v_c;
+                end
+                MODE_HOR: begin
+                    best_mode_c = MODE_HOR;
+                    best_pred_c = pred_h_c;
+                    best_resid_c = resid_h_c;
+                end
+                MODE_DDL: begin
+                    best_mode_c = MODE_DDL;
+                    best_pred_c = pred_ddl_c;
+                    best_resid_c = resid_ddl_c;
+                end
+                MODE_DDR: begin
+                    best_mode_c = MODE_DDR;
+                    best_pred_c = pred_ddr_c;
+                    best_resid_c = resid_ddr_c;
+                end
+                MODE_VR: begin
+                    best_mode_c = MODE_VR;
+                    best_pred_c = pred_vr_c;
+                    best_resid_c = resid_vr_c;
+                end
+                MODE_HD: begin
+                    best_mode_c = MODE_HD;
+                    best_pred_c = pred_hd_c;
+                    best_resid_c = resid_hd_c;
+                end
+                MODE_VL: begin
+                    best_mode_c = MODE_VL;
+                    best_pred_c = pred_vl_c;
+                    best_resid_c = resid_vl_c;
+                end
+                MODE_HU: begin
+                    best_mode_c = MODE_HU;
+                    best_pred_c = pred_hu_c;
+                    best_resid_c = resid_hu_c;
+                end
+                default: begin
+                    best_mode_c = MODE_DC;
+                    best_pred_c = pred_d_c;
+                    best_resid_c = resid_d_c;
+                end
+            endcase
         end
     end
 

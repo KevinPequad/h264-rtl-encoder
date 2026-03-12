@@ -38,6 +38,7 @@ module h264_cavlc (
     localparam S_RB_SETUP    = 4'd8;
     localparam S_RB_EMIT     = 4'd9;
     localparam S_DONE        = 4'd10;
+    localparam S_LEV_EMIT_LO = 4'd11;
 
     reg [3:0] state;
 
@@ -750,55 +751,66 @@ module h264_cavlc (
     reg [15:0] lev_lcode_r;
     reg [3:0]  lev_suflen_r;
 
-    reg [31:0] lev_out_data;
-    reg [5:0]  lev_out_bits;
+    reg [63:0] lev_out_data;
+    reg [6:0]  lev_out_bits;
     reg [15:0] lev_prefix;
     reg [5:0]  lev_prefix_len;
+    reg [63:0] lev_suffix_bits;
+    reg [5:0]  lev_escape_prefix;
+    reg [31:0] lev_emit_hi_bits;
+    reg [31:0] lev_emit_lo_bits;
+    reg [5:0]  lev_emit_lo_count;
 
     always @(*) begin
-        lev_out_data = 32'd0;
-        lev_out_bits = 6'd1;
+        lev_out_data = 64'd0;
+        lev_out_bits = 7'd1;
         lev_prefix = 16'd0;
         lev_prefix_len = 6'd0;
+        lev_suffix_bits = 64'd0;
+        lev_escape_prefix = 6'd15;
+        lev_emit_hi_bits = 32'd0;
+        lev_emit_lo_bits = 32'd0;
+        lev_emit_lo_count = 6'd0;
 
-        if (lev_suflen_r == 4'd0) begin
-            // Level VLC table 0
-            if (lev_lcode_r < 16'd14) begin
-                // prefix = lev_lcode_r zeros followed by 1
-                lev_out_bits = {2'd0, lev_lcode_r[3:0]} + 6'd1;
-                lev_out_data = 32'h80000000 >> lev_lcode_r[4:0];
-            end else if (lev_lcode_r < 16'd30) begin
-                // Escape level 1: 14 zeros, 1, 4-bit suffix
-                lev_out_bits = 6'd19;
-                lev_out_data = (32'd1 << (32 - 15)) |
-                               ((({16'd0, lev_lcode_r} - 32'd14) & 32'hF) << (32 - 19));
-            end else begin
-                // Escape level 2: 15 zeros, 1, 12-bit suffix
-                // Decoder: levelCode = 30 + suffix, so suffix = lcode - 30
-                lev_out_bits = 6'd28;
-                lev_out_data = (32'd1 << (32 - 16)) |
-                               ((({16'd0, lev_lcode_r} - 32'd30) & 32'hFFF) << (32 - 28));
-            end
+        lev_prefix = lev_lcode_r >> lev_suflen_r;
+        if (lev_suflen_r == 4'd0 && lev_lcode_r < 16'd14) begin
+            lev_out_bits = {2'd0, lev_lcode_r[3:0]} + 6'd1;
+            lev_out_data = 64'd1;
+        end else if (lev_suflen_r == 4'd0 && lev_lcode_r < 16'd30) begin
+            lev_out_bits = 7'd19;
+            lev_out_data = ((64'd1 << 4) + ({48'd0, lev_lcode_r} - 64'd14)) & 64'h1F;
+        end else if (lev_suflen_r != 4'd0 && lev_prefix == 16'd14) begin
+            lev_out_bits = 7'd15 + {3'd0, lev_suflen_r};
+            lev_suffix_bits = (64'd1 << lev_suflen_r)
+                            + ({48'd0, lev_lcode_r} & ((64'd1 << lev_suflen_r) - 64'd1));
+            lev_out_data = lev_suffix_bits;
+        end else if (lev_prefix < 16'd14) begin
+            lev_prefix_len = {1'b0, lev_prefix[4:0]};
+            lev_out_bits = {1'b0, lev_prefix_len} + 7'd1 + {3'd0, lev_suflen_r};
+            lev_suffix_bits = (lev_suflen_r == 4'd0) ? 64'd1 :
+                              ((64'd1 << lev_suflen_r)
+                               + ({48'd0, lev_lcode_r} & ((64'd1 << lev_suflen_r) - 64'd1)));
+            lev_out_data = lev_suffix_bits;
         end else begin
-            // Level VLC with suffix_length > 0
-            // prefix = levelCode >> suffix_length
-            // suffix = levelCode & ((1 << suffix_length) - 1)
-            lev_prefix = lev_lcode_r >> lev_suflen_r;
-            if (lev_prefix < 16'd15) begin
-                lev_prefix_len = {1'b0, lev_prefix[4:0]};
-                lev_out_bits = lev_prefix_len + 6'd1 + {2'd0, lev_suflen_r};
-                // prefix zeros, then 1, then suffix bits
-                lev_out_data = (32'h80000000 >> lev_prefix[4:0]);
-                // OR in the suffix at the right position
-                lev_out_data = lev_out_data |
-                    (({16'd0, lev_lcode_r} & ((32'd1 << lev_suflen_r) - 32'd1))
-                     << (6'd32 - lev_out_bits));
-            end else begin
-                // Escape
-                lev_out_bits = 6'd28;
-                lev_out_data = (32'd1 << (32 - 16)) |
-                               ((({16'd0, lev_lcode_r} - (32'd15 << lev_suflen_r)) & 32'hFFF) << (32 - 28));
+            lev_suffix_bits = {48'd0, lev_lcode_r} - (64'd15 << lev_suflen_r);
+            if (lev_suflen_r == 4'd0)
+                lev_suffix_bits = lev_suffix_bits - 64'd15;
+            while ((lev_escape_prefix < 6'd17) &&
+                   (lev_suffix_bits >= (64'd1 << (lev_escape_prefix - 6'd3)))) begin
+                lev_suffix_bits = lev_suffix_bits - (64'd1 << (lev_escape_prefix - 6'd3));
+                lev_escape_prefix = lev_escape_prefix + 6'd1;
             end
+            lev_out_bits = {1'b0, ((lev_escape_prefix << 1) - 6'd2)};
+            lev_out_data = (64'd1 << (lev_escape_prefix - 6'd3))
+                         + (lev_suffix_bits & ((64'd1 << (lev_escape_prefix - 6'd3)) - 64'd1));
+        end
+
+        if (lev_out_bits > 7'd32) begin
+            lev_emit_hi_bits = lev_out_data >> (lev_out_bits - 7'd32);
+            lev_emit_lo_count = lev_out_bits - 7'd32;
+            lev_emit_lo_bits = lev_out_data & ((64'd1 << lev_emit_lo_count) - 64'd1);
+        end else begin
+            lev_emit_hi_bits = lev_out_data[31:0] << (7'd32 - lev_out_bits);
         end
     end
 
@@ -924,22 +936,57 @@ module h264_cavlc (
                 end
 
                 S_LEV_EMIT: begin
-                    bits_out   <= lev_out_data;
-                    bits_count <= lev_out_bits;
+                    bits_out   <= lev_emit_hi_bits;
+                    bits_count <= (lev_out_bits > 7'd32) ? 6'd32 : lev_out_bits[5:0];
                     bits_valid <= 1'b1;
 
+                    if (lev_out_bits > 7'd32) begin
+                        state <= S_LEV_EMIT_LO;
+                    end else begin
+
+                        cur_val  = nz_val[idx[3:0]];
+                        cur_sign = cur_val[15];
+                        cur_abs  = cur_sign ? (~cur_val + 16'd1) : cur_val;
+
+                        begin : update_suffix_len
+                            reg [3:0] next_suffix_len;
+                            next_suffix_len = suffix_len;
+                            if (next_suffix_len == 4'd0)
+                                next_suffix_len = 4'd1;
+                            if ((cur_abs > ({12'd0, 4'd3} << (next_suffix_len - 4'd1))) &&
+                                (next_suffix_len < 4'd6))
+                                next_suffix_len = next_suffix_len + 4'd1;
+                            suffix_len <= next_suffix_len;
+                        end
+
+                        idx <= idx + 5'd1;
+
+                        if (idx + 5'd1 < total_coeffs)
+                            state <= S_LEV_SETUP;
+                        else
+                            state <= S_TZ_SETUP;
+                    end
+                end
+
+                S_LEV_EMIT_LO: begin
+                    bits_out   <= lev_emit_lo_bits << (6'd32 - lev_emit_lo_count);
+                    bits_count <= lev_emit_lo_count;
+                    bits_valid <= 1'b1;
 
                     cur_val  = nz_val[idx[3:0]];
                     cur_sign = cur_val[15];
                     cur_abs  = cur_sign ? (~cur_val + 16'd1) : cur_val;
 
-                    if (suffix_len == 4'd0) begin
-                        if (cur_abs > 16'd3)
-                            suffix_len <= 4'd2;
-                        else
-                            suffix_len <= 4'd1;
-                    end else if (cur_abs > ({12'd0, 4'd3} << (suffix_len - 4'd1)))
-                        suffix_len <= suffix_len + 4'd1;
+                    begin : update_suffix_len_lo
+                        reg [3:0] next_suffix_len;
+                        next_suffix_len = suffix_len;
+                        if (next_suffix_len == 4'd0)
+                            next_suffix_len = 4'd1;
+                        if ((cur_abs > ({12'd0, 4'd3} << (next_suffix_len - 4'd1))) &&
+                            (next_suffix_len < 4'd6))
+                            next_suffix_len = next_suffix_len + 4'd1;
+                        suffix_len <= next_suffix_len;
+                    end
 
                     idx <= idx + 5'd1;
 
