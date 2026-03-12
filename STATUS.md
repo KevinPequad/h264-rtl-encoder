@@ -270,10 +270,10 @@ Current additional validated tiny non-`I_PCM` coverage at `32x16`:
 
 Current additional validated non-`I_PCM` coverage at `320x176`:
 
-- `10-bit 4:2:0` four-frame strict-decode IDR+P run
-- `10-bit 4:2:2` four-frame strict-decode IDR+P run
-- `8-bit 4:4:4` four-frame strict-decode IDR+P run
-- `10-bit 4:4:4` four-frame strict-decode IDR+P run
+- `10-bit 4:2:0` ten-frame strict-decode IDR+P run
+- `10-bit 4:2:2` ten-frame strict-decode IDR+P run
+- `8-bit 4:4:4` ten-frame strict-decode IDR+P run
+- `10-bit 4:4:4` ten-frame strict-decode IDR+P run
 
 ## Validated Capabilities
 
@@ -340,14 +340,18 @@ Measured validation points:
 - `32x16_2f_nonipcm_10b444_p_ncfix`: strict FFmpeg-decodable two-frame IDR+P
   non-`I_PCM` `10-bit 4:4:4` probe, RTL PSNR avg `28.3215`, RTL SSIM
   `0.886921`
-- `320x176_4f_nonipcm_10b420_p`: strict FFmpeg-decodable four-frame IDR+P
-  non-`I_PCM` `10-bit 4:2:0` validation, `82,912,587` cycles, `3,391` bytes
-- `320x176_4f_nonipcm_10b422_p`: strict FFmpeg-decodable four-frame IDR+P
-  non-`I_PCM` `10-bit 4:2:2` validation, `83,862,691` cycles, `3,612` bytes
-- `320x176_4f_nonipcm_8b444_p`: strict FFmpeg-decodable four-frame IDR+P
-  non-`I_PCM` `8-bit 4:4:4` validation, `94,712,740` cycles, `2,437` bytes
-- `320x176_4f_nonipcm_10b444_p`: strict FFmpeg-decodable four-frame IDR+P
-  non-`I_PCM` `10-bit 4:4:4` validation, `93,663,754` cycles, `2,254` bytes
+- `320x176_10f_nonipcm_10b420_p`: strict FFmpeg-decodable ten-frame IDR+P
+  non-`I_PCM` `10-bit 4:2:0` validation, `420,156,980` cycles, `11,433`
+  bytes
+- `320x176_10f_nonipcm_10b422_p`: strict FFmpeg-decodable ten-frame IDR+P
+  non-`I_PCM` `10-bit 4:2:2` validation, `422,555,097` cycles, `12,108`
+  bytes
+- `320x176_10f_nonipcm_8b444_p`: strict FFmpeg-decodable ten-frame IDR+P
+  non-`I_PCM` `8-bit 4:4:4` validation, `472,182,097` cycles, `11,736`
+  bytes
+- `320x176_10f_nonipcm_10b444_p`: strict FFmpeg-decodable ten-frame IDR+P
+  non-`I_PCM` `10-bit 4:4:4` validation, `461,752,849` cycles, `11,019`
+  bytes
 - `320x176_1f_vui`: strict FFmpeg-decodable one-frame SPS/VUI timing smoke,
   `732,748` cycles, FFmpeg `level=12`, and raw-stream timing metadata behavior
   matching a one-frame `x264` elementary stream at the same settings
@@ -596,7 +600,7 @@ H.264 encoder yet:
   quarter-pel luma path
 - broader inter partition coverage and `8x8dct`-class transform support
 - broader `4:4:4` chroma support beyond the current `320x176` strict-decode
-  non-`I_PCM` path and spot `I_PCM` coverage
+  non-`I_PCM` path through `10` frames and spot `I_PCM` coverage
 - full in-loop deblocking engine
 - full-standard profile / level / tool coverage
 
@@ -612,7 +616,8 @@ Still missing relative to the chosen `x264` software baseline:
 - broader sub-pel motion estimation / compensation and richer mode decision
 - broader partition / transform coverage including `8x8dct`-class tools
 - broader `I444` / `4:4:4` format coverage beyond the current `320x176`
-  strict-decode non-`I_PCM` path and spot `I_PCM` coverage
+  strict-decode non-`I_PCM` path through `10` frames and spot `I_PCM`
+  coverage
 - in-loop deblocking
 - enough profile / level / tool coverage to stop calling the repo a subset
 
