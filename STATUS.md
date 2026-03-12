@@ -272,8 +272,8 @@ Current additional validated non-`I_PCM` coverage at `320x176`:
 
 - `10-bit 4:2:0` ten-frame strict-decode IDR+P run
 - `10-bit 4:2:2` ten-frame strict-decode IDR+P run
-- `8-bit 4:4:4` ten-frame strict-decode IDR+P run
-- `10-bit 4:4:4` ten-frame strict-decode IDR+P run
+- `8-bit 4:4:4` twenty-four-frame strict-decode IDR+P run
+- `10-bit 4:4:4` twenty-four-frame strict-decode IDR+P run
 
 ## Validated Capabilities
 
@@ -358,6 +358,16 @@ Measured validation points:
 - `320x176_4f_nonipcm_8b444_f14f17_fixcbp`: strict FFmpeg-decodable extracted
   `8-bit 4:4:4` IDR+P validation over source frames `14..17`, `88,709,796`
   cycles, `10,442` bytes
+- `320x176_6f_nonipcm_8b444_f12f17_fixcbp`: strict FFmpeg-decodable extracted
+  `8-bit 4:4:4` IDR+P validation over source frames `12..17`, `212,087,014`
+  cycles, `16,327` bytes
+- `320x176_8f_nonipcm_8b444_f10f17_fixcbp`: strict FFmpeg-decodable extracted
+  `8-bit 4:4:4` IDR+P validation over source frames `10..17`, `337,204,428`
+  cycles, `21,715` bytes
+- `320x176_24f_nonipcm_8b444_fixcbp`: strict FFmpeg-decodable full current-tree
+  `8-bit 4:4:4` IDR+P validation, `1,350,672,124` cycles, `58,281` bytes
+- `320x176_24f_nonipcm_10b444_fixcbp`: strict FFmpeg-decodable full current-tree
+  `10-bit 4:4:4` IDR+P validation, `1,336,320,075` cycles, `56,308` bytes
 - `320x176_1f_vui`: strict FFmpeg-decodable one-frame SPS/VUI timing smoke,
   `732,748` cycles, FFmpeg `level=12`, and raw-stream timing metadata behavior
   matching a one-frame `x264` elementary stream at the same settings
@@ -611,7 +621,8 @@ H.264 encoder yet:
   quarter-pel luma path
 - broader inter partition coverage and `8x8dct`-class transform support
 - broader `4:4:4` chroma support beyond the current `320x176` strict-decode
-  non-`I_PCM` path through `10` frames and spot `I_PCM` coverage
+  non-`I_PCM` path through `24` frames for `8-bit` and `10-bit`, plus spot
+  `I_PCM` coverage
 - full in-loop deblocking engine
 - full-standard profile / level / tool coverage
 
@@ -627,8 +638,8 @@ Still missing relative to the chosen `x264` software baseline:
 - broader sub-pel motion estimation / compensation and richer mode decision
 - broader partition / transform coverage including `8x8dct`-class tools
 - broader `I444` / `4:4:4` format coverage beyond the current `320x176`
-  strict-decode non-`I_PCM` path through `10` frames and spot `I_PCM`
-  coverage
+  strict-decode non-`I_PCM` path through `24` frames for `8-bit` and
+  `10-bit`, plus spot `I_PCM` coverage
 - in-loop deblocking
 - enough profile / level / tool coverage to stop calling the repo a subset
 

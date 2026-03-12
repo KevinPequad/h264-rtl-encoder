@@ -32,8 +32,8 @@ Implemented and validated now:
   `4x4` nnz context, which re-closed the tiny non-`I_PCM` high-bit-depth
   decode path
 - current non-`I_PCM` strict-decode validation now reaches `320x176` through
-  `10` frames for `10-bit 4:2:0`, `10-bit 4:2:2`, `8-bit 4:4:4`, and
-  `10-bit 4:4:4`
+  `10` frames for `10-bit 4:2:0` and `10-bit 4:2:2`, and through `24` frames
+  for `8-bit 4:4:4` and `10-bit 4:4:4`
 - limited quarter-pel luma refinement and chroma fractional interpolation on the
   current inter path
 - validated multi-frame subset runs plus current-tree `Intra_16x16` decode smoke
@@ -290,8 +290,8 @@ Current additional validated non-`I_PCM` coverage at `320x176`:
 
 - `10-bit 4:2:0` ten-frame strict-decode IDR+P run
 - `10-bit 4:2:2` ten-frame strict-decode IDR+P run
-- `8-bit 4:4:4` ten-frame strict-decode IDR+P run
-- `10-bit 4:4:4` ten-frame strict-decode IDR+P run
+- `8-bit 4:4:4` twenty-four-frame strict-decode IDR+P run
+- `10-bit 4:4:4` twenty-four-frame strict-decode IDR+P run
 
 ## What Is Not Done Yet
 
@@ -357,9 +357,12 @@ Measured validation points:
   `10-bit 4:2:2`, `8-bit 4:4:4`, and `10-bit 4:4:4` through the
   `validation_nonipcm_*_ncfix.json` artifacts
 - `320x176_nonipcm_10f`: strict-decode IDR+P validation now also closes at
-  `320x176` through `10` frames for `10-bit 4:2:0`, `10-bit 4:2:2`, `8-bit 4:4:4`, and
-  `10-bit 4:4:4` through the `validation_nonipcm_*_320x176_4f_p.json`
-  and `validation_nonipcm_*_320x176_10f_p.json` artifacts
+  `320x176` through `10` frames for `10-bit 4:2:0` and `10-bit 4:2:2`, and
+  through `24` frames for `8-bit 4:4:4` and `10-bit 4:4:4`, via the
+  `validation_nonipcm_*_320x176_4f_p.json`,
+  `validation_nonipcm_*_320x176_10f_p.json`,
+  `validation_nonipcm_8b444_320x176_24f_p_fixcbp2.json`, and
+  `validation_nonipcm_10b444_320x176_24f_p_fixcbp2.json` artifacts
 - `320x176_nonipcm_8b444_inter_cbp_fix`: the `4:4:4` inter
   `coded_block_pattern` path now uses the ChromaArrayType `3` inter table in
   the RTL writer instead of the `4:2:x` inter code, and strict FFmpeg decode
@@ -367,7 +370,16 @@ Measured validation points:
   `validation_nonipcm_8b444_f16f17_2f_fixcbp.json` (`2` frames,
   `14,159,804` cycles, `5,298` bytes) and
   `validation_nonipcm_8b444_f14f17_4f_fixcbp.json` (`4` frames,
-  `88,709,796` cycles, `10,442` bytes)
+  `88,709,796` cycles, `10,442` bytes), plus
+  `validation_nonipcm_8b444_f12f17_6f_fixcbp.json` (`6` frames,
+  `212,087,014` cycles, `16,327` bytes),
+  `validation_nonipcm_8b444_f10f17_8f_fixcbp2.json` (`8` frames,
+  `337,204,428` cycles, `21,715` bytes), and the full current-tree
+  `validation_nonipcm_8b444_320x176_24f_p_fixcbp2.json` (`24` frames,
+  `1,350,672,124` cycles, `58,281` bytes); the matching `10-bit 4:4:4`
+  current-tree run now also re-closes through
+  `validation_nonipcm_10b444_320x176_24f_p_fixcbp2.json` (`24` frames,
+  `1,336,320,075` cycles, `56,308` bytes)
 - `320x176_10f_tefix`: strict FFmpeg-decodable multi-frame validation on the
   current tree, `253,064,186` cycles, RTL PSNR avg `45.745576`, RTL SSIM all
   `0.994893`
