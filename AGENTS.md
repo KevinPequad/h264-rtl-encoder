@@ -402,6 +402,9 @@ The testbench must not:
     dual-list `16x16` B path
   - Explicit weighted prediction on the current single-list reordered B
     subpaths
+  - Single-list weighted `P` / `B` / direct qpel refinement now scores
+    weighted luma samples during mode decision instead of scoring the
+    unweighted predictor and applying weights only later in reconstruction
   - Limited spatial direct prediction on the current reordered dual-list
     `16x16` B path, with automatic selection plus a force hook for targeted
     validation
@@ -677,6 +680,15 @@ The testbench must not:
     `output/validation_bdirect_auto_probe_320x176_5f.h264`, and simulator
     logging showing nonzero `b_direct_mbs` across all three non-IDR pictures
     (`219`, `148`, and `31`)
+  - `bdirect_auto_weighted_32x16_3f`: strict FFmpeg-decodable weighted
+    non-forced auto `B_DIRECT_16x16` reordered-B validation at `32x16`, `3`
+    frames, `131,078` cycles, `180` bytes, RTL PSNR avg `30.158513`, RTL SSIM
+    all `0.775715`, `output/validation_bdirect_auto_weighted_32x16_3f.h264`,
+    and simulator logging showing `b_direct_mbs=1` on the last picture
+  - `weightedp_small_32x16_2f`: strict FFmpeg-decodable small weighted-P
+    validation at `32x16`, `2` frames, `51,117` cycles, `112` bytes, RTL PSNR
+    avg `28.420753`, RTL SSIM all `0.66449`, and
+    `output/validation_weightedp_small_32x16_2f.h264`
 
 - A 720p chroma corruption bug was traced to raw input address overflow in the Cr plane fetch path and fixed by widening the raw input address width
 - A directional `Intra_4x4` top-right reference fetch bug was fixed in
