@@ -506,6 +506,7 @@ module h264_encoder_top #(
     localparam BD1 = BIT_DEPTH + 1;
     localparam CW  = BIT_DEPTH + 8; // coefficient width for transform/quant pipeline
     wire use_weighted_pred_w = WEIGHTED_PRED_ENABLE && (is_p_frame || is_b_frame);
+    wire use_post_weighted_pred_w = use_weighted_pred_w && !(is_b_frame && is_b_bi_mb_reg);
     wire [2:0] b_l0_ref_bank_w = (is_b_frame && (valid_ref_count >= 3'd2)) ? older_ref_bank : newest_ref_bank;
     wire weighted_pred_enable_cfg_w = (WEIGHTED_PRED_ENABLE != 0);
     wire [3:0] luma_log2_weight_denom_cfg_w = LUMA_LOG2_WEIGHT_DENOM[3:0];
@@ -564,6 +565,48 @@ module h264_encoder_top #(
             weighted_sample = (CHROMA_WEIGHT_CR * sample_in) + round_val + (CHROMA_OFFSET_CR << CHROMA_LOG2_WEIGHT_DENOM);
             weighted_sample = weighted_sample >>> CHROMA_LOG2_WEIGHT_DENOM;
             apply_chroma_cr_weight = clip_weighted_sample(weighted_sample);
+        end
+    endfunction
+
+    function [BD-1:0] apply_luma_bi_weight;
+        input [BD-1:0] sample0_in;
+        input [BD-1:0] sample1_in;
+        integer weighted_sample;
+        integer round_val;
+        begin
+            round_val = 1 << LUMA_LOG2_WEIGHT_DENOM;
+            weighted_sample = (LUMA_WEIGHT * sample0_in) + (LUMA_WEIGHT * sample1_in)
+                            + round_val + (LUMA_OFFSET << (LUMA_LOG2_WEIGHT_DENOM + 1));
+            weighted_sample = weighted_sample >>> (LUMA_LOG2_WEIGHT_DENOM + 1);
+            apply_luma_bi_weight = clip_weighted_sample(weighted_sample);
+        end
+    endfunction
+
+    function [BD-1:0] apply_chroma_cb_bi_weight;
+        input [BD-1:0] sample0_in;
+        input [BD-1:0] sample1_in;
+        integer weighted_sample;
+        integer round_val;
+        begin
+            round_val = 1 << CHROMA_LOG2_WEIGHT_DENOM;
+            weighted_sample = (CHROMA_WEIGHT_CB * sample0_in) + (CHROMA_WEIGHT_CB * sample1_in)
+                            + round_val + (CHROMA_OFFSET_CB << (CHROMA_LOG2_WEIGHT_DENOM + 1));
+            weighted_sample = weighted_sample >>> (CHROMA_LOG2_WEIGHT_DENOM + 1);
+            apply_chroma_cb_bi_weight = clip_weighted_sample(weighted_sample);
+        end
+    endfunction
+
+    function [BD-1:0] apply_chroma_cr_bi_weight;
+        input [BD-1:0] sample0_in;
+        input [BD-1:0] sample1_in;
+        integer weighted_sample;
+        integer round_val;
+        begin
+            round_val = 1 << CHROMA_LOG2_WEIGHT_DENOM;
+            weighted_sample = (CHROMA_WEIGHT_CR * sample0_in) + (CHROMA_WEIGHT_CR * sample1_in)
+                            + round_val + (CHROMA_OFFSET_CR << (CHROMA_LOG2_WEIGHT_DENOM + 1));
+            weighted_sample = weighted_sample >>> (CHROMA_LOG2_WEIGHT_DENOM + 1);
+            apply_chroma_cr_bi_weight = clip_weighted_sample(weighted_sample);
         end
     endfunction
 
@@ -855,7 +898,7 @@ sb_orig_pixels = {(16*BD){1'b0}};
         // For inter MBs: use inter_pred_buf; for intra: use pred_4x4_w scattered into MB
 pred_buf = {(256*BD){1'b0}};
         if (is_inter_mb_reg && is_luma) begin
-            if (use_weighted_pred_w) begin
+            if (use_post_weighted_pred_w) begin
                 for (idx_pi = 0; idx_pi < 256; idx_pi = idx_pi + 1)
                     pred_buf[idx_pi*BD +: BD] = apply_luma_weight(inter_pred_buf[idx_pi*BD +: BD]);
             end else begin
@@ -864,10 +907,10 @@ pred_buf = {(256*BD){1'b0}};
         end else if (is_inter_mb_reg && (CHROMA_FORMAT_IDC == 3) && (is_cb || is_cr)) begin
             for (idx_pi = 0; idx_pi < 256; idx_pi = idx_pi + 1) begin
                 if (is_cr)
-                    pred_buf[idx_pi*BD +: BD] = use_weighted_pred_w ? apply_chroma_cr_weight(inter_chr_pred_cr[idx_pi*BD +: BD])
+                    pred_buf[idx_pi*BD +: BD] = use_post_weighted_pred_w ? apply_chroma_cr_weight(inter_chr_pred_cr[idx_pi*BD +: BD])
                                                                     : inter_chr_pred_cr[idx_pi*BD +: BD];
                 else
-                    pred_buf[idx_pi*BD +: BD] = use_weighted_pred_w ? apply_chroma_cb_weight(inter_chr_pred_cb[idx_pi*BD +: BD])
+                    pred_buf[idx_pi*BD +: BD] = use_post_weighted_pred_w ? apply_chroma_cb_weight(inter_chr_pred_cb[idx_pi*BD +: BD])
                                                                     : inter_chr_pred_cb[idx_pi*BD +: BD];
             end
         end else if (use_intra16_mb_reg && is_luma) begin
@@ -889,7 +932,7 @@ pred_buf = {(256*BD){1'b0}};
             reg signed [BD:0] diff;
             orig_pix = fetched_luma[{sb_r, idx_ir[3:2], sb_c, idx_ir[1:0]}*BD +: BD];
             pred_pix = inter_pred_buf[{sb_r, idx_ir[3:2], sb_c, idx_ir[1:0]}*BD +: BD];
-            if (use_weighted_pred_w)
+            if (use_post_weighted_pred_w)
                 pred_pix = apply_luma_weight(pred_pix);
             diff = $signed({1'b0, orig_pix}) - $signed({1'b0, pred_pix});
             inter_resid_4x4[idx_ir*BD1 +: BD1] = diff;
@@ -1616,10 +1659,12 @@ pred_buf = {(256*BD){1'b0}};
                         sel_is_b_bi = 1'b0;
                         bi_pred_buf_i = {(256*BD){1'b0}};
                         bi_sad_i = 32'h7fffffff;
-                        if (is_b_frame && (valid_ref_count >= 3'd2) && (me_search_pass == 2'd1) && !use_weighted_pred_w) begin
+                        if (is_b_frame && (valid_ref_count >= 3'd2) && (me_search_pass == 2'd1)) begin
                             bi_sad_i = 0;
                             for (bi_idx = 0; bi_idx < 256; bi_idx = bi_idx + 1) begin
-                                bi_pred_sample = (me_pass0_ref_mb[bi_idx*BD +: BD] + me_ref_mb_w[bi_idx*BD +: BD] + 1) >> 1;
+                                bi_pred_sample = use_weighted_pred_w ?
+                                    apply_luma_bi_weight(me_pass0_ref_mb[bi_idx*BD +: BD], me_ref_mb_w[bi_idx*BD +: BD]) :
+                                    ((me_pass0_ref_mb[bi_idx*BD +: BD] + me_ref_mb_w[bi_idx*BD +: BD] + 1) >> 1);
                                 bi_pred_buf_i[bi_idx*BD +: BD] = bi_pred_sample[BD-1:0];
                                 bi_orig_sample = fetched_luma[bi_idx*BD +: BD];
                                 if (bi_orig_sample >= bi_pred_sample)
@@ -1630,7 +1675,6 @@ pred_buf = {(256*BD){1'b0}};
                         end
 
                         if (is_b_frame && (valid_ref_count >= 3'd2) && (me_search_pass == 2'd1) &&
-                            !use_weighted_pred_w &&
                             (force_b_bi_in || ((bi_sad_i < me_pass0_sad) && (bi_sad_i < me_sad_w)))) begin
                             sel_fullpel_mvx = me_pass0_mvx;
                             sel_fullpel_mvy = me_pass0_mvy;
@@ -1854,9 +1898,11 @@ pred_buf = {(256*BD){1'b0}};
                                 bi_final_sad_i = 0;
                                 bi_final_pred_buf_i = {(256*BD){1'b0}};
                                 for (bi_final_idx = 0; bi_final_idx < 256; bi_final_idx = bi_final_idx + 1) begin
-                                    bi_final_sample =
-                                        (b_bi_luma_pred_l0[bi_final_idx*BD +: BD] +
-                                         best_pred_buf_i[bi_final_idx*BD +: BD] + 1) >>> 1;
+                                    bi_final_sample = use_weighted_pred_w ?
+                                        apply_luma_bi_weight(b_bi_luma_pred_l0[bi_final_idx*BD +: BD],
+                                                             best_pred_buf_i[bi_final_idx*BD +: BD]) :
+                                        ((b_bi_luma_pred_l0[bi_final_idx*BD +: BD] +
+                                          best_pred_buf_i[bi_final_idx*BD +: BD] + 1) >>> 1);
                                     bi_final_pred_buf_i[bi_final_idx*BD +: BD] = bi_final_sample[BD-1:0];
                                     bi_final_orig_sample = fetched_luma[bi_final_idx*BD +: BD];
                                     if (bi_final_orig_sample >= bi_final_sample)
@@ -2814,8 +2860,14 @@ pred_buf = {(256*BD){1'b0}};
                             end else begin
                                 if (is_b_frame && is_b_bi_mb_reg) begin
                                     for (bi_chr_idx = 0; bi_chr_idx < CHR_MB_PIXELS; bi_chr_idx = bi_chr_idx + 1) begin
-                                        bi_cb_i = (b_bi_chr_pred_cb_l0[bi_chr_idx*BD +: BD] + interp_cb_i[bi_chr_idx*BD +: BD] + 1'b1) >> 1;
-                                        bi_cr_i = (b_bi_chr_pred_cr_l0[bi_chr_idx*BD +: BD] + interp_cr_i[bi_chr_idx*BD +: BD] + 1'b1) >> 1;
+                                        bi_cb_i = use_weighted_pred_w ?
+                                            apply_chroma_cb_bi_weight(b_bi_chr_pred_cb_l0[bi_chr_idx*BD +: BD],
+                                                                      interp_cb_i[bi_chr_idx*BD +: BD]) :
+                                            ((b_bi_chr_pred_cb_l0[bi_chr_idx*BD +: BD] + interp_cb_i[bi_chr_idx*BD +: BD] + 1'b1) >> 1);
+                                        bi_cr_i = use_weighted_pred_w ?
+                                            apply_chroma_cr_bi_weight(b_bi_chr_pred_cr_l0[bi_chr_idx*BD +: BD],
+                                                                      interp_cr_i[bi_chr_idx*BD +: BD]) :
+                                            ((b_bi_chr_pred_cr_l0[bi_chr_idx*BD +: BD] + interp_cr_i[bi_chr_idx*BD +: BD] + 1'b1) >> 1);
                                         interp_cb_i[bi_chr_idx*BD +: BD] = bi_cb_i;
                                         interp_cr_i[bi_chr_idx*BD +: BD] = bi_cr_i;
                                     end
@@ -2885,12 +2937,12 @@ pred_buf = {(256*BD){1'b0}};
                                             if (chr_is_cr) begin
                                                 orig_pix = fetched_cr[pidx*BD +: BD];
                                                 pred_pix = inter_chr_pred_cr[pidx*BD +: BD];
-                                                if (use_weighted_pred_w)
+                                                if (use_post_weighted_pred_w)
                                                     pred_pix = apply_chroma_cr_weight(pred_pix);
                                             end else begin
                                                 orig_pix = fetched_cb[pidx*BD +: BD];
                                                 pred_pix = inter_chr_pred_cb[pidx*BD +: BD];
-                                                if (use_weighted_pred_w)
+                                                if (use_post_weighted_pred_w)
                                                     pred_pix = apply_chroma_cb_weight(pred_pix);
                                             end
                                             chr_resid_4x4[cj*BD1 +: BD1] = {1'b0, orig_pix} - {1'b0, pred_pix};
@@ -3059,12 +3111,12 @@ pred_buf = {(256*BD){1'b0}};
                                                 if (chr_is_cr) begin
                                                     orig_pix = fetched_cr[pidx*BD +: BD];
                                                     pred_pix = inter_chr_pred_cr[pidx*BD +: BD];
-                                                    if (use_weighted_pred_w)
+                                                    if (use_post_weighted_pred_w)
                                                         pred_pix = apply_chroma_cr_weight(pred_pix);
                                                 end else begin
                                                     orig_pix = fetched_cb[pidx*BD +: BD];
                                                     pred_pix = inter_chr_pred_cb[pidx*BD +: BD];
-                                                    if (use_weighted_pred_w)
+                                                    if (use_post_weighted_pred_w)
                                                         pred_pix = apply_chroma_cb_weight(pred_pix);
                                                 end
                                                 chr_resid_4x4[cj*BD1 +: BD1] = {1'b0, orig_pix} - {1'b0, pred_pix};
@@ -3557,7 +3609,7 @@ pred_buf = {(256*BD){1'b0}};
                                                         pred_val = inter_chr_pred_cr[pix_idx_0*BD +: BD];
                                                     else
                                                         pred_val = inter_chr_pred_cb[pix_idx_0*BD +: BD];
-                                                    if (use_weighted_pred_w) begin
+                                                    if (use_post_weighted_pred_w) begin
                                                         if (chr_is_cr)
                                                             pred_val = apply_chroma_cr_weight(pred_val);
                                                         else

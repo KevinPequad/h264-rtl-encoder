@@ -321,8 +321,8 @@ The testbench must not:
   - Weighted P prediction for inter luma and chroma on the RTL path
   - `pred_weight_table` slice signaling in RTL for weighted P slices
   - Explicit weighted B prediction on the current single-list reordered B
-    subpaths, including B-slice `pred_weight_table` signaling for `List0` and
-    `List1`
+    subpaths and limited `B_BI_16x16` path, including B-slice
+    `pred_weight_table` signaling for `List0` and `List1`
   - Full directional `Intra_4x4` mode support
   - `Intra_16x16` luma prediction with `Vertical`, `Horizontal`, `DC`, and
     `Plane` mode search
@@ -616,6 +616,14 @@ The testbench must not:
     `output/validation_forcebbi_qpelprobe_320x176_5f.h264`, and
     `output/validation_forcebbi_qpelprobe_320x176_5f.json`, with simulator
     logging showing `b_bi_mbs=220` on the last two non-IDR pictures
+  - `forcebbi_weightedbi5_320x176_5f`: strict FFmpeg-decodable current-tree
+    forced-`B_BI_16x16` reordered all-`BREF` validation at `320x176`, `5`
+    frames, non-default explicit B weights (`5` with denom `2`), `92,405,579`
+    cycles, `19,258` bytes, RTL PSNR avg `32.63735`, RTL SSIM all `0.864016`,
+    with simulator logging showing `b_bi_mbs=220` on the last two non-IDR
+    pictures and `trace_headers` confirmation of `weighted_bipred_idc = 1`,
+    `luma_log2_weight_denom = 2`, `chroma_log2_weight_denom = 2`, and
+    list0/list1 luma/chroma weights of `5`
 
 - A 720p chroma corruption bug was traced to raw input address overflow in the Cr plane fetch path and fixed by widening the raw input address width
 - A directional `Intra_4x4` top-right reference fetch bug was fixed in
@@ -707,9 +715,10 @@ The testbench must not:
   `List0` and `List1`
 - The current tree now also validates a limited `B_BI_16x16` path on reordered
   B-picture GOPs, with explicit list0/list1 neighbor state, list-specific MVD
-  syntax, simulator-side `b_bi_mbs` logging, and per-list quarter-pel luma
-  refinement before the bidirectional average; automatic BI mode selection is
-  still not closed on the real `320x176` reordered clip
+  syntax, simulator-side `b_bi_mbs` logging, per-list quarter-pel luma
+  refinement, and explicit weighted bipred combine on the limited
+  `B_BI_16x16` path; automatic BI mode selection is still not closed on the
+  real `320x176` reordered clip
 - `scripts/validate_clip.py` and `scripts/rtl_runner.py` now expose
   `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
   `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths
@@ -729,7 +738,6 @@ The testbench must not:
   - No broader `B` / `BREF` picture support beyond the current limited
     reordered dual-list `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` `16x16`
     path
-  - No weighted bipred on bidirectional B macroblocks
   - No direct motion-vector prediction modes
   - No reference management beyond the current four-reference P-slice subset
   - No broader full-standard sub-pel motion path beyond the current `16x16`
@@ -745,8 +753,7 @@ The testbench must not:
   - CABAC integrated into real RTL slice syntax, not only a standalone core
   - `B` / `BREF` picture support
   - Reference-picture management beyond the current four-reference P-slice subset
-  - Weighted bipred support beyond the current weighted P path and single-list
-    weighted B subpaths
+  - Weighted bipred support beyond the current limited `B_BI_16x16` path
   - Direct motion-vector prediction support
   - Broader sub-pel motion estimation / compensation support
   - Broader inter partition coverage and `8x8dct`-class transform coverage

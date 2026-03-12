@@ -43,8 +43,8 @@ Still missing before full-standard completion, using the current `x264`
 software encoder as the implementation baseline:
 
 - CABAC syntax integration into the final RTL bitstream path
-- broader `B` / `BREF` picture support and the associated reference management
-- weighted bipred on bidirectional B macroblocks and direct-mode handling
+- broader `B` / `BREF` picture support, direct-mode handling, and the
+  associated reference management
 - broader standards-complete sub-pel motion handling across richer inter modes
 - broader inter partition and transform coverage including `8x8dct`-class tools
 - broader validated `4:4:4` support beyond the current `320x176`
@@ -222,8 +222,8 @@ Current implemented features:
 - weighted P prediction for inter luma and chroma on the RTL path
 - `pred_weight_table` slice signaling in RTL for weighted P slices
 - explicit weighted B prediction on the current single-list reordered B
-  subpaths, including B-slice `pred_weight_table` signaling for `List0` and
-  `List1`
+  subpaths and limited `B_BI_16x16` path, including B-slice
+  `pred_weight_table` signaling for `List0` and `List1`
 - luma intra prediction:
   `Intra_4x4_Vertical`, `Intra_4x4_Horizontal`, `Intra_4x4_DC`,
   `Intra_4x4_Diagonal_Down_Right`, `Intra_4x4_Vertical_Right`,
@@ -305,7 +305,6 @@ Important non-completion gaps:
 - broader inter-coded `B` / `BREF` picture handling is not implemented beyond
   the current limited reordered dual-list `B_L0_16x16` / `B_L1_16x16` /
   `B_BI_16x16` `16x16` path
-- weighted bipred on bidirectional B macroblocks is not implemented yet
 - direct motion-vector prediction modes are not implemented
 - reference-picture management beyond the current four-reference P-slice subset
   is not implemented
@@ -530,6 +529,16 @@ Measured validation points:
   `output/validation_forcebbi_qpelprobe_320x176_5f.h264`, and
   `output/validation_forcebbi_qpelprobe_320x176_5f.json`, with simulator
   logging showing `b_bi_mbs=220` on the last two non-IDR pictures
+- `forcebbi_weightedbi5_320x176_5f`: strict FFmpeg-decodable current-tree
+  forced-`B_BI_16x16` reordered all-`BREF` validation at `320x176`, `5`
+  frames, non-default explicit B weights (`5` with denom `2`), `92,405,579`
+  cycles, `19,258` bytes, RTL PSNR avg `32.63735`, RTL SSIM all `0.864016`,
+  `output/validation_forcebbi_weightedbi5_320x176_5f.h264`, and
+  `output/validation_forcebbi_weightedbi5_320x176_5f.json`, with simulator
+  logging showing `b_bi_mbs=220` on the last two non-IDR pictures and
+  `output/validation_forcebbi_weightedbi5_320x176_5f.trace.txt` confirming
+  `weighted_bipred_idc = 1`, `luma_log2_weight_denom = 2`,
+  `chroma_log2_weight_denom = 2`, and list0/list1 luma/chroma weights of `5`
 - `32x16_2f_444_ipcm_scripted`: strict staged validation through
   `scripts/validate_clip.py` with `--enable-idr-ipcm 1 --enable-p-ipcm 1`
   at `32x16`, `8-bit 4:4:4`, packaged MP4 output, and JSON summary in
@@ -628,10 +637,11 @@ Recent correctness fix:
   focused strict-decode reruns ending on the old bad picture re-close at
   `320x176` for extracted `2`-frame and `4`-frame clips
 - the current reordered B path now carries explicit list0/list1 neighbor MV
-  state, list-specific MVD syntax, and per-list quarter-pel luma refinement,
-  which re-opened a limited `B_BI_16x16` path for forced strict-decode
-  validation at `32x16` and `320x176`; automatic BI mode selection is still
-  not closed on the real `320x176` reordered clip
+  state, list-specific MVD syntax, per-list quarter-pel luma refinement, and
+  explicit weighted bipred combine on the limited `B_BI_16x16` path, which
+  re-opened forced strict-decode validation at `32x16` and `320x176`;
+  automatic BI mode selection is still not closed on the real `320x176`
+  reordered clip
 - `scripts/validate_clip.py` and `scripts/rtl_runner.py` now expose
   `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
   `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths
