@@ -352,6 +352,12 @@ Measured validation points:
 - `320x176_10f_nonipcm_10b444_p`: strict FFmpeg-decodable ten-frame IDR+P
   non-`I_PCM` `10-bit 4:4:4` validation, `461,752,849` cycles, `11,019`
   bytes
+- `320x176_2f_nonipcm_8b444_f16f17_fixcbp`: strict FFmpeg-decodable extracted
+  `8-bit 4:4:4` IDR+P validation over source frames `16..17`, `14,159,804`
+  cycles, `5,298` bytes
+- `320x176_4f_nonipcm_8b444_f14f17_fixcbp`: strict FFmpeg-decodable extracted
+  `8-bit 4:4:4` IDR+P validation over source frames `14..17`, `88,709,796`
+  cycles, `10,442` bytes
 - `320x176_1f_vui`: strict FFmpeg-decodable one-frame SPS/VUI timing smoke,
   `732,748` cycles, FFmpeg `level=12`, and raw-stream timing metadata behavior
   matching a one-frame `x264` elementary stream at the same settings
@@ -570,6 +576,11 @@ Current verified milestone outputs:
 - the current tree now also validates exact RTL-owned `4:4:4 I_PCM` output on
   the IDR path and current P-slice intra path at `32x16` for `8-bit` and
   `10-bit`, with SPS/profile signaling decoding as `High 4:4:4 Predictive`
+- the `4:4:4` inter path must use the ChromaArrayType `3`
+  `coded_block_pattern` table rather than the `4:2:x` inter code; the current
+  RTL writer now emits the correct full-residual inter code on that path, and
+  focused strict-decode reruns ending on the old bad picture re-close at
+  `320x176` for extracted `2`-frame and `4`-frame clips
 - `scripts/validate_clip.py` and `scripts/rtl_runner.py` now expose
   `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
   `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths

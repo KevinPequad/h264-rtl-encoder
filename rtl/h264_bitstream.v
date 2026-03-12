@@ -1188,12 +1188,20 @@ module h264_bitstream #(
                                 sub <= 6'd15;
                             end
                             6'd15: begin
-                                // Inter CBP: CBP=47 -> codeNum=12 -> UE(12)='0001101'
-                                //   (luma all, chroma DC+AC)
-                                //             CBP=0  -> codeNum=0  -> UE(0)='1'
+                                // Inter coded_block_pattern:
+                                //   4:2:0 / 4:2:2 current path emits the full-residual case
+                                //   CBP=47 -> codeNum=12 -> UE(12)='0001101'
+                                //   4:4:4 uses the ChromaArrayType 3 table, where the matching
+                                //   "all four 8x8 groups present" case is CBP=15 -> codeNum=9
+                                //   -> UE(9)='0001010'. CBP=0 stays UE(0)='1' for every format.
                                 if (mb_has_residual) begin
-                                    bit_buf <= bit_buf | ({7'b0001101, 89'd0} >> bit_cnt[6:0]);
-                                    bit_cnt <= bit_cnt + 7'd7;
+                                    if (CHROMA_FORMAT_IDC == 3) begin
+                                        bit_buf <= bit_buf | ({7'b0001010, 89'd0} >> bit_cnt[6:0]);
+                                        bit_cnt <= bit_cnt + 7'd7;
+                                    end else begin
+                                        bit_buf <= bit_buf | ({7'b0001101, 89'd0} >> bit_cnt[6:0]);
+                                        bit_cnt <= bit_cnt + 7'd7;
+                                    end
                                 end else begin
                                     bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + 7'd1;

@@ -637,6 +637,11 @@ The testbench must not:
 - The current tree now also validates exact RTL-owned `4:4:4 I_PCM` output on
   the IDR path and current P-slice intra path at `32x16` for `8-bit` and
   `10-bit`, with SPS/profile signaling decoding as `High 4:4:4 Predictive`
+- The `4:4:4` inter path must use the ChromaArrayType `3`
+  `coded_block_pattern` table rather than the `4:2:x` inter code; the current
+  RTL writer now emits the correct full-residual inter code on that path, and
+  focused strict-decode reruns ending on the old bad picture re-close at
+  `320x176` for extracted `2`-frame and `4`-frame clips
 - The `Intra_16x16` luma-DC `nC` fix now also re-closes tiny strict-decode
   non-`I_PCM` probes at `32x16` for `10-bit 4:2:0`, `10-bit 4:2:2`,
   `8-bit 4:4:4`, and `10-bit 4:4:4`

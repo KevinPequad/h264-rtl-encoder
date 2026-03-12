@@ -360,6 +360,14 @@ Measured validation points:
   `320x176` through `10` frames for `10-bit 4:2:0`, `10-bit 4:2:2`, `8-bit 4:4:4`, and
   `10-bit 4:4:4` through the `validation_nonipcm_*_320x176_4f_p.json`
   and `validation_nonipcm_*_320x176_10f_p.json` artifacts
+- `320x176_nonipcm_8b444_inter_cbp_fix`: the `4:4:4` inter
+  `coded_block_pattern` path now uses the ChromaArrayType `3` inter table in
+  the RTL writer instead of the `4:2:x` inter code, and strict FFmpeg decode
+  now re-closes focused extracted clips ending on the old bad picture through
+  `validation_nonipcm_8b444_f16f17_2f_fixcbp.json` (`2` frames,
+  `14,159,804` cycles, `5,298` bytes) and
+  `validation_nonipcm_8b444_f14f17_4f_fixcbp.json` (`4` frames,
+  `88,709,796` cycles, `10,442` bytes)
 - `320x176_10f_tefix`: strict FFmpeg-decodable multi-frame validation on the
   current tree, `253,064,186` cycles, RTL PSNR avg `45.745576`, RTL SSIM all
   `0.994893`
@@ -575,6 +583,11 @@ Recent correctness fix:
 - the current tree now also validates exact RTL-owned `4:4:4 I_PCM` output on
   the IDR path and current P-slice intra path at `32x16` for `8-bit` and
   `10-bit`, with SPS/profile signaling decoding as `High 4:4:4 Predictive`
+- the `4:4:4` inter path must use the ChromaArrayType `3`
+  `coded_block_pattern` table rather than the `4:2:x` inter code; the current
+  RTL writer now emits the correct full-residual inter code on that path, and
+  focused strict-decode reruns ending on the old bad picture re-close at
+  `320x176` for extracted `2`-frame and `4`-frame clips
 - `scripts/validate_clip.py` and `scripts/rtl_runner.py` now expose
   `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
   `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths
