@@ -20,7 +20,8 @@ DEFAULT_TIMEOUT = 20_000_000
 SIM_SUMMARY_RE = re.compile(r"\[TB\]\s+(?P<frames>\d+)\s+frames encoded,\s+(?P<cycles>\d+)\s+cycles,\s+(?P<bytes>\d+)\s+bytes")
 PSKIP_RE = re.compile(
     r"\[PSKIP\]\s+Frame\s+(?P<frame>\d+)\s+skip_mbs=(?P<skip>\d+)\s+"
-    r"b_l1_mbs=(?P<b_l1>\d+)\s+b_bi_mbs=(?P<b_bi>\d+)\s+b_direct_mbs=(?P<b_direct>\d+)"
+    r"b_l1_mbs=(?P<b_l1>\d+)\s+b_bi_mbs=(?P<b_bi>\d+)\s+b_direct_mbs=(?P<b_direct>\d+)\s+"
+    r"b_l0_refgt0_mbs=(?P<b_l0_refgt0>\d+)"
 )
 DECODE_ERROR_PATTERNS = (
     "error while decoding",
@@ -67,6 +68,10 @@ class SmokeCase:
     force_b_direct: int = 0
     force_b_direct_temporal: int = 0
     reorder_b_gop: int = 0
+    flat_y_frames: tuple[int, ...] | None = None
+    require_bi_min: int = 0
+    require_direct_min: int = 0
+    require_l0_refgt0_min: int = 0
 
 
 CASES = [
@@ -170,6 +175,25 @@ CASES = [
         force_b_direct_temporal=1,
         reorder_b_gop=1,
     ),
+    SmokeCase(
+        "smoke_8b_420_bmultiref_bi_l0ref1",
+        8,
+        1,
+        "smoke_32x16_5f_bmultiref_ref1win.yuv",
+        "smoke_32x16_5f_bmultiref_ref1win.h264",
+        frames=5,
+        timeout=80_000_000,
+        enable_idr_ipcm=1,
+        enable_p_ipcm=1,
+        ipcm_sad_threshold=100_000_000,
+        inter_sad_threshold=40_000,
+        force_b_slice=1,
+        force_b_bi=1,
+        reorder_b_gop=1,
+        flat_y_frames=(255, 64, 0, 228, 200),
+        require_bi_min=1,
+        require_l0_refgt0_min=1,
+    ),
 ]
 
 
@@ -221,24 +245,47 @@ def write_sample(out_f, value: int, bit_depth: int) -> None:
         out_f.write(bytes((value,)))
 
 
-def generate_smoke_input(path: Path, width: int, height: int, frames: int, bit_depth: int, chroma_format_idc: int) -> None:
+def generate_smoke_input(
+    path: Path,
+    width: int,
+    height: int,
+    frames: int,
+    bit_depth: int,
+    chroma_format_idc: int,
+    flat_y_frames: tuple[int, ...] | None = None,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     chroma_height = height if chroma_format_idc in (2, 3) else height // 2
     chroma_width = width if chroma_format_idc == 3 else width // 2
+    if flat_y_frames is not None and len(flat_y_frames) != frames:
+        raise ValueError(f"Expected {frames} flat-frame entries, got {len(flat_y_frames)}")
 
     with path.open("wb") as out_f:
         for frame_idx in range(frames):
-            for y in range(height):
-                for x in range(width):
-                    write_sample(out_f, plane_value(bit_depth, "y", x, y, frame_idx), bit_depth)
+            if flat_y_frames is not None:
+                y_value = clamp(flat_y_frames[frame_idx], 0, (1 << bit_depth) - 1)
+                c_value = 128 if bit_depth == 8 else 512
+                for _ in range(height):
+                    for _ in range(width):
+                        write_sample(out_f, y_value, bit_depth)
+                for _ in range(chroma_height):
+                    for _ in range(chroma_width):
+                        write_sample(out_f, c_value, bit_depth)
+                for _ in range(chroma_height):
+                    for _ in range(chroma_width):
+                        write_sample(out_f, c_value, bit_depth)
+            else:
+                for y in range(height):
+                    for x in range(width):
+                        write_sample(out_f, plane_value(bit_depth, "y", x, y, frame_idx), bit_depth)
 
-            for y in range(chroma_height):
-                for x in range(chroma_width):
-                    write_sample(out_f, plane_value(bit_depth, "u", x, y, frame_idx), bit_depth)
+                for y in range(chroma_height):
+                    for x in range(chroma_width):
+                        write_sample(out_f, plane_value(bit_depth, "u", x, y, frame_idx), bit_depth)
 
-            for y in range(chroma_height):
-                for x in range(chroma_width):
-                    write_sample(out_f, plane_value(bit_depth, "v", x, y, frame_idx), bit_depth)
+                for y in range(chroma_height):
+                    for x in range(chroma_width):
+                        write_sample(out_f, plane_value(bit_depth, "v", x, y, frame_idx), bit_depth)
 
 
 def ffprobe_stream(path: Path) -> dict[str, str]:
@@ -296,24 +343,29 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     frames_with_l1 = 0
     frames_with_bi = 0
     frames_with_direct = 0
+    frames_with_l0_refgt0 = 0
     max_skip = 0
     max_l1 = 0
     max_bi = 0
     max_direct = 0
+    max_l0_refgt0 = 0
     total_skip = 0
     total_l1 = 0
     total_bi = 0
     total_direct = 0
+    total_l0_refgt0 = 0
 
     for match in PSKIP_RE.finditer(sim_log):
         skip = int(match.group("skip"))
         l1 = int(match.group("b_l1"))
         bi = int(match.group("b_bi"))
         direct = int(match.group("b_direct"))
+        l0_refgt0 = int(match.group("b_l0_refgt0"))
         total_skip += skip
         total_l1 += l1
         total_bi += bi
         total_direct += direct
+        total_l0_refgt0 += l0_refgt0
         if skip:
             frames_with_skip += 1
         if l1:
@@ -322,24 +374,30 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
             frames_with_bi += 1
         if direct:
             frames_with_direct += 1
+        if l0_refgt0:
+            frames_with_l0_refgt0 += 1
         max_skip = max(max_skip, skip)
         max_l1 = max(max_l1, l1)
         max_bi = max(max_bi, bi)
         max_direct = max(max_direct, direct)
+        max_l0_refgt0 = max(max_l0_refgt0, l0_refgt0)
 
     return {
         "frames_with_skip": frames_with_skip,
         "frames_with_l1": frames_with_l1,
         "frames_with_bi": frames_with_bi,
         "frames_with_direct": frames_with_direct,
+        "frames_with_l0_refgt0": frames_with_l0_refgt0,
         "max_skip": max_skip,
         "max_l1": max_l1,
         "max_bi": max_bi,
         "max_direct": max_direct,
+        "max_l0_refgt0": max_l0_refgt0,
         "total_skip": total_skip,
         "total_l1": total_l1,
         "total_bi": total_bi,
         "total_direct": total_direct,
+        "total_l0_refgt0": total_l0_refgt0,
     }
 
 
@@ -359,7 +417,15 @@ def main() -> int:
         output_path = output_dir / case.output_file
         log_path = output_dir / f"{case.name}.sim.log"
         build_log_path = output_dir / f"{case.name}.build.log"
-        generate_smoke_input(input_path, case.width, case.height, case.frames, case.bit_depth, case.chroma_format_idc)
+        generate_smoke_input(
+            input_path,
+            case.width,
+            case.height,
+            case.frames,
+            case.bit_depth,
+            case.chroma_format_idc,
+            case.flat_y_frames,
+        )
 
         workspace = stage_workspace(f"h264_{case.name}_")
         config = BuildConfig(
@@ -410,6 +476,21 @@ def main() -> int:
         b_mode_summary = parse_b_mode_summary(sim_log)
         decode_check(output_path)
         stream = ffprobe_stream(output_path)
+        if b_mode_summary.get("total_bi", 0) < case.require_bi_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_bi_min} B_BI macroblocks, "
+                f"saw {b_mode_summary.get('total_bi', 0)}"
+            )
+        if b_mode_summary.get("total_direct", 0) < case.require_direct_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_direct_min} B_DIRECT macroblocks, "
+                f"saw {b_mode_summary.get('total_direct', 0)}"
+            )
+        if b_mode_summary.get("total_l0_refgt0", 0) < case.require_l0_refgt0_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_l0_refgt0_min} nonzero B List0 refs, "
+                f"saw {b_mode_summary.get('total_l0_refgt0', 0)}"
+            )
 
         result = {
             "name": case.name,
@@ -426,7 +507,8 @@ def main() -> int:
         print(
             f"[PASS] {case.name}: profile={stream.get('profile')} "
             f"pix_fmt={stream.get('pix_fmt')} {stream.get('width')}x{stream.get('height')} "
-            f"b_direct_max={b_mode_summary.get('max_direct', 0)}"
+            f"b_direct_max={b_mode_summary.get('max_direct', 0)} "
+            f"b_l0_refgt0_max={b_mode_summary.get('max_l0_refgt0', 0)}"
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)

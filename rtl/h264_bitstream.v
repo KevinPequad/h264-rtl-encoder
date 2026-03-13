@@ -158,6 +158,12 @@ module h264_bitstream #(
     reg [3:0]  slice_multi_ref_bits_len;
     reg [11:0] slice_multi_ref_bits_qp;
     reg [3:0]  slice_multi_ref_bits_qp_len;
+    reg [8:0]  b_slice_multi_ref_bits;
+    reg [3:0]  b_slice_multi_ref_bits_len;
+    reg [13:0] b_slice_multi_ref_bits_qp_ref;
+    reg [3:0]  b_slice_multi_ref_bits_qp_ref_len;
+    reg [12:0] b_slice_multi_ref_bits_qp_nonref;
+    reg [3:0]  b_slice_multi_ref_bits_qp_nonref_len;
     reg [9:0]  ipcm_sample_idx;
     always @(*) begin
         case (slice_num_ref_idx_l0_active_minus1)
@@ -184,6 +190,42 @@ module h264_bitstream #(
                 slice_multi_ref_bits_len = 4'd0;
                 slice_multi_ref_bits_qp = 12'd0;
                 slice_multi_ref_bits_qp_len = 4'd0;
+            end
+        endcase
+    end
+    always @(*) begin
+        case (slice_num_ref_idx_l0_active_minus1)
+            2'd1: begin
+                b_slice_multi_ref_bits = 9'b101010000;      // 1 + ue(1)=010 + ue(0)=1 + reorder_l0=0 + reorder_l1=0
+                b_slice_multi_ref_bits_len = 4'd7;
+                b_slice_multi_ref_bits_qp_ref = 14'b10101000101000;    // + adaptive_marking=0 + qp_delta=1 + deblock=010
+                b_slice_multi_ref_bits_qp_ref_len = 4'd12;
+                b_slice_multi_ref_bits_qp_nonref = 13'b1010100101000;  // + qp_delta=1 + deblock=010
+                b_slice_multi_ref_bits_qp_nonref_len = 4'd11;
+            end
+            2'd2: begin
+                b_slice_multi_ref_bits = 9'b101110000;      // 1 + ue(2)=011 + ue(0)=1 + reorder_l0=0 + reorder_l1=0
+                b_slice_multi_ref_bits_len = 4'd7;
+                b_slice_multi_ref_bits_qp_ref = 14'b10111000101000;
+                b_slice_multi_ref_bits_qp_ref_len = 4'd12;
+                b_slice_multi_ref_bits_qp_nonref = 13'b1011100101000;
+                b_slice_multi_ref_bits_qp_nonref_len = 4'd11;
+            end
+            2'd3: begin
+                b_slice_multi_ref_bits = 9'b100100100;      // 1 + ue(3)=00100 + ue(0)=1 + reorder_l0=0 + reorder_l1=0
+                b_slice_multi_ref_bits_len = 4'd9;
+                b_slice_multi_ref_bits_qp_ref = 14'b10010010001010;
+                b_slice_multi_ref_bits_qp_ref_len = 4'd14;
+                b_slice_multi_ref_bits_qp_nonref = 13'b1001001001010;
+                b_slice_multi_ref_bits_qp_nonref_len = 4'd13;
+            end
+            default: begin
+                b_slice_multi_ref_bits = 9'd0;
+                b_slice_multi_ref_bits_len = 4'd0;
+                b_slice_multi_ref_bits_qp_ref = 14'd0;
+                b_slice_multi_ref_bits_qp_ref_len = 4'd0;
+                b_slice_multi_ref_bits_qp_nonref = 13'd0;
+                b_slice_multi_ref_bits_qp_nonref_len = 4'd0;
             end
         endcase
     end
@@ -856,29 +898,44 @@ module h264_bitstream #(
                                     end
                                 end else if (is_b_slice) begin
                                     if (weighted_pred_flag) begin
-                                        // B-slice base header up to ref_pic_list_reordering_flag_l1:
-                                        // first_mb=UE(0), slice_type(B)=UE(1), pps_id=UE(0), frame_num(8),
-                                        // pic_order_cnt_lsb(9), direct_spatial_mv_pred_flag,
-                                        // num_ref_idx_active_override_flag=0,
-                                        // ref_pic_list_reordering_flag_l0=0,
-                                        // ref_pic_list_reordering_flag_l1=0.
-                                        bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 3'b000, 70'd0};
-                                        bit_cnt <= 7'd26;
+                                        // B-slice base header up to ref_pic_list_reordering_flag_l1.
+                                        // When slice_multi_ref_enable is set on the current limited B path,
+                                        // emit num_ref_idx_active_override_flag=1,
+                                        // num_ref_idx_l0_active_minus1, num_ref_idx_l1_active_minus1=0,
+                                        // ref_pic_list_reordering_flag_l0=0, ref_pic_list_reordering_flag_l1=0
+                                        // before the weighted pred_weight_table.
+                                        if (slice_multi_ref_enable) begin
+                                            bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, b_slice_multi_ref_bits, 64'd0};
+                                            bit_cnt <= 7'd23 + {3'd0, b_slice_multi_ref_bits_len};
+                                        end else begin
+                                            bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 3'b000, 70'd0};
+                                            bit_cnt <= 7'd26;
+                                        end
                                         ue_input <= {6'd0, luma_log2_weight_denom};
                                         sub <= 6'd8;
                                     end else begin
-                                        // Non-reference B-slice header on the current intra/I_PCM-only B path:
-                                        // first_mb=UE(0), slice_type(B)=UE(1), pps_id=UE(0), frame_num(8),
-                                        // pic_order_cnt_lsb(9), direct_spatial_mv_pred_flag,
-                                        // num_ref_idx_active_override_flag=0, ref_pic_list_reordering_flag_l0=0,
-                                        // ref_pic_list_reordering_flag_l1=0, optional adaptive_ref_pic_marking_mode_flag,
-                                        // slice_qp_delta=SE(0), deblocking=UE(1)
-                                        if (is_b_ref_slice) begin
-                                            bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 5'b00001, 3'b010, 65'd0};
-                                            bit_cnt <= 7'd31;
+                                        // Non-weighted B-slice header on the current limited reordered B path.
+                                        if (slice_multi_ref_enable) begin
+                                            if (is_b_ref_slice) begin
+                                                bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, b_slice_multi_ref_bits_qp_ref, 59'd0};
+                                                bit_cnt <= 7'd23 + {3'd0, b_slice_multi_ref_bits_qp_ref_len};
+                                            end else begin
+                                                bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, b_slice_multi_ref_bits_qp_nonref, 60'd0};
+                                                bit_cnt <= 7'd23 + {3'd0, b_slice_multi_ref_bits_qp_nonref_len};
+                                            end
                                         end else begin
-                                            bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 4'b0001, 3'b010, 66'd0};
-                                            bit_cnt <= 7'd30;
+                                            // first_mb=UE(0), slice_type(B)=UE(1), pps_id=UE(0), frame_num(8),
+                                            // pic_order_cnt_lsb(9), direct_spatial_mv_pred_flag,
+                                            // num_ref_idx_active_override_flag=0, ref_pic_list_reordering_flag_l0=0,
+                                            // ref_pic_list_reordering_flag_l1=0, optional adaptive_ref_pic_marking_mode_flag,
+                                            // slice_qp_delta=SE(0), deblocking=UE(1)
+                                            if (is_b_ref_slice) begin
+                                                bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 5'b00001, 3'b010, 65'd0};
+                                                bit_cnt <= 7'd31;
+                                            end else begin
+                                                bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 4'b0001, 3'b010, 66'd0};
+                                                bit_cnt <= 7'd30;
+                                            end
                                         end
                                         sub <= sub + 6'd1;
                                     end
@@ -1168,15 +1225,27 @@ module h264_bitstream #(
 
                             // ===== Inter MB path (sub 10+) =====
                             // After the inter mb_type, P-slices may need ref_idx_l0 before the
-                            // motion-vector-difference syntax. The current B-slice subset uses one
-                            // active reference per list, so it emits only the relevant MVD pairs.
+                            // motion-vector-difference syntax. The current limited B-slice path
+                            // now also emits ref_idx_l0 for B_L0_16x16 / B_BI_16x16 when more than
+                            // one List0 reference is active.
                             // For exactly two active refs, ref_idx_l0 uses TE(v) with x=1,
                             // which is a single bit encoded as (1 ^ ref_idx).
                             // For three active refs, TE(v) falls back to UE(v) of ref_idx.
                             6'd10: begin
                                 if (is_b_slice) begin
-                                    ue_input <= is_b_l1_mb ? mvd_x_l1_codenum_w : mvd_x_l0_codenum_w;
-                                    sub <= 6'd12;
+                                    if (!is_b_direct_mb && !is_b_l1_mb && slice_multi_ref_enable) begin
+                                        if (slice_num_ref_idx_l0_active_minus1 == 2'd1) begin
+                                            bit_buf <= bit_buf | ({(~mb_ref_idx_l0[0]), 95'd0} >> bit_cnt[6:0]);
+                                            bit_cnt <= bit_cnt + 7'd1;
+                                            sub <= 6'd11;
+                                        end else begin
+                                            ue_input <= {8'd0, mb_ref_idx_l0};
+                                            sub <= 6'd23;
+                                        end
+                                    end else begin
+                                        ue_input <= is_b_l1_mb ? mvd_x_l1_codenum_w : mvd_x_l0_codenum_w;
+                                        sub <= 6'd12;
+                                    end
                                 end else if (slice_multi_ref_enable) begin
                                     if (slice_num_ref_idx_l0_active_minus1 == 2'd1) begin
                                         bit_buf <= bit_buf | ({(~mb_ref_idx_l0[0]), 95'd0} >> bit_cnt[6:0]);
@@ -1260,7 +1329,12 @@ module h264_bitstream #(
                             6'd23: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
-                                sub <= 6'd11;
+                                if (is_b_slice) begin
+                                    ue_input <= is_b_l1_mb ? mvd_x_l1_codenum_w : mvd_x_l0_codenum_w;
+                                    sub <= 6'd12;
+                                end else begin
+                                    sub <= 6'd11;
+                                end
                             end
                             6'd27: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
