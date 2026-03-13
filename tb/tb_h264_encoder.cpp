@@ -69,6 +69,14 @@ int main(int argc, char** argv) {
     bool force_b_l0 = false;
     bool force_b_direct = false;
     bool force_b_direct_temporal = false;
+    bool force_b_bi_on_reorder_ref_slot = false;
+    bool force_b_l0_on_reorder_ref_slot = false;
+    bool force_b_direct_on_reorder_ref_slot = false;
+    bool force_b_direct_temporal_on_reorder_ref_slot = false;
+    bool force_b_bi_on_reorder_b_slot = false;
+    bool force_b_l0_on_reorder_b_slot = false;
+    bool force_b_direct_on_reorder_b_slot = false;
+    bool force_b_direct_temporal_on_reorder_b_slot = false;
     bool reorder_b_gop = false;
 
     for (int i = 1; i < argc; i++) {
@@ -84,6 +92,14 @@ int main(int argc, char** argv) {
         else if (arg.rfind("+force_b_l0=", 0) == 0) force_b_l0 = std::atoi(arg.c_str() + 12) != 0;
         else if (arg.rfind("+force_b_direct=", 0) == 0) force_b_direct = std::atoi(arg.c_str() + 16) != 0;
         else if (arg.rfind("+force_b_direct_temporal=", 0) == 0) force_b_direct_temporal = std::atoi(arg.c_str() + 25) != 0;
+        else if (arg.rfind("+force_b_bi_on_reorder_ref_slot=", 0) == 0) force_b_bi_on_reorder_ref_slot = std::atoi(arg.c_str() + 32) != 0;
+        else if (arg.rfind("+force_b_l0_on_reorder_ref_slot=", 0) == 0) force_b_l0_on_reorder_ref_slot = std::atoi(arg.c_str() + 32) != 0;
+        else if (arg.rfind("+force_b_direct_on_reorder_ref_slot=", 0) == 0) force_b_direct_on_reorder_ref_slot = std::atoi(arg.c_str() + 36) != 0;
+        else if (arg.rfind("+force_b_direct_temporal_on_reorder_ref_slot=", 0) == 0) force_b_direct_temporal_on_reorder_ref_slot = std::atoi(arg.c_str() + 45) != 0;
+        else if (arg.rfind("+force_b_bi_on_reorder_b_slot=", 0) == 0) force_b_bi_on_reorder_b_slot = std::atoi(arg.c_str() + 30) != 0;
+        else if (arg.rfind("+force_b_l0_on_reorder_b_slot=", 0) == 0) force_b_l0_on_reorder_b_slot = std::atoi(arg.c_str() + 30) != 0;
+        else if (arg.rfind("+force_b_direct_on_reorder_b_slot=", 0) == 0) force_b_direct_on_reorder_b_slot = std::atoi(arg.c_str() + 34) != 0;
+        else if (arg.rfind("+force_b_direct_temporal_on_reorder_b_slot=", 0) == 0) force_b_direct_temporal_on_reorder_b_slot = std::atoi(arg.c_str() + 43) != 0;
         else if (arg.rfind("+reorder_b_gop=", 0) == 0) reorder_b_gop = std::atoi(arg.c_str() + 15) != 0;
         else if (arg == "+trace") enable_trace = true;
         else if (arg.rfind("+trace_file=", 0) == 0) trace_file = arg.substr(12);
@@ -129,15 +145,21 @@ int main(int argc, char** argv) {
     fprintf(stderr, "  H.264 RTL Encoder Testbench (%d-bit)\n", BD);
     fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d  idr_interval=%d  force_b_slice=%d  force_bref_slice=%d  force_b_bi=%d  force_b_l0=%d  force_b_direct=%d  force_b_direct_temporal=%d  reorder_b_gop=%d\n",
             num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC, idr_interval, force_b_slice ? 1 : 0, force_bref_slice ? 1 : 0, force_b_bi ? 1 : 0, force_b_l0 ? 1 : 0, force_b_direct ? 1 : 0, force_b_direct_temporal ? 1 : 0, reorder_b_gop ? 1 : 0);
+    fprintf(stderr, "  Reorder ref-slot overrides: bi=%d l0=%d direct=%d direct_temporal=%d\n",
+            force_b_bi_on_reorder_ref_slot ? 1 : 0, force_b_l0_on_reorder_ref_slot ? 1 : 0,
+            force_b_direct_on_reorder_ref_slot ? 1 : 0, force_b_direct_temporal_on_reorder_ref_slot ? 1 : 0);
+    fprintf(stderr, "  Reorder b-slot overrides:   bi=%d l0=%d direct=%d direct_temporal=%d\n",
+            force_b_bi_on_reorder_b_slot ? 1 : 0, force_b_l0_on_reorder_b_slot ? 1 : 0,
+            force_b_direct_on_reorder_b_slot ? 1 : 0, force_b_direct_temporal_on_reorder_b_slot ? 1 : 0);
     fprintf(stderr, "==========================================================\n");
 
     Vh264_encoder_top* dut = new Vh264_encoder_top;
     dut->clk = 0; dut->rst_n = 0; dut->start = 0;
     dut->frame_num_in = 0; dut->pic_order_cnt_lsb_in = 0; dut->is_idr_in = 0; dut->is_b_in = 0; dut->is_bref_in = 0; dut->ref_mem_rd_data = 0;
-    dut->force_b_bi_in = force_b_bi ? 1 : 0;
-    dut->force_b_l0_in = force_b_l0 ? 1 : 0;
-    dut->force_b_direct_in = force_b_direct ? 1 : 0;
-    dut->force_b_direct_temporal_in = force_b_direct_temporal ? 1 : 0;
+    dut->force_b_bi_in = 0;
+    dut->force_b_l0_in = 0;
+    dut->force_b_direct_in = 0;
+    dut->force_b_direct_temporal_in = 0;
     dut->chr_cb_ref_rd_data = CHROMA_MID; dut->chr_cr_ref_rd_data = CHROMA_MID;
 
 #if VM_TRACE
@@ -203,6 +225,40 @@ int main(int argc, char** argv) {
         return (((enc_idx - 1) & 1) == 1) && ((2 + pair * 2) < num_frames) && ((1 + pair * 2) < num_frames);
     };
 
+    auto set_frame_force_flags = [&](bool is_b, bool reorder_ref_slot, bool reorder_b_slot) {
+        bool frame_force_b_bi = force_b_bi;
+        bool frame_force_b_l0 = force_b_l0;
+        bool frame_force_b_direct = force_b_direct;
+        bool frame_force_b_direct_temporal = force_b_direct_temporal;
+        const bool has_ref_slot_override =
+            force_b_bi_on_reorder_ref_slot ||
+            force_b_l0_on_reorder_ref_slot ||
+            force_b_direct_on_reorder_ref_slot ||
+            force_b_direct_temporal_on_reorder_ref_slot;
+        const bool has_b_slot_override =
+            force_b_bi_on_reorder_b_slot ||
+            force_b_l0_on_reorder_b_slot ||
+            force_b_direct_on_reorder_b_slot ||
+            force_b_direct_temporal_on_reorder_b_slot;
+
+        if (reorder_ref_slot && has_ref_slot_override) {
+            frame_force_b_bi = force_b_bi_on_reorder_ref_slot;
+            frame_force_b_l0 = force_b_l0_on_reorder_ref_slot;
+            frame_force_b_direct = force_b_direct_on_reorder_ref_slot;
+            frame_force_b_direct_temporal = force_b_direct_temporal_on_reorder_ref_slot;
+        } else if (reorder_b_slot && has_b_slot_override) {
+            frame_force_b_bi = force_b_bi_on_reorder_b_slot;
+            frame_force_b_l0 = force_b_l0_on_reorder_b_slot;
+            frame_force_b_direct = force_b_direct_on_reorder_b_slot;
+            frame_force_b_direct_temporal = force_b_direct_temporal_on_reorder_b_slot;
+        }
+
+        dut->force_b_bi_in = (is_b && frame_force_b_bi) ? 1 : 0;
+        dut->force_b_l0_in = (is_b && frame_force_b_l0) ? 1 : 0;
+        dut->force_b_direct_in = (is_b && frame_force_b_direct) ? 1 : 0;
+        dut->force_b_direct_temporal_in = (is_b && frame_force_b_direct_temporal) ? 1 : 0;
+    };
+
     while (!got_sigint && cycle < timeout_cycles && frame_idx < num_frames) {
         if (!frame_active) {
             dut->start = 1;
@@ -219,6 +275,7 @@ int main(int argc, char** argv) {
             const bool is_bref = !is_idr && is_b && force_bref_slice;
             const bool is_ref_picture = is_idr || !is_b || is_bref;
             const int frame_num = is_idr ? 0 : (is_ref_picture ? next_ref_frame_num : last_ref_frame_num);
+            set_frame_force_flags(is_b, reorder_ref_slot, reorder_b_slot);
             dut->frame_num_in = frame_num & 0xFF;
             dut->pic_order_cnt_lsb_in = (display_idx * 2) & 0x1FF;
             dut->is_idr_in = is_idr ? 1 : 0;
@@ -228,9 +285,11 @@ int main(int argc, char** argv) {
             active_frame_num = frame_num & 0xFF;
             active_is_ref = is_ref_picture;
             frame_active = true;
-            fprintf(stderr, "[TB] Enc %d -> Disp %d (%s) frame_num=%d poc_lsb=%d start @ cycle %llu\n",
+            fprintf(stderr, "[TB] Enc %d -> Disp %d (%s) frame_num=%d poc_lsb=%d force_bi=%d force_l0=%d force_direct=%d force_direct_temporal=%d start @ cycle %llu\n",
                     frame_idx, display_idx, is_idr ? "IDR" : (is_bref ? "BREF" : (is_b ? "B" : "P")),
-                    active_frame_num, (display_idx * 2) & 0x1FF, (unsigned long long)cycle);
+                    active_frame_num, (display_idx * 2) & 0x1FF,
+                    dut->force_b_bi_in, dut->force_b_l0_in, dut->force_b_direct_in, dut->force_b_direct_temporal_in,
+                    (unsigned long long)cycle);
         }
 
         dut->clk = 1;

@@ -360,6 +360,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--force-b-l0", action="store_true")
     parser.add_argument("--force-b-direct", action="store_true")
     parser.add_argument("--force-b-direct-temporal", action="store_true")
+    parser.add_argument("--force-b-bi-on-reorder-ref-slot", action="store_true")
+    parser.add_argument("--force-b-l0-on-reorder-ref-slot", action="store_true")
+    parser.add_argument("--force-b-direct-on-reorder-ref-slot", action="store_true")
+    parser.add_argument("--force-b-direct-temporal-on-reorder-ref-slot", action="store_true")
+    parser.add_argument("--force-b-bi-on-reorder-b-slot", action="store_true")
+    parser.add_argument("--force-b-l0-on-reorder-b-slot", action="store_true")
+    parser.add_argument("--force-b-direct-on-reorder-b-slot", action="store_true")
+    parser.add_argument("--force-b-direct-temporal-on-reorder-b-slot", action="store_true")
     parser.add_argument("--reorder-b-gop", action="store_true")
     parser.add_argument("--decode-only", action="store_true")
     parser.add_argument("--skip-metrics", action="store_true")
@@ -420,6 +428,14 @@ def main() -> int:
         force_b_l0=1 if args.force_b_l0 else 0,
         force_b_direct=1 if args.force_b_direct else 0,
         force_b_direct_temporal=1 if args.force_b_direct_temporal else 0,
+        force_b_bi_on_reorder_ref_slot=1 if args.force_b_bi_on_reorder_ref_slot else 0,
+        force_b_l0_on_reorder_ref_slot=1 if args.force_b_l0_on_reorder_ref_slot else 0,
+        force_b_direct_on_reorder_ref_slot=1 if args.force_b_direct_on_reorder_ref_slot else 0,
+        force_b_direct_temporal_on_reorder_ref_slot=1 if args.force_b_direct_temporal_on_reorder_ref_slot else 0,
+        force_b_bi_on_reorder_b_slot=1 if args.force_b_bi_on_reorder_b_slot else 0,
+        force_b_l0_on_reorder_b_slot=1 if args.force_b_l0_on_reorder_b_slot else 0,
+        force_b_direct_on_reorder_b_slot=1 if args.force_b_direct_on_reorder_b_slot else 0,
+        force_b_direct_temporal_on_reorder_b_slot=1 if args.force_b_direct_temporal_on_reorder_b_slot else 0,
         reorder_b_gop=1 if args.reorder_b_gop else 0,
     )
     sim_bin = build_sim(workspace, config, build_log_path=build_log_path)
@@ -436,6 +452,14 @@ def main() -> int:
         force_b_l0=1 if args.force_b_l0 else 0,
         force_b_direct=1 if args.force_b_direct else 0,
         force_b_direct_temporal=1 if args.force_b_direct_temporal else 0,
+        force_b_bi_on_reorder_ref_slot=1 if args.force_b_bi_on_reorder_ref_slot else 0,
+        force_b_l0_on_reorder_ref_slot=1 if args.force_b_l0_on_reorder_ref_slot else 0,
+        force_b_direct_on_reorder_ref_slot=1 if args.force_b_direct_on_reorder_ref_slot else 0,
+        force_b_direct_temporal_on_reorder_ref_slot=1 if args.force_b_direct_temporal_on_reorder_ref_slot else 0,
+        force_b_bi_on_reorder_b_slot=1 if args.force_b_bi_on_reorder_b_slot else 0,
+        force_b_l0_on_reorder_b_slot=1 if args.force_b_l0_on_reorder_b_slot else 0,
+        force_b_direct_on_reorder_b_slot=1 if args.force_b_direct_on_reorder_b_slot else 0,
+        force_b_direct_temporal_on_reorder_b_slot=1 if args.force_b_direct_temporal_on_reorder_b_slot else 0,
         reorder_b_gop=1 if args.reorder_b_gop else 0,
         capture=True,
     )
