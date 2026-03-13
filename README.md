@@ -391,8 +391,8 @@ Verified validation/features around the current encoder flow:
   tiny `I_PCM` inputs plus tiny forced spatial-direct, temporal-direct,
   auto temporal-direct reordered-`B` and reordered-`BREF` cases,
   temporal-direct reordered-`BREF` `B_DIRECT_16x16`, mixed reordered-`BREF`
-  ref-slot / B-slot temporal-direct cases, and multi-ref reordered
-  `B_BI_16x16` cases
+  ref-slot / B-slot temporal-direct cases, explicit reordered-`BREF`
+  ref-slot `B_L1_16x16` guards, and multi-ref reordered `B_BI_16x16` cases
 - multi-frame validation at `320x176`
 - multi-frame validation at `1280x720`
 - PSNR / SSIM comparison scripts
@@ -1057,6 +1057,8 @@ python3 scripts/package_mp4.py output.h264 output.mp4 --fps 24 --width 320 --hei
 - `python3 scripts/regress_smoke_matrix.py` runs the current fast
   strict-decode/profile smoke regression matrix on generated tiny `I_PCM`
   inputs and emits paired `.build.log` / `.sim.log` artifacts per case
+  - use `--case <name>` to run only specific smoke cases; filtered runs write
+    `output/smoke_matrix_summary_filtered.json`
 - `python3 scripts/validate_clip.py` runs staged multi-frame validation with
   a clean staged rebuild, strict decode checking, paired `.build.log` /
   `.sim.log` artifacts, MP4 output, and comparison metrics
