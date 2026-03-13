@@ -353,6 +353,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--enable-p-ipcm", type=int, choices=(0, 1), default=0)
     parser.add_argument("--ipcm-sad-threshold", type=int, default=18000)
     parser.add_argument("--inter-sad-threshold", type=int, default=8000)
+    parser.add_argument("--enable-cabac-pskip", type=int, choices=(0, 1), default=0)
     parser.add_argument("--luma-log2-weight-denom", type=int, default=0)
     parser.add_argument("--luma-weight", type=int, default=1)
     parser.add_argument("--luma-offset", type=int, default=0)
@@ -428,6 +429,7 @@ def main() -> int:
         enable_p_ipcm=args.enable_p_ipcm,
         ipcm_sad_threshold=args.ipcm_sad_threshold,
         inter_sad_threshold=args.inter_sad_threshold,
+        enable_cabac_pskip=args.enable_cabac_pskip,
         luma_log2_weight_denom=args.luma_log2_weight_denom,
         luma_weight=args.luma_weight,
         luma_offset=args.luma_offset,

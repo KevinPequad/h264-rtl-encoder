@@ -361,6 +361,9 @@ The testbench must not:
   - Integer-pel motion estimation
   - Fixed search range motion estimation
   - Diamond-style luma ME search
+  - The integer-pel ME core now resets its per-search diamond/refine state on
+    every new macroblock search, preventing stale candidate state from leaking
+    between macroblocks
   - Quarter-pel luma refinement on the current `16x16` P-macroblock inter path
   - Luma inter prediction from previous reconstructed frame
   - Chroma fractional interpolation on the current inter path
@@ -388,7 +391,10 @@ The testbench must not:
   - Reconstruction loop in RTL
   - Reference-frame writeback for reconstructed luma
   - Reference-frame writeback for reconstructed chroma
-  - Standalone CABAC arithmetic coding core in `rtl/h264_cabac_core.v`
+  - Standalone CABAC arithmetic coding core in `rtl/h264_cabac_core.v`, plus
+    a current final-path CABAC subset for skip-only P slices with dual PPS
+    emission, CABAC slice-header fields, CABAC-coded `mb_skip_flag`, and
+    CABAC-coded `end_of_slice_flag`
   - Parameterized resolution
   - Parameterized bit depth
   - Parameterized chroma format
@@ -427,6 +433,8 @@ The testbench must not:
   - Annex B bitstream generation owned by RTL
   - SPS / PPS / slice-header / macroblock-header ownership in RTL
   - CAVLC entropy path owned by RTL
+  - Current CABAC final-path subset on skip-only P slices, with CABAC PPS
+    selection, CABAC-coded `mb_skip_flag`, and CABAC-coded `end_of_slice_flag`
   - I-picture and P-picture coding
   - Non-reference `B`-picture syntax on the current intra / `I_PCM` path
   - Limited non-reference `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` inter
@@ -468,8 +476,9 @@ The testbench must not:
     generated tiny `I_PCM` inputs plus tiny forced spatial-direct,
     temporal-direct, auto temporal-direct reordered-`B` and reordered-`BREF`
     cases, mixed reordered-`BREF` ref-slot / B-slot temporal-direct cases,
-    explicit reordered-`BREF` ref-slot `B_L1_16x16` guards, and multi-ref
-    reordered `B_BI_16x16` cases
+    explicit reordered-`BREF` ref-slot `B_L1_16x16` guards, multi-ref
+    reordered `B_BI_16x16` cases, a generated flat exact-reference CABAC
+    P-skip case, and a flat forced-direct reordered-`BREF` case
   - Multi-frame validation at `320x176`
   - Multi-frame validation at `1280x720`
   - PSNR / SSIM comparison scripts
@@ -552,6 +561,10 @@ The testbench must not:
 - Verified multi-frame validation runs now include:
   - Docker one-frame smoke at `320x176`, `1` frame, `816,975` cycles,
     `output/docker_320x176_1f.h264`, and `output/docker_320x176_1f.mp4`
+  - strict CABAC skip-only P-slice validation at `32x16`, `4` frames,
+    `234,131` cycles, `473` bytes, `Main` profile, exact-reference flat clip,
+    `output/validation_cabac_pskip_ipcmidr_32x16_4f.h264`, and
+    `output/validation_cabac_pskip_ipcmidr_32x16_4f.mp4`
   - strict current-tree validation at `320x176`, `10` frames,
     `253,064,186` cycles, RTL PSNR avg `45.745576`, RTL SSIM all `0.994893`,
     `output/validation_tefix_320x176_10f.h264`, and
@@ -1050,7 +1063,8 @@ The testbench must not:
 
 - Important missing features, so this does not get confused with a full-standard
   H.264 encoder yet:
-  - No CABAC syntax integration into the final RTL bitstream path yet
+  - No full CABAC syntax/context integration beyond the current skip-only
+    P-slice subset yet
   - No broader `B` / `BREF` picture support beyond the current limited
     reordered dual-list `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` `16x16`
     path

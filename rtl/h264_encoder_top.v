@@ -17,6 +17,7 @@ module h264_encoder_top #(
     parameter IPCM_SAD_THRESHOLD = 18000,
     parameter ENABLE_P_IPCM = 0,
     parameter INTER_SAD_THRESHOLD = 8000,
+    parameter ENABLE_CABAC_PSKIP = 0,
     parameter WEIGHTED_PRED_ENABLE = 0,
     parameter LUMA_LOG2_WEIGHT_DENOM = 0,
     parameter integer LUMA_WEIGHT = 1,
@@ -257,6 +258,8 @@ module h264_encoder_top #(
     reg signed [7:0] left_mvy_l1;
     reg        top_is_inter [0:MB_COLS-1];   // 1 if top MB was inter
     reg        left_is_inter;         // 1 if left MB was inter
+    reg        top_is_skip [0:MB_COLS-1];
+    reg        left_is_skip;
     reg        top_is_inter_l1 [0:MB_COLS-1];
     reg        left_is_inter_l1;
     reg        top_is_b_l1 [0:MB_COLS-1];
@@ -457,6 +460,10 @@ module h264_encoder_top #(
     reg [5:0]   intra_mb_type_code_num;
     reg         pskip_syntax_eligible_reg;
     reg         bskip_syntax_eligible_reg;
+    reg [1:0]   cabac_skip_ctx_reg;
+
+    wire        cabac_feature_enable_w = (ENABLE_CABAC_PSKIP != 0);
+    wire        cabac_slice_enable_w = cabac_feature_enable_w && is_p_frame;
 
     // Neighbor storage
     reg [MB_COLS*16*BIT_DEPTH-1:0] top_ref_flat;
@@ -1988,6 +1995,9 @@ pred_buf = {(256*BD){1'b0}};
         .cmd_clear_fifo(bs_cmd_clear_fifo),
         .cavlc_valid(cavlc_bits_valid), .cavlc_bits(cavlc_bits), .cavlc_count(cavlc_count),
         .mb_qp_delta(8'd0), .mb_has_residual(mb_has_residual),
+        .cabac_feature_enable(cabac_feature_enable_w),
+        .cabac_slice_enable(cabac_slice_enable_w),
+        .cabac_skip_ctx(cabac_skip_ctx_reg),
         .is_p_slice(is_p_frame), .is_b_slice(is_b_frame), .is_b_ref_slice(is_b_ref_frame), .frame_num(cur_frame_num),
         .pic_order_cnt_lsb(cur_pic_order_cnt_lsb),
         .is_inter_mb(is_inter_mb_reg), .is_skip_mb(is_skip_mb_reg),
@@ -2028,6 +2038,7 @@ pred_buf = {(256*BD){1'b0}};
             recon_buf <= {(256*BD){1'b0}}; luma_recon_buf <= {(256*BD){1'b0}}; top_ref_flat <= {(MB_COLS*16*BD){1'b0}}; left_ref_flat <= {(16*BD){1'b0}};
             top_pixels_flat <= {(16*BD){1'b0}}; left_pixels_flat <= {(16*BD){1'b0}}; flush_pending <= 1'b0; flush_accepted <= 1'b0;
             is_p_frame <= 1'b0; is_b_frame <= 1'b0; is_b_ref_frame <= 1'b0; is_inter_mb_reg <= 1'b0; is_skip_mb_reg <= 1'b0; is_b_l1_mb_reg <= 1'b0; is_b_bi_mb_reg <= 1'b0; is_b_direct_mb_reg <= 1'b0; is_b_direct_from_l1_reg <= 1'b0; use_intra16_mb_reg <= 1'b0; use_ipcm_mb_reg <= 1'b0; cur_frame_num <= 8'd0; cur_pic_order_cnt_lsb <= 9'd0; direct_temporal_slice_mode_reg <= 1'b0;
+            cabac_skip_ctx_reg <= 2'd0;
             me_best_mvx <= 8'sd0; me_best_mvy <= 8'sd0; me_best_mvx_l0 <= 8'sd0; me_best_mvy_l0 <= 8'sd0; me_best_mvx_l1 <= 8'sd0; me_best_mvy_l1 <= 8'sd0; me_best_sad <= 18'd0; me_fullpel_best_sad <= 18'd0;
             inter_pred_buf <= {(256*BD){1'b0}}; ref_wr_idx <= 9'd0;
             intra16_pred_buf <= {(256*BD){1'b0}}; intra16_mode_mb <= 2'd2;
@@ -2035,7 +2046,7 @@ pred_buf = {(256*BD){1'b0}};
             ref_mem_wr_en <= 1'b0; ref_mem_wr_addr <= 20'd0; ref_mem_wr_data <= {BD{1'b0}};
             mvp_x <= 8'sd0; mvp_y <= 8'sd0; mvp_x_l0 <= 8'sd0; mvp_y_l0 <= 8'sd0; mvp_x_l1 <= 8'sd0; mvp_y_l1 <= 8'sd0;
             left_mvx <= 8'sd0; left_mvy <= 8'sd0; left_mvx_l1 <= 8'sd0; left_mvy_l1 <= 8'sd0;
-            left_is_inter <= 1'b0; left_is_inter_l1 <= 1'b0; left_is_b_l1 <= 1'b0; left_is_i16 <= 1'b0; left_ref_idx <= 2'd0; left_ref_idx_l1 <= 2'd0; left_mb_i16dc_nz <= 5'd0;
+            left_is_inter <= 1'b0; left_is_skip <= 1'b0; left_is_inter_l1 <= 1'b0; left_is_b_l1 <= 1'b0; left_is_i16 <= 1'b0; left_ref_idx <= 2'd0; left_ref_idx_l1 <= 2'd0; left_mb_i16dc_nz <= 5'd0;
             diag_mvx <= 8'sd0; diag_mvy <= 8'sd0; diag_mvx_l1 <= 8'sd0; diag_mvy_l1 <= 8'sd0; diag_is_inter <= 1'b0; diag_is_inter_l1 <= 1'b0; diag_is_b_l1 <= 1'b0; diag_ref_idx <= 2'd0; diag_ref_idx_l1 <= 2'd0;
             mb_ref_idx_reg <= 2'd0; mb_ref_idx_l1_reg <= 2'd0; me_search_pass <= 2'd0;
             valid_ref_count <= 3'd0; newest_ref_bank <= 3'd0; older_ref_bank <= 3'd1; oldest_ref_bank <= 3'd2; ancient_ref_bank <= 3'd3; next_write_bank <= 3'd0; current_write_bank <= 3'd0;
@@ -2049,6 +2060,8 @@ pred_buf = {(256*BD){1'b0}};
                 b_l0_pass_sad[idx_rb] <= 18'd0;
                 b_l0_pass_ref_mb[idx_rb] <= {(256*BD){1'b0}};
             end
+            for (idx_rb = 0; idx_rb < MB_COLS; idx_rb = idx_rb + 1)
+                top_is_skip[idx_rb] <= 1'b0;
             chr_dc_start <= 1'b0; chr_dc_inverse <= 1'b0;
             i16_dc_start <= 1'b0; i16_dc_inverse <= 1'b0;
             chr_phase <= 3'd0; chr_blk <= {CHR_BLK_W{1'b0}}; chr_is_cr <= 1'b0; luma16_phase <= 3'd0; luma16_blk <= 4'd0;
@@ -2154,6 +2167,10 @@ pred_buf = {(256*BD){1'b0}};
                     frame_b_l0_nonzero_ref_mb_count <= 16'd0;
                     frame_b_direct_nonzero_ref_mb_count <= 16'd0;
                     frame_b_direct_from_l1_mb_count <= 16'd0;
+                    left_is_skip <= 1'b0;
+                    cabac_skip_ctx_reg <= 2'd0;
+                    for (idx_rb = 0; idx_rb < MB_COLS; idx_rb = idx_rb + 1)
+                        top_is_skip[idx_rb] <= 1'b0;
                     if (is_idr_in) begin
                         valid_ref_count <= 3'd0;
                         newest_ref_bank <= 3'd0;
@@ -3687,6 +3704,15 @@ pred_buf = {(256*BD){1'b0}};
                 end
 
                 TS_DEFER_MB_HDR: if (!bs_busy) begin
+                    cabac_skip_ctx_reg <= {1'b0, left_is_skip} + {1'b0, top_is_skip[mb_x]};
+                    if (cabac_slice_enable_w)
+                        $fatal(1,
+                               "[CABAC_PSKIP] Unsupported non-skip MB at frame_num=%0d mb=(%0d,%0d) inter=%0d residual=%0d skip=%0d pskip_eligible=%0d bskip_eligible=%0d ref=%0d mv=(%0d,%0d) fullpel_mv=(%0d,%0d)",
+                               cur_frame_num, mb_x, mb_y,
+                               is_inter_mb_reg, mb_has_residual, is_skip_mb_reg,
+                               pskip_syntax_eligible_reg, bskip_syntax_eligible_reg,
+                               mb_ref_idx_reg, me_best_mvx_l0, me_best_mvy_l0,
+                               me_fullpel_mvx, me_fullpel_mvy);
                     // Emit the buffered macroblock header while FIFO drain is
                     // still held so the header stays ahead of this MB's
                     // deferred residual payload.
@@ -3711,6 +3737,7 @@ pred_buf = {(256*BD){1'b0}};
                 end
 
                 TS_SKIP_MB_HDR: if (!bs_busy) begin
+                    cabac_skip_ctx_reg <= {1'b0, left_is_skip} + {1'b0, top_is_skip[mb_x]};
                     bs_hold_fifo_drain <= 1'b0;
                     bs_cmd_mb_hdr <= 1'b1;
                     top_state <= TS_NEXT_MB;
@@ -3772,6 +3799,8 @@ pred_buf = {(256*BD){1'b0}};
                         frame_b_direct_nonzero_ref_mb_count <= frame_b_direct_nonzero_ref_mb_count + 16'd1;
                     if (is_b_frame && is_inter_mb_reg && is_b_direct_mb_reg && is_b_direct_from_l1_reg)
                         frame_b_direct_from_l1_mb_count <= frame_b_direct_from_l1_mb_count + 16'd1;
+                    top_is_skip[mb_x] <= is_skip_mb_reg;
+                    left_is_skip <= is_skip_mb_reg;
                     refmeta_is_intra[current_write_bank][mb_count] <= !is_inter_mb_reg;
                     refmeta_has_l0[current_write_bank][mb_count] <= is_inter_mb_reg &&
                                                                   (!is_b_frame || !is_b_l1_mb_reg || is_b_bi_mb_reg);
@@ -3937,6 +3966,7 @@ pred_buf = {(256*BD){1'b0}};
                         // Done writing this MB to reference, advance to next MB
                         if (mb_x == MB_COLS[6:0] - 7'd1) begin
                             mb_x <= 7'd0;
+                            left_is_skip <= 1'b0;
                             if (mb_y == MB_ROWS[5:0] - 6'd1)
                                 top_state <= TS_TRAILING;
                             else begin

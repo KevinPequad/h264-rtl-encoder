@@ -56,7 +56,7 @@ Implemented and validated now:
 Still missing before full-standard completion, using the current `x264`
 software encoder as the implementation baseline:
 
-- CABAC syntax integration into the final RTL bitstream path
+- full CABAC syntax integration beyond the current skip-only P-slice subset
 - broader `B` / `BREF` picture support, broader direct-mode handling, and the
   associated reference management
 - broader standards-complete sub-pel motion handling across richer inter modes
@@ -268,6 +268,9 @@ Current implemented features:
 - integer-pel motion estimation
 - fixed search range motion estimation
 - diamond-style luma motion estimation
+- the integer-pel ME core now resets its per-search diamond/refine state on
+  every new macroblock search, preventing stale candidate state from leaking
+  between macroblocks
 - quarter-pel luma refinement on the current `16x16` P-macroblock inter path
 - luma inter prediction from the previous reconstructed frame
 - chroma fractional interpolation on the current inter path
@@ -296,7 +299,10 @@ Current implemented features:
 - reconstruction loop in RTL
 - reference-frame writeback for reconstructed luma
 - reference-frame writeback for reconstructed chroma
-- standalone CABAC arithmetic coding core in `rtl/h264_cabac_core.v`
+- standalone CABAC arithmetic coding core in `rtl/h264_cabac_core.v`, plus a
+  current final-path CABAC subset for skip-only P slices with dual PPS
+  emission, CABAC slice-header fields, CABAC-coded `mb_skip_flag`, and
+  CABAC-coded `end_of_slice_flag`
 - parameterized resolution
 - parameterized bit depth
 - parameterized chroma format
@@ -306,6 +312,8 @@ Implemented now relative to the chosen `x264` baseline:
 - Annex B bitstream ownership in RTL
 - parameter-set and slice-header ownership in RTL
 - CAVLC-based coefficient coding in RTL
+- current CABAC final-path subset on skip-only P slices, with CABAC PPS
+  selection, CABAC-coded `mb_skip_flag`, and CABAC-coded `end_of_slice_flag`
 - I and P picture flow
 - non-reference `B`-picture syntax on the current intra / `I_PCM` path
 - limited non-reference `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` inter
@@ -364,7 +372,8 @@ Current additional validated non-`I_PCM` coverage at `320x176`:
 
 Important non-completion gaps:
 
-- `CABAC` arithmetic coding is not yet wired into the final slice syntax path
+- full `CABAC` syntax/context integration beyond the current skip-only
+  P-slice subset is not implemented yet
 - broader inter-coded `B` / `BREF` picture handling is not implemented beyond
   the current limited reordered dual-list `B_L0_16x16` / `B_L1_16x16` /
   `B_BI_16x16` `16x16` path
@@ -397,7 +406,8 @@ Verified validation/features around the current encoder flow:
   auto temporal-direct reordered-`B` and reordered-`BREF` cases,
   temporal-direct reordered-`BREF` `B_DIRECT_16x16`, mixed reordered-`BREF`
   ref-slot / B-slot temporal-direct cases, explicit reordered-`BREF`
-  ref-slot `B_L1_16x16` guards, and multi-ref reordered `B_BI_16x16` cases
+  ref-slot `B_L1_16x16` guards, multi-ref reordered `B_BI_16x16` cases, and
+  a generated flat exact-reference CABAC P-skip case
 - multi-frame validation at `320x176`
 - multi-frame validation at `1280x720`
 - PSNR / SSIM comparison scripts
@@ -451,6 +461,11 @@ Verified validation/features around the current encoder flow:
 Measured validation points:
 
 - `docker_320x176_1f`: `816,975` cycles
+- `32x16_4f_cabac_pskip_ipcmidr`: strict FFmpeg-decodable CABAC skip-only
+  P-slice validation on a flat exact-reference clip, `234,131` cycles,
+  `473` bytes, `Main` profile, `output/validation_cabac_pskip_ipcmidr_32x16_4f.h264`,
+  `output/validation_cabac_pskip_ipcmidr_32x16_4f.mp4`, and
+  `b_mode_summary.total_skip = 6`
 - `32x16_nonipcm_ncfix`: the `Intra_16x16` luma-DC `nC` fix re-opened strict
   decode on tiny non-`I_PCM` high-bit-depth probes, covering `10-bit 4:2:0`,
   `10-bit 4:2:2`, `8-bit 4:4:4`, and `10-bit 4:4:4` through the

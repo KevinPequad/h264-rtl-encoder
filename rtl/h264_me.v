@@ -165,8 +165,16 @@ module h264_me #(
                         // Initialize: search center = (0,0) relative to MB
                         center_x <= {5'b0, mb_x} << 4;
                         center_y <= {6'b0, mb_y} << 4;
+                        iter_best_x <= {5'b0, mb_x} << 4;
+                        iter_best_y <= {6'b0, mb_y} << 4;
                         best_sad <= 18'h3FFFF;
+                        best_mvx <= 8'sd0;
+                        best_mvy <= 8'sd0;
+                        ref_mb_out <= {(256*BIT_DEPTH){1'b0}};
                         use_small_diamond <= 1'b0;
+                        diamond_idx <= 4'd0;
+                        iter_best_sad <= 18'h3FFFF;
+                        iter_improved <= 1'b0;
                         iter_count <= 5'd0;
                         // First test: center (0,0) itself
                         cand_ox <= 9'sd0;
