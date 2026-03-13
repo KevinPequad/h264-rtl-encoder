@@ -23,7 +23,8 @@ Implemented and validated now:
 - limited inter-coded `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` support on
   the current reordered dual-list `16x16` B path
 - limited `B_DIRECT_16x16` support on the current reordered dual-list `16x16`
-  B path, with automatic selection plus a force hook for targeted validation
+  B path, with spatial direct derivation, a current limited temporal-direct
+  mode, automatic selection, and force hooks for targeted validation
 - limited `B_SKIP` support on the current reordered dual-list `16x16`
   `B_DIRECT_16x16` path when the chosen direct macroblock reaches zero
   residual
@@ -190,6 +191,10 @@ Current implemented features:
 - limited `B_DIRECT_16x16` support on the current reordered dual-list `16x16`
   B path, with spatial direct derivation from neighbor state plus colocated MB
   metadata captured per reference bank
+- current limited temporal-direct support on the reordered dual-list `16x16`
+  B path when the future reference picture's `List0 ref0` bank maps back to
+  the current past reference, including slice-level
+  `direct_spatial_mv_pred_flag = 0` signaling in RTL
 - limited reference-`B` / `BREF` support on the current reordered dual-list
   `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` path
 - reordered `B`-GOP scheduling support in the testbench / validation flow for
@@ -209,8 +214,9 @@ Current implemented features:
   against the current reordered `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16`
   candidates instead of only via a force flag
 - reference-bank metadata now also retains picture-order and frame-level
-  list0-reference-bank state alongside the per-MB colocated metadata, so the
-  RTL has the prerequisites needed for a future temporal-direct path
+  list0-reference-bank state alongside the per-MB colocated metadata, and the
+  current limited temporal-direct path now consumes that metadata on reordered
+  B slices
 - the current limited `B_DIRECT_16x16` path can now collapse zero-residual
   macroblocks into RTL-owned B-slice skip-run syntax through the same late
   deferred-header path already used for zero-residual `P_SKIP`
@@ -286,8 +292,9 @@ Implemented now relative to the chosen `x264` baseline:
 - limited reference-`B` / `BREF` picture support on the current reordered
   dual-list `16x16` B path
 - explicit weighted prediction on the current single-list reordered B subpaths
-- limited forced spatial direct prediction on the current reordered dual-list
-  `16x16` B path
+- limited spatial direct prediction on the current reordered dual-list
+  `16x16` B path, plus a current limited temporal-direct mode for reordered
+  B slices whose future reference maps back to the current past reference
 - full `Intra_4x4` directional luma mode coverage
 - `Intra_16x16` luma prediction and syntax support
 - `I_PCM` macroblock coding on the current IDR path and current P-slice intra
@@ -360,7 +367,8 @@ Verified validation/features around the current encoder flow:
 - MP4 remux of the RTL-generated stream
 - Docker one-frame smoke run producing RTL-generated `.h264` and `.mp4`
 - reproducible smoke matrix for fast strict-decode/profile sanity on generated
-  tiny `I_PCM` inputs plus a tiny forced `B_DIRECT_16x16` case
+  tiny `I_PCM` inputs plus tiny forced spatial-direct and temporal-direct
+  `B_DIRECT_16x16` cases
 - multi-frame validation at `320x176`
 - multi-frame validation at `1280x720`
 - PSNR / SSIM comparison scripts
@@ -381,6 +389,9 @@ Verified validation/features around the current encoder flow:
 - runtime-configurable `force_b_direct` support in the testbench and
   validation scripts for targeted validation of the current limited
   `B_DIRECT_16x16` path
+- runtime-configurable `force_b_direct_temporal` support in the testbench and
+  validation scripts so reordered B slices can switch to the current limited
+  temporal-direct derivation and emit `direct_spatial_mv_pred_flag = 0`
 - simulator-side per-frame `b_l1_mbs` logging so reordered B validation can
   prove that the future-reference `List1` path was actually selected
 - simulator-side per-frame `b_bi_mbs` logging so reordered B validation can
@@ -619,6 +630,17 @@ Measured validation points:
   JSON `b_mode_summary` reporting `frames_with_skip=3`, `total_skip=393`,
   `max_skip=219`, `frames_with_direct=3`, and simulator skip counts of
   `219`, `148`, and `26` across the three non-IDR pictures
+- `temporal_direct_force_32x16_3f`: strict FFmpeg-decodable forced
+  temporal-direct reordered-B validation at `32x16`, `3` frames, `131,063`
+  cycles, `263` bytes, `output/validation_temporal_direct_32x16_3f.h264`,
+  `output/validation_temporal_direct_32x16_3f.json`, and header-trace proof of
+  `direct_spatial_mv_pred_flag = 0` with `b_direct_mbs=2`
+- `temporal_direct_force_320x176_3f`: strict FFmpeg-decodable decode-only
+  forced temporal-direct reordered-B validation at `320x176`, `3` frames,
+  `37,905,407` cycles, `21,423` bytes,
+  `output/validation_temporal_direct_320x176_3f.h264`,
+  `output/validation_temporal_direct_320x176_3f.json`, and header-trace proof
+  of `direct_spatial_mv_pred_flag = 0` with `b_direct_mbs=220`
 - `bdirect_auto_weighted_32x16_3f`: strict FFmpeg-decodable weighted
   non-forced auto `B_DIRECT_16x16` reordered-B validation at `32x16`, `3`
   frames, `131,078` cycles, `180` bytes, RTL PSNR avg `30.158513`, RTL SSIM

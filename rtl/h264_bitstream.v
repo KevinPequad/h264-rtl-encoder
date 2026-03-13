@@ -48,6 +48,7 @@ module h264_bitstream #(
     input  wire        is_b_direct_mb,
     input  wire        is_b_l1_mb,
     input  wire        is_b_bi_mb,
+    input  wire        direct_spatial_mv_pred_flag,
     input  wire [1:0]  mb_ref_idx_l0,
     input  wire [1:0]  mb_ref_idx_l1,
     input  wire signed [8:0] mvd_x_l0,
@@ -857,26 +858,26 @@ module h264_bitstream #(
                                     if (weighted_pred_flag) begin
                                         // B-slice base header up to ref_pic_list_reordering_flag_l1:
                                         // first_mb=UE(0), slice_type(B)=UE(1), pps_id=UE(0), frame_num(8),
-                                        // pic_order_cnt_lsb(9), direct_spatial_mv_pred_flag=1,
+                                        // pic_order_cnt_lsb(9), direct_spatial_mv_pred_flag,
                                         // num_ref_idx_active_override_flag=0,
                                         // ref_pic_list_reordering_flag_l0=0,
                                         // ref_pic_list_reordering_flag_l1=0.
-                                        bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, 4'b1000, 70'd0};
+                                        bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 3'b000, 70'd0};
                                         bit_cnt <= 7'd26;
                                         ue_input <= {6'd0, luma_log2_weight_denom};
                                         sub <= 6'd8;
                                     end else begin
                                         // Non-reference B-slice header on the current intra/I_PCM-only B path:
                                         // first_mb=UE(0), slice_type(B)=UE(1), pps_id=UE(0), frame_num(8),
-                                        // pic_order_cnt_lsb(9), direct_spatial_mv_pred_flag=1,
+                                        // pic_order_cnt_lsb(9), direct_spatial_mv_pred_flag,
                                         // num_ref_idx_active_override_flag=0, ref_pic_list_reordering_flag_l0=0,
                                         // ref_pic_list_reordering_flag_l1=0, optional adaptive_ref_pic_marking_mode_flag,
                                         // slice_qp_delta=SE(0), deblocking=UE(1)
                                         if (is_b_ref_slice) begin
-                                            bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, 6'b100001, 3'b010, 65'd0};
+                                            bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 5'b00001, 3'b010, 65'd0};
                                             bit_cnt <= 7'd31;
                                         end else begin
-                                            bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, 5'b10001, 3'b010, 66'd0};
+                                            bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 4'b0001, 3'b010, 66'd0};
                                             bit_cnt <= 7'd30;
                                         end
                                         sub <= sub + 6'd1;

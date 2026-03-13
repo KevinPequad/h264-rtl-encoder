@@ -284,8 +284,9 @@ The testbench must not:
     `B_BI_16x16` support on the current reordered dual-list `16x16` B path
   - Limited `B_DIRECT_16x16` support on the current reordered dual-list
     `16x16` B path, with spatial direct derivation from neighbor state plus
-    colocated MB metadata captured per reference bank, automatic selection,
-    and a force hook for targeted validation
+    colocated MB metadata captured per reference bank, a current limited
+    temporal-direct mode, automatic selection, and force hooks for targeted
+    validation
   - Limited `B_SKIP` support on the current reordered dual-list `16x16`
     `B_DIRECT_16x16` path when the chosen direct macroblock reaches zero
     residual
@@ -308,8 +309,13 @@ The testbench must not:
     against the current reordered `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16`
     candidates instead of only via a force flag
   - Reference-bank metadata now also retains picture-order and frame-level
-    list0-reference-bank state alongside the per-MB colocated metadata, so the
-    RTL has the prerequisites needed for a future temporal-direct path
+    list0-reference-bank state alongside the per-MB colocated metadata, and
+    the current limited temporal-direct path now consumes that metadata on
+    reordered B slices
+  - The current limited reordered `B_DIRECT_16x16` path now also supports a
+    temporal-direct mode when the future reference picture's `List0 ref0` bank
+    maps back to the current past reference, with RTL-owned
+    `direct_spatial_mv_pred_flag = 0` signaling
   - The current limited `B_DIRECT_16x16` path can now collapse zero-residual
     macroblocks into RTL-owned B-slice skip-run syntax through the same late
     deferred-header path already used for zero-residual `P_SKIP`
@@ -417,8 +423,8 @@ The testbench must not:
     weighted luma samples during mode decision instead of scoring the
     unweighted predictor and applying weights only later in reconstruction
   - Limited spatial direct prediction on the current reordered dual-list
-    `16x16` B path, with automatic selection plus a force hook for targeted
-    validation
+    `16x16` B path, plus a current limited temporal-direct mode for reordered
+    B slices whose future reference maps back to the current past reference
   - Full directional `Intra_4x4` luma mode coverage
   - `Intra_16x16` luma prediction and syntax support
   - `Intra_16x16` luma-DC CAVLC now derives `nC` from the normal surrounding
@@ -438,7 +444,8 @@ The testbench must not:
   - FFmpeg-decodable RTL-generated `.h264`
   - MP4 remux of the RTL-generated stream
   - Reproducible smoke matrix for fast strict-decode/profile sanity on
-    generated tiny `I_PCM` inputs
+    generated tiny `I_PCM` inputs plus tiny forced spatial-direct and
+    temporal-direct `B_DIRECT_16x16` cases
   - Multi-frame validation at `320x176`
   - Multi-frame validation at `1280x720`
   - PSNR / SSIM comparison scripts
@@ -459,6 +466,10 @@ The testbench must not:
   - Runtime-configurable `force_b_direct` support in the testbench and
     validation scripts for targeted validation of the current limited
     `B_DIRECT_16x16` path
+  - Runtime-configurable `force_b_direct_temporal` support in the testbench
+    and validation scripts so reordered B slices can switch to the current
+    limited temporal-direct derivation and emit
+    `direct_spatial_mv_pred_flag = 0`
   - Simulator-side per-frame `b_l1_mbs` logging so reordered B validation can
     prove that the future-reference `List1` path was actually selected
   - Simulator-side per-frame `b_bi_mbs` logging so reordered B validation can
@@ -701,6 +712,17 @@ The testbench must not:
     JSON `b_mode_summary` reporting `frames_with_skip=3`, `total_skip=393`,
     `max_skip=219`, `frames_with_direct=3`, and simulator skip counts of
     `219`, `148`, and `26` across the three non-IDR pictures
+  - `temporal_direct_force_32x16_3f`: strict FFmpeg-decodable forced
+    temporal-direct reordered-B validation at `32x16`, `3` frames, `131,063`
+    cycles, `263` bytes, `output/validation_temporal_direct_32x16_3f.h264`,
+    `output/validation_temporal_direct_32x16_3f.json`, and header-trace proof
+    of `direct_spatial_mv_pred_flag = 0` with `b_direct_mbs=2`
+  - `temporal_direct_force_320x176_3f`: strict FFmpeg-decodable decode-only
+    forced temporal-direct reordered-B validation at `320x176`, `3` frames,
+    `37,905,407` cycles, `21,423` bytes,
+    `output/validation_temporal_direct_320x176_3f.h264`,
+    `output/validation_temporal_direct_320x176_3f.json`, and header-trace
+    proof of `direct_spatial_mv_pred_flag = 0` with `b_direct_mbs=220`
   - `bdirect_auto_weighted_32x16_3f`: strict FFmpeg-decodable weighted
     non-forced auto `B_DIRECT_16x16` reordered-B validation at `32x16`, `3`
     frames, `131,078` cycles, `180` bytes, RTL PSNR avg `30.158513`, RTL SSIM
