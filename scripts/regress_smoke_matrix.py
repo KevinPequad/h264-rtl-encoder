@@ -25,6 +25,7 @@ PSKIP_RE = re.compile(
     r"b_l0_refgt0_mbs=(?P<b_l0_refgt0>\d+)\s+"
     r"b_direct_refgt0_mbs=(?P<b_direct_refgt0>\d+)"
     r"(?:\s+b_direct_l1src_mbs=(?P<b_direct_l1src>\d+))?"
+    r"(?:\s+cabac_p16x16_mbs=(?P<cabac_p16x16>\d+))?"
 )
 DECODE_ERROR_PATTERNS = (
     "error while decoding",
@@ -65,6 +66,7 @@ class SmokeCase:
     ipcm_sad_threshold: int = 18000
     inter_sad_threshold: int = 8000
     enable_cabac_pskip: int = 0
+    enable_cabac_p16x16: int = 0
     idr_interval: int = 12
     force_b_slice: int = 0
     force_bref_slice: int = 0
@@ -92,6 +94,7 @@ class SmokeCase:
     require_l0_refgt0_min: int = 0
     require_direct_refgt0_min: int = 0
     require_direct_l1src_min: int = 0
+    require_cabac_p16x16_min: int = 0
 
 
 CASES = [
@@ -172,6 +175,18 @@ CASES = [
         enable_cabac_pskip=1,
         flat_y_frames=(32, 32, 32, 32),
         require_skip_min=6,
+    ),
+    SmokeCase(
+        "smoke_8b_420_cabac_p16x16",
+        8,
+        1,
+        "smoke_32x16_2f_cabac_p16x16.yuv",
+        "smoke_32x16_2f_cabac_p16x16.h264",
+        frames=2,
+        enable_idr_ipcm=1,
+        enable_cabac_p16x16=1,
+        flat_y_frames=(64, 64),
+        require_cabac_p16x16_min=2,
     ),
     SmokeCase(
         "smoke_8b_420_bdirect",
@@ -539,6 +554,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     frames_with_l0_refgt0 = 0
     frames_with_direct_refgt0 = 0
     frames_with_direct_l1src = 0
+    frames_with_cabac_p16x16 = 0
     max_skip = 0
     max_l1 = 0
     max_bi = 0
@@ -546,6 +562,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     max_l0_refgt0 = 0
     max_direct_refgt0 = 0
     max_direct_l1src = 0
+    max_cabac_p16x16 = 0
     total_skip = 0
     total_l1 = 0
     total_bi = 0
@@ -553,6 +570,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     total_l0_refgt0 = 0
     total_direct_refgt0 = 0
     total_direct_l1src = 0
+    total_cabac_p16x16 = 0
 
     for match in PSKIP_RE.finditer(sim_log):
         skip = int(match.group("skip"))
@@ -562,6 +580,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         l0_refgt0 = int(match.group("b_l0_refgt0"))
         direct_refgt0 = int(match.group("b_direct_refgt0"))
         direct_l1src = int(match.group("b_direct_l1src") or 0)
+        cabac_p16x16 = int(match.group("cabac_p16x16") or 0)
         total_skip += skip
         total_l1 += l1
         total_bi += bi
@@ -569,6 +588,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         total_l0_refgt0 += l0_refgt0
         total_direct_refgt0 += direct_refgt0
         total_direct_l1src += direct_l1src
+        total_cabac_p16x16 += cabac_p16x16
         if skip:
             frames_with_skip += 1
         if l1:
@@ -583,6 +603,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
             frames_with_direct_refgt0 += 1
         if direct_l1src:
             frames_with_direct_l1src += 1
+        if cabac_p16x16:
+            frames_with_cabac_p16x16 += 1
         max_skip = max(max_skip, skip)
         max_l1 = max(max_l1, l1)
         max_bi = max(max_bi, bi)
@@ -590,6 +612,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         max_l0_refgt0 = max(max_l0_refgt0, l0_refgt0)
         max_direct_refgt0 = max(max_direct_refgt0, direct_refgt0)
         max_direct_l1src = max(max_direct_l1src, direct_l1src)
+        max_cabac_p16x16 = max(max_cabac_p16x16, cabac_p16x16)
 
     return {
         "frames_with_skip": frames_with_skip,
@@ -599,6 +622,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "frames_with_l0_refgt0": frames_with_l0_refgt0,
         "frames_with_direct_refgt0": frames_with_direct_refgt0,
         "frames_with_direct_l1src": frames_with_direct_l1src,
+        "frames_with_cabac_p16x16": frames_with_cabac_p16x16,
         "max_skip": max_skip,
         "max_l1": max_l1,
         "max_bi": max_bi,
@@ -606,6 +630,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "max_l0_refgt0": max_l0_refgt0,
         "max_direct_refgt0": max_direct_refgt0,
         "max_direct_l1src": max_direct_l1src,
+        "max_cabac_p16x16": max_cabac_p16x16,
         "total_skip": total_skip,
         "total_l1": total_l1,
         "total_bi": total_bi,
@@ -613,6 +638,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "total_l0_refgt0": total_l0_refgt0,
         "total_direct_refgt0": total_direct_refgt0,
         "total_direct_l1src": total_direct_l1src,
+        "total_cabac_p16x16": total_cabac_p16x16,
     }
 
 
@@ -673,6 +699,7 @@ def main() -> int:
             ipcm_sad_threshold=case.ipcm_sad_threshold,
             inter_sad_threshold=case.inter_sad_threshold,
             enable_cabac_pskip=case.enable_cabac_pskip,
+            enable_cabac_p16x16=case.enable_cabac_p16x16,
             luma_log2_weight_denom=case.luma_log2_weight_denom,
             luma_weight=case.luma_weight,
             luma_offset=case.luma_offset,
@@ -769,6 +796,11 @@ def main() -> int:
             raise RuntimeError(
                 f"{case.name} expected at least {case.require_direct_l1src_min} B_DIRECT macroblocks "
                 f"derived from colocated List1, saw {b_mode_summary.get('total_direct_l1src', 0)}"
+            )
+        if b_mode_summary.get("total_cabac_p16x16", 0) < case.require_cabac_p16x16_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_cabac_p16x16_min} CABAC P_L0_16x16 macroblocks, "
+                f"saw {b_mode_summary.get('total_cabac_p16x16', 0)}"
             )
 
         result = {

@@ -23,6 +23,7 @@ PSKIP_RE = re.compile(
     r"b_l0_refgt0_mbs=(?P<b_l0_refgt0>\d+)\s+"
     r"b_direct_refgt0_mbs=(?P<b_direct_refgt0>\d+)"
     r"(?:\s+b_direct_l1src_mbs=(?P<b_direct_l1src>\d+))?"
+    r"(?:\s+cabac_p16x16_mbs=(?P<cabac_p16x16>\d+))?"
 )
 DECODE_ERROR_PATTERNS = (
     "error while decoding",
@@ -73,6 +74,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     frames_with_l0_refgt0 = 0
     frames_with_direct_refgt0 = 0
     frames_with_direct_l1src = 0
+    frames_with_cabac_p16x16 = 0
     max_skip = 0
     max_l1 = 0
     max_bi = 0
@@ -80,6 +82,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     max_l0_refgt0 = 0
     max_direct_refgt0 = 0
     max_direct_l1src = 0
+    max_cabac_p16x16 = 0
     total_skip = 0
     total_l1 = 0
     total_bi = 0
@@ -87,6 +90,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     total_l0_refgt0 = 0
     total_direct_refgt0 = 0
     total_direct_l1src = 0
+    total_cabac_p16x16 = 0
 
     for match in PSKIP_RE.finditer(sim_log):
         skip = int(match.group("skip"))
@@ -96,6 +100,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         l0_refgt0 = int(match.group("b_l0_refgt0"))
         direct_refgt0 = int(match.group("b_direct_refgt0"))
         direct_l1src = int(match.group("b_direct_l1src") or 0)
+        cabac_p16x16 = int(match.group("cabac_p16x16") or 0)
         total_skip += skip
         total_l1 += l1
         total_bi += bi
@@ -103,6 +108,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         total_l0_refgt0 += l0_refgt0
         total_direct_refgt0 += direct_refgt0
         total_direct_l1src += direct_l1src
+        total_cabac_p16x16 += cabac_p16x16
         if skip:
             frames_with_skip += 1
         if l1:
@@ -117,6 +123,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
             frames_with_direct_refgt0 += 1
         if direct_l1src:
             frames_with_direct_l1src += 1
+        if cabac_p16x16:
+            frames_with_cabac_p16x16 += 1
         max_skip = max(max_skip, skip)
         max_l1 = max(max_l1, l1)
         max_bi = max(max_bi, bi)
@@ -124,6 +132,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         max_l0_refgt0 = max(max_l0_refgt0, l0_refgt0)
         max_direct_refgt0 = max(max_direct_refgt0, direct_refgt0)
         max_direct_l1src = max(max_direct_l1src, direct_l1src)
+        max_cabac_p16x16 = max(max_cabac_p16x16, cabac_p16x16)
 
     return {
         "frames_with_skip": frames_with_skip,
@@ -133,6 +142,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "frames_with_l0_refgt0": frames_with_l0_refgt0,
         "frames_with_direct_refgt0": frames_with_direct_refgt0,
         "frames_with_direct_l1src": frames_with_direct_l1src,
+        "frames_with_cabac_p16x16": frames_with_cabac_p16x16,
         "max_skip": max_skip,
         "max_l1": max_l1,
         "max_bi": max_bi,
@@ -140,6 +150,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "max_l0_refgt0": max_l0_refgt0,
         "max_direct_refgt0": max_direct_refgt0,
         "max_direct_l1src": max_direct_l1src,
+        "max_cabac_p16x16": max_cabac_p16x16,
         "total_skip": total_skip,
         "total_l1": total_l1,
         "total_bi": total_bi,
@@ -147,6 +158,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "total_l0_refgt0": total_l0_refgt0,
         "total_direct_refgt0": total_direct_refgt0,
         "total_direct_l1src": total_direct_l1src,
+        "total_cabac_p16x16": total_cabac_p16x16,
     }
 
 
@@ -354,6 +366,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--ipcm-sad-threshold", type=int, default=18000)
     parser.add_argument("--inter-sad-threshold", type=int, default=8000)
     parser.add_argument("--enable-cabac-pskip", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--enable-cabac-p16x16", type=int, choices=(0, 1), default=0)
     parser.add_argument("--luma-log2-weight-denom", type=int, default=0)
     parser.add_argument("--luma-weight", type=int, default=1)
     parser.add_argument("--luma-offset", type=int, default=0)
@@ -430,6 +443,7 @@ def main() -> int:
         ipcm_sad_threshold=args.ipcm_sad_threshold,
         inter_sad_threshold=args.inter_sad_threshold,
         enable_cabac_pskip=args.enable_cabac_pskip,
+        enable_cabac_p16x16=args.enable_cabac_p16x16,
         luma_log2_weight_denom=args.luma_log2_weight_denom,
         luma_weight=args.luma_weight,
         luma_offset=args.luma_offset,

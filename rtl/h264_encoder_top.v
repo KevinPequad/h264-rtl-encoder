@@ -18,6 +18,7 @@ module h264_encoder_top #(
     parameter ENABLE_P_IPCM = 0,
     parameter INTER_SAD_THRESHOLD = 8000,
     parameter ENABLE_CABAC_PSKIP = 0,
+    parameter ENABLE_CABAC_P16X16 = 0,
     parameter WEIGHTED_PRED_ENABLE = 0,
     parameter LUMA_LOG2_WEIGHT_DENOM = 0,
     parameter integer LUMA_WEIGHT = 1,
@@ -252,6 +253,10 @@ module h264_encoder_top #(
     reg signed [7:0] top_mvy [0:MB_COLS-1];  // Top row MV y
     reg signed [7:0] left_mvx;        // Left MB MV x
     reg signed [7:0] left_mvy;        // Left MB MV y
+    reg [6:0] top_mvd_abs_x [0:MB_COLS-1];
+    reg [6:0] top_mvd_abs_y [0:MB_COLS-1];
+    reg [6:0] left_mvd_abs_x;
+    reg [6:0] left_mvd_abs_y;
     reg signed [7:0] top_mvx_l1 [0:MB_COLS-1];
     reg signed [7:0] top_mvy_l1 [0:MB_COLS-1];
     reg signed [7:0] left_mvx_l1;
@@ -424,6 +429,7 @@ module h264_encoder_top #(
     reg [15:0] frame_b_l0_nonzero_ref_mb_count;
     reg [15:0] frame_b_direct_nonzero_ref_mb_count;
     reg [15:0] frame_b_direct_from_l1_mb_count;
+    reg [15:0] frame_cabac_p16x16_mb_count;
 
     // Reference-bank MB metadata for colocated/direct derivation.
     reg        refmeta_is_intra [0:4][0:TOTAL_MBS-1];
@@ -462,7 +468,8 @@ module h264_encoder_top #(
     reg         bskip_syntax_eligible_reg;
     reg [1:0]   cabac_skip_ctx_reg;
 
-    wire        cabac_feature_enable_w = (ENABLE_CABAC_PSKIP != 0);
+    wire        cabac_feature_enable_w = (ENABLE_CABAC_PSKIP != 0) || (ENABLE_CABAC_P16X16 != 0);
+    wire        cabac_p16x16_enable_w = (ENABLE_CABAC_P16X16 != 0);
     wire        cabac_slice_enable_w = cabac_feature_enable_w && is_p_frame;
 
     // Neighbor storage
@@ -645,6 +652,51 @@ module h264_encoder_top #(
             apply_chroma_cr_weight = clip_weighted_sample(weighted_sample);
         end
     endfunction
+
+    function automatic [6:0] cap_abs_mvd;
+        input signed [8:0] mvd_in;
+        reg [8:0] abs_i;
+        begin
+            abs_i = mvd_in[8] ? (~mvd_in + 9'd1) : mvd_in;
+            if (abs_i > 9'd66)
+                cap_abs_mvd = 7'd66;
+            else
+                cap_abs_mvd = abs_i[6:0];
+        end
+    endfunction
+
+    function automatic [1:0] cabac_mvd_ctx_class;
+        input [6:0] left_abs_i;
+        input [6:0] top_abs_i;
+        integer sum_i;
+        begin
+            sum_i = left_abs_i + top_abs_i;
+            cabac_mvd_ctx_class = {1'b0, (sum_i > 2)} + {1'b0, (sum_i > 32)};
+        end
+    endfunction
+
+    wire [6:0] cabac_left_mvd_abs_x_w = mb_left_avail ? left_mvd_abs_x : 7'd0;
+    wire [6:0] cabac_left_mvd_abs_y_w = mb_left_avail ? left_mvd_abs_y : 7'd0;
+    wire [6:0] cabac_top_mvd_abs_x_w = mb_top_avail ? top_mvd_abs_x[mb_x] : 7'd0;
+    wire [6:0] cabac_top_mvd_abs_y_w = mb_top_avail ? top_mvd_abs_y[mb_x] : 7'd0;
+    wire [1:0] cabac_mvd_ctx_x_w = cabac_mvd_ctx_class(cabac_left_mvd_abs_x_w, cabac_top_mvd_abs_x_w);
+    wire [1:0] cabac_mvd_ctx_y_w = cabac_mvd_ctx_class(cabac_left_mvd_abs_y_w, cabac_top_mvd_abs_y_w);
+    wire [1:0] cabac_cbp_luma_ctx0_sel_w = {!mb_top_avail, !mb_left_avail};
+    wire [1:0] cabac_cbp_luma_ctx1_sel_w = {!mb_top_avail, 1'b0};
+    wire [1:0] cabac_cbp_luma_ctx2_sel_w = {1'b0, !mb_left_avail};
+    wire        cabac_zero_cbp_p16x16_eligible_w =
+        cabac_p16x16_enable_w &&
+        is_p_frame &&
+        is_inter_mb_reg &&
+        !use_weighted_pred_w &&
+        (slice_num_ref_idx_l0_active_minus1 == 2'd0) &&
+        (mb_ref_idx_reg == 2'd0) &&
+        (mvd_x_l0_w == 9'sd0) &&
+        (mvd_y_l0_w == 9'sd0);
+    wire        cabac_non_skip_subset_ok_w =
+        cabac_zero_cbp_p16x16_eligible_w &&
+        !mb_has_residual &&
+        !is_skip_mb_reg;
 
     function [BD-1:0] apply_luma_bi_weight;
         input [BD-1:0] sample0_in;
@@ -2007,6 +2059,10 @@ pred_buf = {(256*BD){1'b0}};
         .mb_ref_idx_l0(mb_ref_idx_reg), .mb_ref_idx_l1(mb_ref_idx_l1_reg),
         .mvd_x_l0(mvd_x_l0_w), .mvd_y_l0(mvd_y_l0_w),
         .mvd_x_l1(mvd_x_l1_w), .mvd_y_l1(mvd_y_l1_w),
+        .cabac_mvd_ctx_x(cabac_mvd_ctx_x_w), .cabac_mvd_ctx_y(cabac_mvd_ctx_y_w),
+        .cabac_cbp_luma_ctx0_sel(cabac_cbp_luma_ctx0_sel_w),
+        .cabac_cbp_luma_ctx1_sel(cabac_cbp_luma_ctx1_sel_w),
+        .cabac_cbp_luma_ctx2_sel(cabac_cbp_luma_ctx2_sel_w),
         .slice_num_ref_idx_l0_active_minus1(slice_num_ref_idx_l0_active_minus1),
         .hold_fifo_drain(bs_hold_fifo_drain), .is_intra16_mb(is_intra16_mb_hdr), .is_ipcm_mb(is_ipcm_mb_hdr), .intra_mb_type_code_num(intra_mb_type_code_num),
         .intra_pred_bits(intra_pred_bits_mb), .intra_pred_count(intra_pred_count_mb),
@@ -2046,6 +2102,7 @@ pred_buf = {(256*BD){1'b0}};
             ref_mem_wr_en <= 1'b0; ref_mem_wr_addr <= 20'd0; ref_mem_wr_data <= {BD{1'b0}};
             mvp_x <= 8'sd0; mvp_y <= 8'sd0; mvp_x_l0 <= 8'sd0; mvp_y_l0 <= 8'sd0; mvp_x_l1 <= 8'sd0; mvp_y_l1 <= 8'sd0;
             left_mvx <= 8'sd0; left_mvy <= 8'sd0; left_mvx_l1 <= 8'sd0; left_mvy_l1 <= 8'sd0;
+            left_mvd_abs_x <= 7'd0; left_mvd_abs_y <= 7'd0;
             left_is_inter <= 1'b0; left_is_skip <= 1'b0; left_is_inter_l1 <= 1'b0; left_is_b_l1 <= 1'b0; left_is_i16 <= 1'b0; left_ref_idx <= 2'd0; left_ref_idx_l1 <= 2'd0; left_mb_i16dc_nz <= 5'd0;
             diag_mvx <= 8'sd0; diag_mvy <= 8'sd0; diag_mvx_l1 <= 8'sd0; diag_mvy_l1 <= 8'sd0; diag_is_inter <= 1'b0; diag_is_inter_l1 <= 1'b0; diag_is_b_l1 <= 1'b0; diag_ref_idx <= 2'd0; diag_ref_idx_l1 <= 2'd0;
             mb_ref_idx_reg <= 2'd0; mb_ref_idx_l1_reg <= 2'd0; me_search_pass <= 2'd0;
@@ -2060,8 +2117,11 @@ pred_buf = {(256*BD){1'b0}};
                 b_l0_pass_sad[idx_rb] <= 18'd0;
                 b_l0_pass_ref_mb[idx_rb] <= {(256*BD){1'b0}};
             end
-            for (idx_rb = 0; idx_rb < MB_COLS; idx_rb = idx_rb + 1)
+            for (idx_rb = 0; idx_rb < MB_COLS; idx_rb = idx_rb + 1) begin
                 top_is_skip[idx_rb] <= 1'b0;
+                top_mvd_abs_x[idx_rb] <= 7'd0;
+                top_mvd_abs_y[idx_rb] <= 7'd0;
+            end
             chr_dc_start <= 1'b0; chr_dc_inverse <= 1'b0;
             i16_dc_start <= 1'b0; i16_dc_inverse <= 1'b0;
             chr_phase <= 3'd0; chr_blk <= {CHR_BLK_W{1'b0}}; chr_is_cr <= 1'b0; luma16_phase <= 3'd0; luma16_blk <= 4'd0;
@@ -2116,6 +2176,7 @@ pred_buf = {(256*BD){1'b0}};
             frame_b_l0_nonzero_ref_mb_count <= 16'd0;
             frame_b_direct_nonzero_ref_mb_count <= 16'd0;
             frame_b_direct_from_l1_mb_count <= 16'd0;
+            frame_cabac_p16x16_mb_count <= 16'd0;
             for (meta_bank_i = 0; meta_bank_i < 5; meta_bank_i = meta_bank_i + 1) begin
                 for (meta_mb_i = 0; meta_mb_i < TOTAL_MBS; meta_mb_i = meta_mb_i + 1) begin
                     refmeta_is_intra[meta_bank_i][meta_mb_i] = 1'b1;
@@ -2167,6 +2228,7 @@ pred_buf = {(256*BD){1'b0}};
                     frame_b_l0_nonzero_ref_mb_count <= 16'd0;
                     frame_b_direct_nonzero_ref_mb_count <= 16'd0;
                     frame_b_direct_from_l1_mb_count <= 16'd0;
+                    frame_cabac_p16x16_mb_count <= 16'd0;
                     left_is_skip <= 1'b0;
                     cabac_skip_ctx_reg <= 2'd0;
                     for (idx_rb = 0; idx_rb < MB_COLS; idx_rb = idx_rb + 1)
@@ -3705,14 +3767,16 @@ pred_buf = {(256*BD){1'b0}};
 
                 TS_DEFER_MB_HDR: if (!bs_busy) begin
                     cabac_skip_ctx_reg <= {1'b0, left_is_skip} + {1'b0, top_is_skip[mb_x]};
-                    if (cabac_slice_enable_w)
+                    if (cabac_slice_enable_w && !is_skip_mb_reg && !cabac_non_skip_subset_ok_w)
                         $fatal(1,
-                               "[CABAC_PSKIP] Unsupported non-skip MB at frame_num=%0d mb=(%0d,%0d) inter=%0d residual=%0d skip=%0d pskip_eligible=%0d bskip_eligible=%0d ref=%0d mv=(%0d,%0d) fullpel_mv=(%0d,%0d)",
+                               "[CABAC_PSUBSET] Unsupported non-skip MB at frame_num=%0d mb=(%0d,%0d) inter=%0d residual=%0d skip=%0d pskip_eligible=%0d bskip_eligible=%0d ref=%0d mv=(%0d,%0d) mvd=(%0d,%0d) fullpel_mv=(%0d,%0d) refs=%0d",
                                cur_frame_num, mb_x, mb_y,
                                is_inter_mb_reg, mb_has_residual, is_skip_mb_reg,
                                pskip_syntax_eligible_reg, bskip_syntax_eligible_reg,
                                mb_ref_idx_reg, me_best_mvx_l0, me_best_mvy_l0,
-                               me_fullpel_mvx, me_fullpel_mvy);
+                               $signed(mvd_x_l0_w), $signed(mvd_y_l0_w),
+                               me_fullpel_mvx, me_fullpel_mvy,
+                               slice_num_ref_idx_l0_active_minus1 + 2'd1);
                     // Emit the buffered macroblock header while FIFO drain is
                     // still held so the header stays ahead of this MB's
                     // deferred residual payload.
@@ -3799,8 +3863,21 @@ pred_buf = {(256*BD){1'b0}};
                         frame_b_direct_nonzero_ref_mb_count <= frame_b_direct_nonzero_ref_mb_count + 16'd1;
                     if (is_b_frame && is_inter_mb_reg && is_b_direct_mb_reg && is_b_direct_from_l1_reg)
                         frame_b_direct_from_l1_mb_count <= frame_b_direct_from_l1_mb_count + 16'd1;
+                    if (cabac_non_skip_subset_ok_w)
+                        frame_cabac_p16x16_mb_count <= frame_cabac_p16x16_mb_count + 16'd1;
                     top_is_skip[mb_x] <= is_skip_mb_reg;
                     left_is_skip <= is_skip_mb_reg;
+                    if (is_inter_mb_reg && !is_b_frame && !is_skip_mb_reg) begin
+                        top_mvd_abs_x[mb_x] <= cap_abs_mvd(mvd_x_l0_w);
+                        top_mvd_abs_y[mb_x] <= cap_abs_mvd(mvd_y_l0_w);
+                        left_mvd_abs_x <= cap_abs_mvd(mvd_x_l0_w);
+                        left_mvd_abs_y <= cap_abs_mvd(mvd_y_l0_w);
+                    end else begin
+                        top_mvd_abs_x[mb_x] <= 7'd0;
+                        top_mvd_abs_y[mb_x] <= 7'd0;
+                        left_mvd_abs_x <= 7'd0;
+                        left_mvd_abs_y <= 7'd0;
+                    end
                     refmeta_is_intra[current_write_bank][mb_count] <= !is_inter_mb_reg;
                     refmeta_has_l0[current_write_bank][mb_count] <= is_inter_mb_reg &&
                                                                   (!is_b_frame || !is_b_l1_mb_reg || is_b_bi_mb_reg);
@@ -4110,12 +4187,13 @@ pred_buf = {(256*BD){1'b0}};
                                 if (skip_probe_pending) begin
                                     skip_probe_pending <= 1'b0;
                                     if (skip_chroma_exact_i) begin
-                                        is_skip_mb_reg <= 1'b1;
+                                        is_skip_mb_reg <= cabac_zero_cbp_p16x16_eligible_w ? 1'b0 : 1'b1;
                                         mb_has_residual <= 1'b0;
                                         recon_buf <= inter_pred_buf;
                                         chr_recon_cb <= interp_cb_i;
                                         chr_recon_cr <= interp_cr_i;
-                                        top_state <= TS_SKIP_MB_HDR;
+                                        top_state <= cabac_zero_cbp_p16x16_eligible_w ? TS_SKIP_CLR_FIFO :
+                                                                                       TS_SKIP_MB_HDR;
                                     end else begin
                                         top_state <= TS_MB_HDR;
                                     end
@@ -4295,7 +4373,8 @@ pred_buf = {(256*BD){1'b0}};
                                                 end
                                                 mb_has_residual <= mb_nonzero_i;
                                                 if (!mb_nonzero_i) begin
-                                                    is_skip_mb_reg <= pskip_syntax_eligible_reg || bskip_syntax_eligible_reg;
+                                                    is_skip_mb_reg <= cabac_zero_cbp_p16x16_eligible_w ? 1'b0 :
+                                                                      (pskip_syntax_eligible_reg || bskip_syntax_eligible_reg);
                                                     top_state <= TS_SKIP_CLR_FIFO;
                                                 end else begin
                                                     top_state <= TS_DEFER_MB_HDR;
@@ -4764,7 +4843,8 @@ pred_buf = {(256*BD){1'b0}};
                                                 end
                                                 mb_has_residual <= mb_nonzero_i;
                                                 if (!mb_nonzero_i) begin
-                                                    is_skip_mb_reg <= pskip_syntax_eligible_reg || bskip_syntax_eligible_reg;
+                                                    is_skip_mb_reg <= cabac_zero_cbp_p16x16_eligible_w ? 1'b0 :
+                                                                      (pskip_syntax_eligible_reg || bskip_syntax_eligible_reg);
                                                     top_state <= TS_SKIP_CLR_FIFO;
                                                 end else begin
                                                     top_state <= TS_DEFER_MB_HDR;
@@ -4894,8 +4974,8 @@ pred_buf = {(256*BD){1'b0}};
                          else if (!flush_accepted) flush_accepted <= 1'b1;
                          else if (bs_cmd_done) begin
                              done <= 1'b1;
-                            $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d",
-                                     cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count);
+                            $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d",
+                                     cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count);
                              refbank_poc_lsb[current_write_bank] <= cur_pic_order_cnt_lsb;
                             if (is_p_frame) begin
                                 refbank_has_l0_ref0[current_write_bank] <= (valid_ref_count != 3'd0);

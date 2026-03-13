@@ -392,9 +392,10 @@ The testbench must not:
   - Reference-frame writeback for reconstructed luma
   - Reference-frame writeback for reconstructed chroma
   - Standalone CABAC arithmetic coding core in `rtl/h264_cabac_core.v`, plus
-    a current final-path CABAC subset for skip-only P slices with dual PPS
-    emission, CABAC slice-header fields, CABAC-coded `mb_skip_flag`, and
-    CABAC-coded `end_of_slice_flag`
+    a current final-path CABAC subset for skip-capable P slices with dual PPS
+    emission, CABAC slice-header fields, CABAC-coded `mb_skip_flag`,
+    CABAC-coded `end_of_slice_flag`, and an explicit single-ref / zero-CBP /
+    zero-MVD `P_L0_16x16` subset
   - Parameterized resolution
   - Parameterized bit depth
   - Parameterized chroma format
@@ -433,8 +434,9 @@ The testbench must not:
   - Annex B bitstream generation owned by RTL
   - SPS / PPS / slice-header / macroblock-header ownership in RTL
   - CAVLC entropy path owned by RTL
-  - Current CABAC final-path subset on skip-only P slices, with CABAC PPS
-    selection, CABAC-coded `mb_skip_flag`, and CABAC-coded `end_of_slice_flag`
+  - Current CABAC final-path subset on skip-capable P slices, with CABAC PPS
+    selection, CABAC-coded `mb_skip_flag`, CABAC-coded `end_of_slice_flag`,
+    and an explicit single-ref / zero-CBP / zero-MVD `P_L0_16x16` subset
   - I-picture and P-picture coding
   - Non-reference `B`-picture syntax on the current intra / `I_PCM` path
   - Limited non-reference `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` inter
@@ -565,6 +567,10 @@ The testbench must not:
     `234,131` cycles, `473` bytes, `Main` profile, exact-reference flat clip,
     `output/validation_cabac_pskip_ipcmidr_32x16_4f.h264`, and
     `output/validation_cabac_pskip_ipcmidr_32x16_4f.mp4`
+  - strict FFmpeg-decodable explicit CABAC `P_L0_16x16` zero-CBP /
+    single-ref / zero-MVD smoke at `32x16`, `2` frames, `47,268` cycles,
+    `74` bytes, `Main` profile, `output/smoke_32x16_2f_cabac_p16x16.h264`,
+    and `b_mode_summary.total_cabac_p16x16 = 2`
   - strict current-tree validation at `320x176`, `10` frames,
     `253,064,186` cycles, RTL PSNR avg `45.745576`, RTL SSIM all `0.994893`,
     `output/validation_tefix_320x176_10f.h264`, and
@@ -1063,8 +1069,9 @@ The testbench must not:
 
 - Important missing features, so this does not get confused with a full-standard
   H.264 encoder yet:
-  - No full CABAC syntax/context integration beyond the current skip-only
-    P-slice subset yet
+  - No full CABAC syntax/context integration beyond the current skip-capable
+    plus explicit zero-CBP / single-ref / zero-MVD `P_L0_16x16` P-slice
+    subset yet
   - No broader `B` / `BREF` picture support beyond the current limited
     reordered dual-list `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` `16x16`
     path

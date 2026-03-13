@@ -58,6 +58,11 @@ module h264_bitstream #(
     input  wire signed [8:0] mvd_y_l0,
     input  wire signed [8:0] mvd_x_l1,
     input  wire signed [8:0] mvd_y_l1,
+    input  wire [1:0]  cabac_mvd_ctx_x,
+    input  wire [1:0]  cabac_mvd_ctx_y,
+    input  wire [1:0]  cabac_cbp_luma_ctx0_sel,
+    input  wire [1:0]  cabac_cbp_luma_ctx1_sel,
+    input  wire [1:0]  cabac_cbp_luma_ctx2_sel,
     input  wire [1:0]  slice_num_ref_idx_l0_active_minus1,
     input  wire        hold_fifo_drain,
     input  wire        is_intra16_mb,
@@ -303,6 +308,22 @@ module h264_bitstream #(
     reg [6:0]  cabac_skip_ctx_state_1;
     reg [6:0]  cabac_skip_ctx_state_2;
     reg [1:0]  cabac_pending_skip_ctx_idx;
+    reg [6:0]  cabac_mb_type_ctx_state_14;
+    reg [6:0]  cabac_mb_type_ctx_state_15;
+    reg [6:0]  cabac_mb_type_ctx_state_16;
+    reg [6:0]  cabac_mvdx_ctx_state_0;
+    reg [6:0]  cabac_mvdx_ctx_state_1;
+    reg [6:0]  cabac_mvdx_ctx_state_2;
+    reg [6:0]  cabac_mvdy_ctx_state_0;
+    reg [6:0]  cabac_mvdy_ctx_state_1;
+    reg [6:0]  cabac_mvdy_ctx_state_2;
+    reg [6:0]  cabac_cbp_luma_ctx_state_73;
+    reg [6:0]  cabac_cbp_luma_ctx_state_74;
+    reg [6:0]  cabac_cbp_luma_ctx_state_75;
+    reg [6:0]  cabac_cbp_luma_ctx_state_76;
+    reg [6:0]  cabac_cbp_chroma_ctx_state_77;
+    reg [3:0]  cabac_pending_ctx_kind;
+    reg [1:0]  cabac_pending_ctx_sel;
     reg        cabac_start;
     reg        cabac_bin_valid;
     reg        cabac_bin_value;
@@ -318,6 +339,21 @@ module h264_bitstream #(
     wire [6:0] cabac_ctx_state_out;
     wire       cabac_done;
     wire       cabac_active;
+
+    localparam DEBUG_CABAC_P16X16 = 1'b0;
+
+    localparam [3:0] CABAC_CTX_NONE      = 4'd0;
+    localparam [3:0] CABAC_CTX_SKIP      = 4'd1;
+    localparam [3:0] CABAC_CTX_MBTYPE14  = 4'd2;
+    localparam [3:0] CABAC_CTX_MBTYPE15  = 4'd3;
+    localparam [3:0] CABAC_CTX_MBTYPE16  = 4'd4;
+    localparam [3:0] CABAC_CTX_MVDX      = 4'd5;
+    localparam [3:0] CABAC_CTX_MVDY      = 4'd6;
+    localparam [3:0] CABAC_CTX_CBP0      = 4'd7;
+    localparam [3:0] CABAC_CTX_CBP1      = 4'd8;
+    localparam [3:0] CABAC_CTX_CBP2      = 4'd9;
+    localparam [3:0] CABAC_CTX_CBP3      = 4'd10;
+    localparam [3:0] CABAC_CTX_CBPCHROMA = 4'd11;
 
     function automatic [6:0] cabac_init_state;
         input integer m;
@@ -561,6 +597,22 @@ module h264_bitstream #(
             cabac_skip_ctx_state_1 <= 7'd0;
             cabac_skip_ctx_state_2 <= 7'd0;
             cabac_pending_skip_ctx_idx <= 2'd0;
+            cabac_mb_type_ctx_state_14 <= 7'd0;
+            cabac_mb_type_ctx_state_15 <= 7'd0;
+            cabac_mb_type_ctx_state_16 <= 7'd0;
+            cabac_mvdx_ctx_state_0 <= 7'd0;
+            cabac_mvdx_ctx_state_1 <= 7'd0;
+            cabac_mvdx_ctx_state_2 <= 7'd0;
+            cabac_mvdy_ctx_state_0 <= 7'd0;
+            cabac_mvdy_ctx_state_1 <= 7'd0;
+            cabac_mvdy_ctx_state_2 <= 7'd0;
+            cabac_cbp_luma_ctx_state_73 <= 7'd0;
+            cabac_cbp_luma_ctx_state_74 <= 7'd0;
+            cabac_cbp_luma_ctx_state_75 <= 7'd0;
+            cabac_cbp_luma_ctx_state_76 <= 7'd0;
+            cabac_cbp_chroma_ctx_state_77 <= 7'd0;
+            cabac_pending_ctx_kind <= CABAC_CTX_NONE;
+            cabac_pending_ctx_sel <= 2'd0;
             cabac_start <= 1'b0;
             cabac_bin_valid <= 1'b0;
             cabac_bin_value <= 1'b0;
@@ -575,6 +627,48 @@ module h264_bitstream #(
             cabac_bin_value <= 1'b0;
             cabac_bin_bypass <= 1'b0;
             cabac_bin_terminate <= 1'b0;
+
+            if (cabac_ctx_state_wr) begin
+                case (cabac_pending_ctx_kind)
+                    CABAC_CTX_SKIP: begin
+                        case (cabac_pending_ctx_sel)
+                            2'd0: cabac_skip_ctx_state_0 <= cabac_ctx_state_out;
+                            2'd1: cabac_skip_ctx_state_1 <= cabac_ctx_state_out;
+                            default: cabac_skip_ctx_state_2 <= cabac_ctx_state_out;
+                        endcase
+                    end
+                    CABAC_CTX_MBTYPE14: cabac_mb_type_ctx_state_14 <= cabac_ctx_state_out;
+                    CABAC_CTX_MBTYPE15: cabac_mb_type_ctx_state_15 <= cabac_ctx_state_out;
+                    CABAC_CTX_MBTYPE16: cabac_mb_type_ctx_state_16 <= cabac_ctx_state_out;
+                    CABAC_CTX_MVDX: begin
+                        case (cabac_pending_ctx_sel)
+                            2'd0: cabac_mvdx_ctx_state_0 <= cabac_ctx_state_out;
+                            2'd1: cabac_mvdx_ctx_state_1 <= cabac_ctx_state_out;
+                            default: cabac_mvdx_ctx_state_2 <= cabac_ctx_state_out;
+                        endcase
+                    end
+                    CABAC_CTX_MVDY: begin
+                        case (cabac_pending_ctx_sel)
+                            2'd0: cabac_mvdy_ctx_state_0 <= cabac_ctx_state_out;
+                            2'd1: cabac_mvdy_ctx_state_1 <= cabac_ctx_state_out;
+                            default: cabac_mvdy_ctx_state_2 <= cabac_ctx_state_out;
+                        endcase
+                    end
+                    CABAC_CTX_CBP0,
+                    CABAC_CTX_CBP1,
+                    CABAC_CTX_CBP2: begin
+                        case (cabac_pending_ctx_sel)
+                            2'd0: cabac_cbp_luma_ctx_state_76 <= cabac_ctx_state_out;
+                            2'd1: cabac_cbp_luma_ctx_state_75 <= cabac_ctx_state_out;
+                            2'd2: cabac_cbp_luma_ctx_state_74 <= cabac_ctx_state_out;
+                            default: cabac_cbp_luma_ctx_state_73 <= cabac_ctx_state_out;
+                        endcase
+                    end
+                    CABAC_CTX_CBP3: cabac_cbp_luma_ctx_state_76 <= cabac_ctx_state_out;
+                    CABAC_CTX_CBPCHROMA: cabac_cbp_chroma_ctx_state_77 <= cabac_ctx_state_out;
+                    default: begin end
+                endcase
+            end
 
             // Push to FIFO on valid (if full, we drop, but 64 entries should be plenty)
             if (cavlc_valid && cavlc_count > 6'd0) begin
@@ -620,7 +714,7 @@ module h264_bitstream #(
                         end else if (cmd_write_pps) begin
                             state <= S_PPS; sub <= 6'd0; busy <= 1'b1; pps_secondary_active <= 1'b0;
                         end else if (cmd_write_slice_hdr) begin
-                            state <= S_SLICE; sub <= 6'd0; busy <= 1'b1; cabac_slice_active <= cabac_slice_enable; cabac_mb_counter <= 12'd0;
+                            state <= S_SLICE; sub <= 6'd0; busy <= 1'b1; cabac_slice_active <= cabac_slice_enable; cabac_mb_counter <= 12'd0; cabac_pending_ctx_kind <= CABAC_CTX_NONE; cabac_pending_ctx_sel <= 2'd0;
                         end else if (cmd_write_mb_header) begin
                             state <= S_MB_HDR; sub <= 6'd0; busy <= 1'b1; ipcm_sample_idx <= 10'd0;
                         end else if (cmd_write_trailing) begin
@@ -1130,6 +1224,20 @@ module h264_bitstream #(
                                     cabac_skip_ctx_state_0 <= cabac_pskip_ctx_init(2'd0);
                                     cabac_skip_ctx_state_1 <= cabac_pskip_ctx_init(2'd1);
                                     cabac_skip_ctx_state_2 <= cabac_pskip_ctx_init(2'd2);
+                                    cabac_mb_type_ctx_state_14 <= cabac_init_state(1, 9, 26);
+                                    cabac_mb_type_ctx_state_15 <= cabac_init_state(0, 49, 26);
+                                    cabac_mb_type_ctx_state_16 <= cabac_init_state(-37, 118, 26);
+                                    cabac_mvdx_ctx_state_0 <= cabac_init_state(-3, 69, 26);
+                                    cabac_mvdx_ctx_state_1 <= cabac_init_state(-6, 81, 26);
+                                    cabac_mvdx_ctx_state_2 <= cabac_init_state(-11, 96, 26);
+                                    cabac_mvdy_ctx_state_0 <= cabac_init_state(0, 58, 26);
+                                    cabac_mvdy_ctx_state_1 <= cabac_init_state(-3, 76, 26);
+                                    cabac_mvdy_ctx_state_2 <= cabac_init_state(-10, 94, 26);
+                                    cabac_cbp_luma_ctx_state_73 <= cabac_init_state(-27, 126, 26);
+                                    cabac_cbp_luma_ctx_state_74 <= cabac_init_state(-28, 98, 26);
+                                    cabac_cbp_luma_ctx_state_75 <= cabac_init_state(-25, 101, 26);
+                                    cabac_cbp_luma_ctx_state_76 <= cabac_init_state(-23, 67, 26);
+                                    cabac_cbp_chroma_ctx_state_77 <= cabac_init_state(-28, 82, 26);
                                     cabac_start <= 1'b1;
                                 end
                                 cmd_done <= 1'b1;
@@ -1299,8 +1407,16 @@ module h264_bitstream #(
                         case (sub)
                             6'd0: begin
                                 if (cabac_slice_active) begin
-                                    if (!is_skip_mb) begin
-                                        $fatal(1, "[CABAC_PSKIP] Non-skip MB reached CABAC subset path");
+                                    if (!is_skip_mb &&
+                                        !(is_inter_mb && !is_b_slice && !mb_has_residual &&
+                                          (slice_num_ref_idx_l0_active_minus1 == 2'd0) &&
+                                          (mb_ref_idx_l0 == 2'd0) &&
+                                          (mvd_x_l0 == 9'sd0) && (mvd_y_l0 == 9'sd0))) begin
+                                        $fatal(1,
+                                               "[CABAC_PSUBSET] Unsupported CABAC MB inter=%0d skip=%0d residual=%0d ref=%0d mvd=(%0d,%0d) refs=%0d",
+                                               is_inter_mb, is_skip_mb, mb_has_residual, mb_ref_idx_l0,
+                                               $signed(mvd_x_l0), $signed(mvd_y_l0),
+                                               slice_num_ref_idx_l0_active_minus1 + 2'd1);
                                     end else if (cabac_mb_counter != 12'd0) begin
                                         cabac_bin_valid <= 1'b1;
                                         cabac_bin_value <= 1'b0;
@@ -1315,8 +1431,10 @@ module h264_bitstream #(
                                             default: cabac_ctx_state_in <= cabac_skip_ctx_state_2;
                                         endcase
                                         cabac_pending_skip_ctx_idx <= cabac_skip_ctx;
+                                        cabac_pending_ctx_kind <= CABAC_CTX_SKIP;
+                                        cabac_pending_ctx_sel <= cabac_skip_ctx;
                                         cabac_bin_valid <= 1'b1;
-                                        cabac_bin_value <= 1'b1;
+                                        cabac_bin_value <= is_skip_mb;
                                         cabac_bin_bypass <= 1'b0;
                                         cabac_bin_terminate <= 1'b0;
                                         sub <= 6'd33;
@@ -1409,8 +1527,10 @@ module h264_bitstream #(
                                 state    <= S_IDLE;
                             end
                             6'd32: begin
+                                if (DEBUG_CABAC_P16X16 && !is_skip_mb)
+                                    $display("[CABACDBG] mb=%0d sub=32 terminate0", cabac_mb_counter);
                                 if (cabac_bits_overflow)
-                                    $fatal(1, "[CABAC_PSKIP] CABAC terminate(0) bit overflow");
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC terminate(0) bit overflow");
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1420,6 +1540,9 @@ module h264_bitstream #(
                                 sub <= 6'd33;
                             end
                             6'd33: begin
+                                if (DEBUG_CABAC_P16X16 && !is_skip_mb)
+                                    $display("[CABACDBG] mb=%0d sub=33 skip ctx=%0d state=%0d bin=%0d",
+                                             cabac_mb_counter, cabac_skip_ctx, cabac_ctx_state_in, is_skip_mb);
                                 case (cabac_skip_ctx)
                                     2'd0: cabac_ctx_state_in <= cabac_skip_ctx_state_0;
                                     2'd1: cabac_ctx_state_in <= cabac_skip_ctx_state_1;
@@ -1427,31 +1550,267 @@ module h264_bitstream #(
                                 endcase
                                 cabac_pending_skip_ctx_idx <= cabac_skip_ctx;
                                 cabac_bin_valid <= 1'b1;
-                                cabac_bin_value <= 1'b1;
+                                cabac_bin_value <= is_skip_mb;
                                 cabac_bin_bypass <= 1'b0;
                                 cabac_bin_terminate <= 1'b0;
                                 sub <= 6'd34;
                             end
                             6'd34: begin
+                                if (DEBUG_CABAC_P16X16 && !is_skip_mb)
+                                    $display("[CABACDBG] mb=%0d sub=34 skip outstate=%0d bits_valid=%0d bits_count=%0d",
+                                             cabac_mb_counter, cabac_ctx_state_out, cabac_bits_valid, cabac_bits_count);
                                 if (cabac_bits_overflow)
-                                    $fatal(1, "[CABAC_PSKIP] CABAC skip-flag bit overflow");
-                                if (cabac_ctx_state_wr) begin
-                                    case (cabac_pending_skip_ctx_idx)
-                                        2'd0: cabac_skip_ctx_state_0 <= cabac_ctx_state_out;
-                                        2'd1: cabac_skip_ctx_state_1 <= cabac_ctx_state_out;
-                                        default: cabac_skip_ctx_state_2 <= cabac_ctx_state_out;
-                                    endcase
-                                end
-                                cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC skip-flag bit overflow");
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
                                     return_state <= S_MB_HDR;
                                 end
-                                sub <= 6'd35;
+                                if (is_skip_mb) begin
+                                    cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                    sub <= 6'd35;
+                                end else begin
+                                    cabac_ctx_state_in <= cabac_mb_type_ctx_state_14;
+                                    cabac_pending_ctx_kind <= CABAC_CTX_MBTYPE14;
+                                    cabac_pending_ctx_sel <= 2'd0;
+                                    cabac_bin_valid <= 1'b1;
+                                    cabac_bin_value <= 1'b0;
+                                    cabac_bin_bypass <= 1'b0;
+                                    cabac_bin_terminate <= 1'b0;
+                                    sub <= 6'd36;
+                                end
                             end
                             6'd35: begin
+                                cmd_done <= 1'b1;
+                                busy     <= 1'b0;
+                                state    <= S_IDLE;
+                            end
+                            6'd36: begin
+                                if (DEBUG_CABAC_P16X16)
+                                    $display("[CABACDBG] mb=%0d sub=36 mbtype14 state=%0d", cabac_mb_counter, cabac_mb_type_ctx_state_14);
+                                if (cabac_bits_overflow)
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC mb_type[14] bit overflow");
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                cabac_ctx_state_in <= cabac_mb_type_ctx_state_15;
+                                cabac_pending_ctx_kind <= CABAC_CTX_MBTYPE15;
+                                cabac_pending_ctx_sel <= 2'd0;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= 1'b0;
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                sub <= 6'd37;
+                            end
+                            6'd37: begin
+                                if (DEBUG_CABAC_P16X16)
+                                    $display("[CABACDBG] mb=%0d sub=37 mbtype15 state=%0d", cabac_mb_counter, cabac_mb_type_ctx_state_15);
+                                if (cabac_bits_overflow)
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC mb_type[15] bit overflow");
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                cabac_ctx_state_in <= cabac_mb_type_ctx_state_16;
+                                cabac_pending_ctx_kind <= CABAC_CTX_MBTYPE16;
+                                cabac_pending_ctx_sel <= 2'd0;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= 1'b0;
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                sub <= 6'd38;
+                            end
+                            6'd38: begin
+                                if (DEBUG_CABAC_P16X16)
+                                    $display("[CABACDBG] mb=%0d sub=38 mbtype16 state=%0d", cabac_mb_counter, cabac_mb_type_ctx_state_16);
+                                if (cabac_bits_overflow)
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC mb_type[16] bit overflow");
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                case (cabac_mvd_ctx_x)
+                                    2'd0: cabac_ctx_state_in <= cabac_mvdx_ctx_state_0;
+                                    2'd1: cabac_ctx_state_in <= cabac_mvdx_ctx_state_1;
+                                    default: cabac_ctx_state_in <= cabac_mvdx_ctx_state_2;
+                                endcase
+                                cabac_pending_ctx_kind <= CABAC_CTX_MVDX;
+                                cabac_pending_ctx_sel <= cabac_mvd_ctx_x;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= 1'b0;
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                sub <= 6'd39;
+                            end
+                            6'd39: begin
+                                if (DEBUG_CABAC_P16X16)
+                                    $display("[CABACDBG] mb=%0d sub=39 mvdx ctx=%0d state=%0d",
+                                             cabac_mb_counter, cabac_mvd_ctx_x, cabac_ctx_state_in);
+                                if (cabac_bits_overflow)
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC mvd_x bit overflow");
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                case (cabac_mvd_ctx_y)
+                                    2'd0: cabac_ctx_state_in <= cabac_mvdy_ctx_state_0;
+                                    2'd1: cabac_ctx_state_in <= cabac_mvdy_ctx_state_1;
+                                    default: cabac_ctx_state_in <= cabac_mvdy_ctx_state_2;
+                                endcase
+                                cabac_pending_ctx_kind <= CABAC_CTX_MVDY;
+                                cabac_pending_ctx_sel <= cabac_mvd_ctx_y;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= 1'b0;
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                sub <= 6'd40;
+                            end
+                            6'd40: begin
+                                if (DEBUG_CABAC_P16X16)
+                                    $display("[CABACDBG] mb=%0d sub=40 mvdy ctx=%0d state=%0d",
+                                             cabac_mb_counter, cabac_mvd_ctx_y, cabac_ctx_state_in);
+                                if (cabac_bits_overflow)
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC mvd_y bit overflow");
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                case (cabac_cbp_luma_ctx0_sel)
+                                    2'd0: cabac_ctx_state_in <= cabac_cbp_luma_ctx_state_76;
+                                    2'd1: cabac_ctx_state_in <= cabac_cbp_luma_ctx_state_75;
+                                    2'd2: cabac_ctx_state_in <= cabac_cbp_luma_ctx_state_74;
+                                    default: cabac_ctx_state_in <= cabac_cbp_luma_ctx_state_73;
+                                endcase
+                                cabac_pending_ctx_kind <= CABAC_CTX_CBP0;
+                                cabac_pending_ctx_sel <= cabac_cbp_luma_ctx0_sel;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= 1'b0;
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                sub <= 6'd41;
+                            end
+                            6'd41: begin
+                                if (DEBUG_CABAC_P16X16)
+                                    $display("[CABACDBG] mb=%0d sub=41 cbp0 sel=%0d state=%0d",
+                                             cabac_mb_counter, cabac_cbp_luma_ctx0_sel, cabac_ctx_state_in);
+                                if (cabac_bits_overflow)
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC cbp_luma[0] bit overflow");
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                case (cabac_cbp_luma_ctx1_sel)
+                                    2'd0: cabac_ctx_state_in <= (cabac_ctx_state_wr && (cabac_cbp_luma_ctx0_sel == 2'd0)) ? cabac_ctx_state_out : cabac_cbp_luma_ctx_state_76;
+                                    2'd1: cabac_ctx_state_in <= (cabac_ctx_state_wr && (cabac_cbp_luma_ctx0_sel == 2'd1)) ? cabac_ctx_state_out : cabac_cbp_luma_ctx_state_75;
+                                    2'd2: cabac_ctx_state_in <= (cabac_ctx_state_wr && (cabac_cbp_luma_ctx0_sel == 2'd2)) ? cabac_ctx_state_out : cabac_cbp_luma_ctx_state_74;
+                                    default: cabac_ctx_state_in <= (cabac_ctx_state_wr && (cabac_cbp_luma_ctx0_sel == 2'd3)) ? cabac_ctx_state_out : cabac_cbp_luma_ctx_state_73;
+                                endcase
+                                cabac_pending_ctx_kind <= CABAC_CTX_CBP1;
+                                cabac_pending_ctx_sel <= cabac_cbp_luma_ctx1_sel;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= 1'b0;
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                sub <= 6'd42;
+                            end
+                            6'd42: begin
+                                if (DEBUG_CABAC_P16X16)
+                                    $display("[CABACDBG] mb=%0d sub=42 cbp1 sel=%0d state=%0d",
+                                             cabac_mb_counter, cabac_cbp_luma_ctx1_sel, cabac_ctx_state_in);
+                                if (cabac_bits_overflow)
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC cbp_luma[1] bit overflow");
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                case (cabac_cbp_luma_ctx2_sel)
+                                    2'd0: cabac_ctx_state_in <= (cabac_ctx_state_wr && (cabac_cbp_luma_ctx1_sel == 2'd0)) ? cabac_ctx_state_out : cabac_cbp_luma_ctx_state_76;
+                                    2'd1: cabac_ctx_state_in <= (cabac_ctx_state_wr && (cabac_cbp_luma_ctx1_sel == 2'd1)) ? cabac_ctx_state_out : cabac_cbp_luma_ctx_state_75;
+                                    2'd2: cabac_ctx_state_in <= (cabac_ctx_state_wr && (cabac_cbp_luma_ctx1_sel == 2'd2)) ? cabac_ctx_state_out : cabac_cbp_luma_ctx_state_74;
+                                    default: cabac_ctx_state_in <= (cabac_ctx_state_wr && (cabac_cbp_luma_ctx1_sel == 2'd3)) ? cabac_ctx_state_out : cabac_cbp_luma_ctx_state_73;
+                                endcase
+                                cabac_pending_ctx_kind <= CABAC_CTX_CBP2;
+                                cabac_pending_ctx_sel <= cabac_cbp_luma_ctx2_sel;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= 1'b0;
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                sub <= 6'd43;
+                            end
+                            6'd43: begin
+                                if (DEBUG_CABAC_P16X16)
+                                    $display("[CABACDBG] mb=%0d sub=43 cbp2 sel=%0d state=%0d",
+                                             cabac_mb_counter, cabac_cbp_luma_ctx2_sel, cabac_ctx_state_in);
+                                if (cabac_bits_overflow)
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC cbp_luma[2] bit overflow");
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                cabac_ctx_state_in <= (cabac_ctx_state_wr && (cabac_cbp_luma_ctx2_sel == 2'd0)) ? cabac_ctx_state_out : cabac_cbp_luma_ctx_state_76;
+                                cabac_pending_ctx_kind <= CABAC_CTX_CBP3;
+                                cabac_pending_ctx_sel <= 2'd0;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= 1'b0;
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                sub <= 6'd44;
+                            end
+                            6'd44: begin
+                                if (DEBUG_CABAC_P16X16)
+                                    $display("[CABACDBG] mb=%0d sub=44 cbp3 state=%0d",
+                                             cabac_mb_counter, cabac_ctx_state_in);
+                                if (cabac_bits_overflow)
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC cbp_luma[3] bit overflow");
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                cabac_ctx_state_in <= cabac_cbp_chroma_ctx_state_77;
+                                cabac_pending_ctx_kind <= CABAC_CTX_CBPCHROMA;
+                                cabac_pending_ctx_sel <= 2'd0;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= 1'b0;
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                sub <= 6'd45;
+                            end
+                            6'd45: begin
+                                if (DEBUG_CABAC_P16X16)
+                                    $display("[CABACDBG] mb=%0d sub=45 cbpchroma state=%0d",
+                                             cabac_mb_counter, cabac_ctx_state_in);
+                                if (cabac_bits_overflow)
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC cbp_chroma bit overflow");
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                sub <= 6'd46;
+                            end
+                            6'd46: begin
                                 cmd_done <= 1'b1;
                                 busy     <= 1'b0;
                                 state    <= S_IDLE;
