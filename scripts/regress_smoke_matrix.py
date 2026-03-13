@@ -69,6 +69,14 @@ class SmokeCase:
     force_b_l0: int = 0
     force_b_direct: int = 0
     force_b_direct_temporal: int = 0
+    force_b_bi_on_reorder_ref_slot: int = 0
+    force_b_l0_on_reorder_ref_slot: int = 0
+    force_b_direct_on_reorder_ref_slot: int = 0
+    force_b_direct_temporal_on_reorder_ref_slot: int = 0
+    force_b_bi_on_reorder_b_slot: int = 0
+    force_b_l0_on_reorder_b_slot: int = 0
+    force_b_direct_on_reorder_b_slot: int = 0
+    force_b_direct_temporal_on_reorder_b_slot: int = 0
     reorder_b_gop: int = 0
     flat_y_frames: tuple[int, ...] | None = None
     require_bi_min: int = 0
@@ -191,6 +199,47 @@ CASES = [
         reorder_b_gop=1,
         flat_y_frames=(255, 128, 0, 100, 200, 0, 0),
         require_direct_min=1,
+        require_direct_refgt0_min=1,
+    ),
+    SmokeCase(
+        "smoke_8b_420_bdirect_temporal_bref_ref1",
+        8,
+        1,
+        "smoke_32x16_7f_temporal_ref1.yuv",
+        "smoke_32x16_7f_temporal_bref_ref1.h264",
+        frames=7,
+        timeout=80_000_000,
+        force_bref_slice=1,
+        force_b_l0_on_reorder_ref_slot=1,
+        force_b_direct_on_reorder_b_slot=1,
+        force_b_direct_temporal_on_reorder_b_slot=1,
+        reorder_b_gop=1,
+        flat_y_frames=(255, 128, 0, 100, 200, 0, 0),
+        require_direct_min=1,
+        require_l0_refgt0_min=1,
+        require_direct_refgt0_min=1,
+    ),
+    SmokeCase(
+        "smoke_8b_420_bdirect_temporal_bref_bi_ref1",
+        8,
+        1,
+        "smoke_32x16_5f_bmultiref_ref1win.yuv",
+        "smoke_32x16_5f_temporal_bref_bi_ref1.h264",
+        frames=5,
+        timeout=80_000_000,
+        enable_idr_ipcm=1,
+        enable_p_ipcm=1,
+        ipcm_sad_threshold=100_000_000,
+        inter_sad_threshold=40_000,
+        force_bref_slice=1,
+        force_b_bi_on_reorder_ref_slot=1,
+        force_b_direct_on_reorder_b_slot=1,
+        force_b_direct_temporal_on_reorder_b_slot=1,
+        reorder_b_gop=1,
+        flat_y_frames=(255, 64, 0, 228, 200),
+        require_bi_min=1,
+        require_direct_min=1,
+        require_l0_refgt0_min=1,
         require_direct_refgt0_min=1,
     ),
     SmokeCase(
@@ -498,6 +547,14 @@ def main() -> int:
             force_b_l0=case.force_b_l0,
             force_b_direct=case.force_b_direct,
             force_b_direct_temporal=case.force_b_direct_temporal,
+            force_b_bi_on_reorder_ref_slot=case.force_b_bi_on_reorder_ref_slot,
+            force_b_l0_on_reorder_ref_slot=case.force_b_l0_on_reorder_ref_slot,
+            force_b_direct_on_reorder_ref_slot=case.force_b_direct_on_reorder_ref_slot,
+            force_b_direct_temporal_on_reorder_ref_slot=case.force_b_direct_temporal_on_reorder_ref_slot,
+            force_b_bi_on_reorder_b_slot=case.force_b_bi_on_reorder_b_slot,
+            force_b_l0_on_reorder_b_slot=case.force_b_l0_on_reorder_b_slot,
+            force_b_direct_on_reorder_b_slot=case.force_b_direct_on_reorder_b_slot,
+            force_b_direct_temporal_on_reorder_b_slot=case.force_b_direct_temporal_on_reorder_b_slot,
             reorder_b_gop=case.reorder_b_gop,
         )
         sim_bin = build_sim(workspace, config, build_log_path=build_log_path)
@@ -514,6 +571,14 @@ def main() -> int:
             force_b_l0=case.force_b_l0,
             force_b_direct=case.force_b_direct,
             force_b_direct_temporal=case.force_b_direct_temporal,
+            force_b_bi_on_reorder_ref_slot=case.force_b_bi_on_reorder_ref_slot,
+            force_b_l0_on_reorder_ref_slot=case.force_b_l0_on_reorder_ref_slot,
+            force_b_direct_on_reorder_ref_slot=case.force_b_direct_on_reorder_ref_slot,
+            force_b_direct_temporal_on_reorder_ref_slot=case.force_b_direct_temporal_on_reorder_ref_slot,
+            force_b_bi_on_reorder_b_slot=case.force_b_bi_on_reorder_b_slot,
+            force_b_l0_on_reorder_b_slot=case.force_b_l0_on_reorder_b_slot,
+            force_b_direct_on_reorder_b_slot=case.force_b_direct_on_reorder_b_slot,
+            force_b_direct_temporal_on_reorder_b_slot=case.force_b_direct_temporal_on_reorder_b_slot,
             reorder_b_gop=case.reorder_b_gop,
             capture=True,
         )

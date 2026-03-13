@@ -42,6 +42,14 @@ class BuildConfig:
     force_b_l0: int = 0
     force_b_direct: int = 0
     force_b_direct_temporal: int = 0
+    force_b_bi_on_reorder_ref_slot: int = 0
+    force_b_l0_on_reorder_ref_slot: int = 0
+    force_b_direct_on_reorder_ref_slot: int = 0
+    force_b_direct_temporal_on_reorder_ref_slot: int = 0
+    force_b_bi_on_reorder_b_slot: int = 0
+    force_b_l0_on_reorder_b_slot: int = 0
+    force_b_direct_on_reorder_b_slot: int = 0
+    force_b_direct_temporal_on_reorder_b_slot: int = 0
     reorder_b_gop: int = 0
 
 
@@ -143,6 +151,14 @@ def run_sim(
     force_b_l0: int = 0,
     force_b_direct: int = 0,
     force_b_direct_temporal: int = 0,
+    force_b_bi_on_reorder_ref_slot: int = 0,
+    force_b_l0_on_reorder_ref_slot: int = 0,
+    force_b_direct_on_reorder_ref_slot: int = 0,
+    force_b_direct_temporal_on_reorder_ref_slot: int = 0,
+    force_b_bi_on_reorder_b_slot: int = 0,
+    force_b_l0_on_reorder_b_slot: int = 0,
+    force_b_direct_on_reorder_b_slot: int = 0,
+    force_b_direct_temporal_on_reorder_b_slot: int = 0,
     reorder_b_gop: int = 0,
     trace: bool = False,
     trace_file: Path | None = None,
@@ -169,6 +185,22 @@ def run_sim(
         cmd.append("+force_b_direct=1")
     if force_b_direct_temporal:
         cmd.append("+force_b_direct_temporal=1")
+    if force_b_bi_on_reorder_ref_slot:
+        cmd.append("+force_b_bi_on_reorder_ref_slot=1")
+    if force_b_l0_on_reorder_ref_slot:
+        cmd.append("+force_b_l0_on_reorder_ref_slot=1")
+    if force_b_direct_on_reorder_ref_slot:
+        cmd.append("+force_b_direct_on_reorder_ref_slot=1")
+    if force_b_direct_temporal_on_reorder_ref_slot:
+        cmd.append("+force_b_direct_temporal_on_reorder_ref_slot=1")
+    if force_b_bi_on_reorder_b_slot:
+        cmd.append("+force_b_bi_on_reorder_b_slot=1")
+    if force_b_l0_on_reorder_b_slot:
+        cmd.append("+force_b_l0_on_reorder_b_slot=1")
+    if force_b_direct_on_reorder_b_slot:
+        cmd.append("+force_b_direct_on_reorder_b_slot=1")
+    if force_b_direct_temporal_on_reorder_b_slot:
+        cmd.append("+force_b_direct_temporal_on_reorder_b_slot=1")
     if reorder_b_gop:
         cmd.append("+reorder_b_gop=1")
     if trace:

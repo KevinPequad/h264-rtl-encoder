@@ -335,7 +335,8 @@ Verified validation and tooling coverage around the encoder flow:
 - Docker one-frame smoke run producing RTL-generated `.h264` and `.mp4`
 - reproducible smoke matrix for fast strict-decode/profile sanity on generated
   tiny `I_PCM` inputs plus tiny forced spatial-direct, temporal-direct,
-  temporal-direct reordered-`BREF` `B_DIRECT_16x16`, and multi-ref reordered
+  temporal-direct reordered-`BREF` `B_DIRECT_16x16`, mixed reordered-`BREF`
+  ref-slot / B-slot temporal-direct cases, and multi-ref reordered
   `B_BI_16x16` cases
 - multi-frame validation at `320x176`
 - multi-frame validation at `1280x720`
@@ -362,6 +363,11 @@ Verified validation and tooling coverage around the encoder flow:
 - runtime-configurable `force_b_direct_temporal` support in the testbench and
   validation scripts so reordered B slices can switch to the current limited
   temporal-direct derivation and emit `direct_spatial_mv_pred_flag = 0`
+- runtime-configurable slot-scoped `force_b_bi` / `force_b_l0` /
+  `force_b_direct` / `force_b_direct_temporal` support on reordered
+  reference slots and reordered B slots, so mixed reordered-`BREF`
+  validations can pin the future reference slot to `B_L0_16x16` while
+  pinning the later B slot to temporal direct in the same run
 - simulator-side per-frame `b_l1_mbs` logging so reordered B validation can
   prove that the future-reference `List1` path was actually selected
 - simulator-side per-frame `b_bi_mbs` logging so reordered B validation can
@@ -671,6 +677,40 @@ Measured validation points:
   `b_mode_summary` reporting `total_direct=6` and `total_direct_refgt0=4`,
   proving the current limited temporal-direct path can now consume nonzero
   future-picture `List0 ref_idx` mappings
+- `temporal_direct_bref_mixed_refslotl0_32x16_7f`: strict FFmpeg-decodable
+  decode-only mixed reordered-`BREF` validation at `32x16`, `7` frames,
+  `718,775` cycles, `505` bytes,
+  `output/validation_temporal_direct_bref_mixed_refslotl0_32x16_7f.h264`,
+  `output/validation_temporal_direct_bref_mixed_refslotl0_32x16_7f.json`,
+  and simulator-log proof that reordered reference slots ran with
+  `force_l0=1` while reordered B slots ran with
+  `force_direct=1 force_direct_temporal=1`, with `b_mode_summary`
+  reporting `total_l0_refgt0=6`, `total_direct=4`, and
+  `total_direct_refgt0=2`, proving the current limited temporal-direct path
+  can now consume nonzero future `List0` mappings coming from reordered
+  `BREF` reference slots instead of only future P pictures
+- `temporal_direct_bref_mixed_refslotl0_320x176_3f`: strict
+  FFmpeg-decodable decode-only mixed reordered-`BREF` validation at
+  `320x176`, `3` frames, `37,905,588` cycles, `21,534` bytes,
+  `output/validation_temporal_direct_bref_mixed_refslotl0_320x176_3f.h264`,
+  `output/validation_temporal_direct_bref_mixed_refslotl0_320x176_3f.json`,
+  and simulator-log proof that the same slot-scoped forcing holds on the
+  larger real clip, with the middle reordered `BREF` picture pinned to
+  `B_L0_16x16` and the final reordered `BREF` picture pinned to temporal
+  direct
+- `temporal_direct_bref_mixed_refslotbi_32x16_5f`: strict FFmpeg-decodable
+  decode-only mixed reordered-`BREF` validation at `32x16`, `5` frames,
+  `404,704` cycles, `1,521` bytes,
+  `output/validation_temporal_direct_bref_mixed_refslotbi_32x16_5f.h264`,
+  `output/validation_temporal_direct_bref_mixed_refslotbi_32x16_5f.json`,
+  and simulator-log proof that reordered reference slots ran with
+  `force_bi=1` while reordered B slots ran with
+  `force_direct=1 force_direct_temporal=1`, with `b_mode_summary`
+  reporting `total_bi=6`, `total_l0_refgt0=4`, `total_direct=4`, and
+  `total_direct_refgt0=2`, proving the current limited temporal-direct path
+  can also consume nonzero future `List0` mappings coming from reordered
+  `BREF` reference slots that were themselves coded on the limited
+  `B_BI_16x16` path
 - `bl0_force_ref1_32x16_7f_ipcmrefs`: strict FFmpeg-decodable decode-only
   reordered-B validation at `32x16`, `7` frames, exact IDR/P `I_PCM`
   references, `581,041` cycles, `4,234` bytes,
