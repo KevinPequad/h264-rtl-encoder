@@ -444,8 +444,9 @@ The testbench must not:
   - FFmpeg-decodable RTL-generated `.h264`
   - MP4 remux of the RTL-generated stream
   - Reproducible smoke matrix for fast strict-decode/profile sanity on
-    generated tiny `I_PCM` inputs plus tiny forced spatial-direct and
-    temporal-direct `B_DIRECT_16x16` cases
+    generated tiny `I_PCM` inputs plus tiny forced spatial-direct,
+    temporal-direct, and temporal-direct reordered-`BREF`
+    `B_DIRECT_16x16` cases
   - Multi-frame validation at `320x176`
   - Multi-frame validation at `1280x720`
   - PSNR / SSIM comparison scripts

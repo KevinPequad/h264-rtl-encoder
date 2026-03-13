@@ -158,6 +158,18 @@ CASES = [
         force_b_direct_temporal=1,
         reorder_b_gop=1,
     ),
+    SmokeCase(
+        "smoke_8b_420_bdirect_temporal_bref",
+        8,
+        1,
+        "smoke_32x16_3f_bdirect.yuv",
+        "smoke_32x16_3f_bdirect_temporal_bref.h264",
+        frames=3,
+        force_bref_slice=1,
+        force_b_direct=1,
+        force_b_direct_temporal=1,
+        reorder_b_gop=1,
+    ),
 ]
 
 
