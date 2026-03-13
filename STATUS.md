@@ -277,8 +277,10 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - reference-frame writeback for reconstructed luma
 - reference-frame writeback for reconstructed chroma
 - standalone CABAC arithmetic coder core RTL, plus a current final-path CABAC
-  subset for skip-only P slices with dual PPS emission, CABAC slice-header
-  fields, CABAC-coded `mb_skip_flag`, and CABAC-coded `end_of_slice_flag`
+  subset for skip-capable P slices with dual PPS emission, CABAC
+  slice-header fields, CABAC-coded `mb_skip_flag`, CABAC-coded
+  `end_of_slice_flag`, and an explicit single-ref / zero-CBP / zero-MVD
+  `P_L0_16x16` subset
 - parameterized resolution
 - parameterized bit depth
 - parameterized chroma format
@@ -288,8 +290,9 @@ Implemented now relative to the chosen `x264` baseline:
 - Annex B bitstream generation owned by RTL
 - SPS / PPS / slice-header / macroblock-header ownership in RTL
 - CAVLC entropy path owned by RTL
-- current CABAC final-path subset on skip-only P slices, with CABAC PPS
-  selection, CABAC-coded `mb_skip_flag`, and CABAC-coded `end_of_slice_flag`
+- current CABAC final-path subset on skip-capable P slices, with CABAC PPS
+  selection, CABAC-coded `mb_skip_flag`, CABAC-coded `end_of_slice_flag`,
+  and an explicit single-ref / zero-CBP / zero-MVD `P_L0_16x16` subset
 - I-picture and P-picture coding
 - non-reference `B`-picture syntax on the current intra / `I_PCM` path
 - limited non-reference `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` inter
@@ -358,7 +361,8 @@ Verified validation and tooling coverage around the encoder flow:
   temporal-direct reordered-`BREF` `B_DIRECT_16x16`, mixed reordered-`BREF`
   ref-slot / B-slot temporal-direct cases, explicit reordered-`BREF`
   ref-slot `B_L1_16x16` guards, multi-ref reordered `B_BI_16x16` cases, and
-  a generated flat exact-reference CABAC P-skip case
+  a generated flat exact-reference CABAC P-skip case plus a generated flat
+  exact-reference explicit CABAC `P_L0_16x16` case
 - multi-frame validation at `320x176`
 - multi-frame validation at `1280x720`
 - PSNR / SSIM comparison scripts
@@ -401,8 +405,9 @@ Verified validation and tooling coverage around the encoder flow:
   whether automatically or via force
 - staged validation JSON and smoke summaries now carry parsed
   `skip_mbs` / `b_l1_mbs` / `b_bi_mbs` / `b_direct_mbs` /
-  `b_l0_refgt0_mbs` / `b_direct_refgt0_mbs` / `b_direct_l1src_mbs`
-  aggregates so B-path behavior can be asserted without manual log scraping
+  `b_l0_refgt0_mbs` / `b_direct_refgt0_mbs` / `b_direct_l1src_mbs` /
+  `cabac_p16x16_mbs` aggregates so B-path behavior can be asserted without
+  manual log scraping
 - reordered validation can now combine `--reorder-b-gop` and
   `--force-bref-slice` so the reference slots are emitted as `BREF` pictures
 - fast strict-decode-only validation mode in `validate_clip.py` for longer
@@ -417,6 +422,10 @@ Measured validation points:
   `473` bytes, `Main` profile, `output/validation_cabac_pskip_ipcmidr_32x16_4f.h264`,
   `output/validation_cabac_pskip_ipcmidr_32x16_4f.mp4`, and
   `b_mode_summary.total_skip = 6`
+- `32x16_2f_cabac_p16x16`: strict FFmpeg-decodable explicit CABAC
+  `P_L0_16x16` zero-CBP / single-ref / zero-MVD smoke, `47,268` cycles,
+  `74` bytes, `Main` profile, `output/smoke_32x16_2f_cabac_p16x16.h264`, and
+  `b_mode_summary.total_cabac_p16x16 = 2`
 - `32x16_1f_nonipcm_10b420_main_ncfix`: strict FFmpeg-decodable one-frame
   non-`I_PCM` `10-bit 4:2:0` probe, RTL PSNR avg `7.9009`, RTL SSIM
   `0.345989`
@@ -989,7 +998,8 @@ Important missing features, so this does not get confused with a full-standard
 H.264 encoder yet:
 
 - CABAC context modelling, syntax binarization, and final bitstream-path
-  integration beyond the current skip-only P-slice subset
+  integration beyond the current skip-capable plus explicit zero-CBP /
+  single-ref / zero-MVD `P_L0_16x16` P-slice subset
 - no broader `B` / `BREF` picture support beyond the current limited
   reordered dual-list `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` `16x16` path
 - direct prediction modes beyond the current limited
@@ -1007,7 +1017,8 @@ H.264 encoder yet:
 Still missing relative to the chosen `x264` software baseline:
 
 - full CABAC slice integration beyond the current standalone arithmetic core
-  and skip-only P-slice subset
+  and current skip-capable plus explicit zero-CBP / single-ref / zero-MVD
+  `P_L0_16x16` P-slice subset
 - broader inter-coded `B` / `BREF` picture handling and the associated
   reference management
 - reference-picture management beyond the current four-reference P-slice subset
