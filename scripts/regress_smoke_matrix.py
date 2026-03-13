@@ -23,6 +23,7 @@ PSKIP_RE = re.compile(
     r"b_l1_mbs=(?P<b_l1>\d+)\s+b_bi_mbs=(?P<b_bi>\d+)\s+b_direct_mbs=(?P<b_direct>\d+)\s+"
     r"b_l0_refgt0_mbs=(?P<b_l0_refgt0>\d+)\s+"
     r"b_direct_refgt0_mbs=(?P<b_direct_refgt0>\d+)"
+    r"(?:\s+b_direct_l1src_mbs=(?P<b_direct_l1src>\d+))?"
 )
 DECODE_ERROR_PATTERNS = (
     "error while decoding",
@@ -83,6 +84,7 @@ class SmokeCase:
     require_direct_min: int = 0
     require_l0_refgt0_min: int = 0
     require_direct_refgt0_min: int = 0
+    require_direct_l1src_min: int = 0
 
 
 CASES = [
@@ -269,7 +271,7 @@ CASES = [
         require_bi_min=1,
         require_direct_min=1,
         require_l0_refgt0_min=1,
-        require_direct_refgt0_min=1,
+        require_direct_l1src_min=1,
     ),
     SmokeCase(
         "smoke_8b_420_bl0_ref1",
@@ -457,18 +459,21 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     frames_with_direct = 0
     frames_with_l0_refgt0 = 0
     frames_with_direct_refgt0 = 0
+    frames_with_direct_l1src = 0
     max_skip = 0
     max_l1 = 0
     max_bi = 0
     max_direct = 0
     max_l0_refgt0 = 0
     max_direct_refgt0 = 0
+    max_direct_l1src = 0
     total_skip = 0
     total_l1 = 0
     total_bi = 0
     total_direct = 0
     total_l0_refgt0 = 0
     total_direct_refgt0 = 0
+    total_direct_l1src = 0
 
     for match in PSKIP_RE.finditer(sim_log):
         skip = int(match.group("skip"))
@@ -477,12 +482,14 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         direct = int(match.group("b_direct"))
         l0_refgt0 = int(match.group("b_l0_refgt0"))
         direct_refgt0 = int(match.group("b_direct_refgt0"))
+        direct_l1src = int(match.group("b_direct_l1src") or 0)
         total_skip += skip
         total_l1 += l1
         total_bi += bi
         total_direct += direct
         total_l0_refgt0 += l0_refgt0
         total_direct_refgt0 += direct_refgt0
+        total_direct_l1src += direct_l1src
         if skip:
             frames_with_skip += 1
         if l1:
@@ -495,12 +502,15 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
             frames_with_l0_refgt0 += 1
         if direct_refgt0:
             frames_with_direct_refgt0 += 1
+        if direct_l1src:
+            frames_with_direct_l1src += 1
         max_skip = max(max_skip, skip)
         max_l1 = max(max_l1, l1)
         max_bi = max(max_bi, bi)
         max_direct = max(max_direct, direct)
         max_l0_refgt0 = max(max_l0_refgt0, l0_refgt0)
         max_direct_refgt0 = max(max_direct_refgt0, direct_refgt0)
+        max_direct_l1src = max(max_direct_l1src, direct_l1src)
 
     return {
         "frames_with_skip": frames_with_skip,
@@ -509,18 +519,21 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "frames_with_direct": frames_with_direct,
         "frames_with_l0_refgt0": frames_with_l0_refgt0,
         "frames_with_direct_refgt0": frames_with_direct_refgt0,
+        "frames_with_direct_l1src": frames_with_direct_l1src,
         "max_skip": max_skip,
         "max_l1": max_l1,
         "max_bi": max_bi,
         "max_direct": max_direct,
         "max_l0_refgt0": max_l0_refgt0,
         "max_direct_refgt0": max_direct_refgt0,
+        "max_direct_l1src": max_direct_l1src,
         "total_skip": total_skip,
         "total_l1": total_l1,
         "total_bi": total_bi,
         "total_direct": total_direct,
         "total_l0_refgt0": total_l0_refgt0,
         "total_direct_refgt0": total_direct_refgt0,
+        "total_direct_l1src": total_direct_l1src,
     }
 
 
@@ -637,6 +650,11 @@ def main() -> int:
                 f"{case.name} expected at least {case.require_direct_refgt0_min} nonzero B_DIRECT List0 refs, "
                 f"saw {b_mode_summary.get('total_direct_refgt0', 0)}"
             )
+        if b_mode_summary.get("total_direct_l1src", 0) < case.require_direct_l1src_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_direct_l1src_min} B_DIRECT macroblocks "
+                f"derived from colocated List1, saw {b_mode_summary.get('total_direct_l1src', 0)}"
+            )
 
         result = {
             "name": case.name,
@@ -655,7 +673,8 @@ def main() -> int:
             f"pix_fmt={stream.get('pix_fmt')} {stream.get('width')}x{stream.get('height')} "
             f"b_direct_max={b_mode_summary.get('max_direct', 0)} "
             f"b_l0_refgt0_max={b_mode_summary.get('max_l0_refgt0', 0)} "
-            f"b_direct_refgt0_max={b_mode_summary.get('max_direct_refgt0', 0)}"
+            f"b_direct_refgt0_max={b_mode_summary.get('max_direct_refgt0', 0)} "
+            f"b_direct_l1src_max={b_mode_summary.get('max_direct_l1src', 0)}"
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)
