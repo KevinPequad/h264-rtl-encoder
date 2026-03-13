@@ -468,7 +468,8 @@ The testbench must not:
     generated tiny `I_PCM` inputs plus tiny forced spatial-direct,
     temporal-direct, auto temporal-direct reordered-`B` and reordered-`BREF`
     cases, mixed reordered-`BREF` ref-slot / B-slot temporal-direct cases,
-    and multi-ref reordered `B_BI_16x16` cases
+    explicit reordered-`BREF` ref-slot `B_L1_16x16` guards, and multi-ref
+    reordered `B_BI_16x16` cases
   - Multi-frame validation at `320x176`
   - Multi-frame validation at `1280x720`
   - PSNR / SSIM comparison scripts
@@ -526,6 +527,8 @@ The testbench must not:
   - Treat it as a fast strict-decode/profile sanity matrix on tiny `I_PCM`
     cases plus tiny forced `B_DIRECT_16x16` and multi-ref reordered
     `B_BI_16x16` cases, not the final decode-quality gate
+  - Use `--case <name>` for targeted smoke subsets; filtered runs write
+    `output/smoke_matrix_summary_filtered.json`
   - It now emits both `.build.log` and `.sim.log` artifacts per case
 
 - Use `scripts/validate_clip.py` for staged multi-frame validation, PSNR / SSIM,

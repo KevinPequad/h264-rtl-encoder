@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import asdict, dataclass
 from pathlib import Path
 import json
@@ -85,6 +86,7 @@ class SmokeCase:
     flat_y_frames: tuple[int, ...] | None = None
     require_bi_min: int = 0
     require_direct_min: int = 0
+    require_l1_min: int = 0
     require_l0_refgt0_min: int = 0
     require_direct_refgt0_min: int = 0
     require_direct_l1src_min: int = 0
@@ -252,6 +254,24 @@ CASES = [
         require_direct_min=1,
         require_l0_refgt0_min=1,
         require_direct_refgt0_min=1,
+    ),
+    SmokeCase(
+        "smoke_8b_420_bref_l1_refslot",
+        8,
+        1,
+        "smoke_32x16_7f_temporal_ref1.yuv",
+        "smoke_32x16_7f_bref_l1_refslot.h264",
+        frames=7,
+        timeout=80_000_000,
+        enable_idr_ipcm=1,
+        enable_p_ipcm=1,
+        ipcm_sad_threshold=100_000_000,
+        inter_sad_threshold=40_000,
+        force_bref_slice=1,
+        force_b_l1_on_reorder_ref_slot=1,
+        reorder_b_gop=1,
+        flat_y_frames=(255, 128, 0, 100, 200, 0, 0),
+        require_l1_min=1,
     ),
     SmokeCase(
         "smoke_8b_420_bdirect_temporal_bref_l1_ref1",
@@ -581,6 +601,16 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--case",
+        action="append",
+        dest="cases",
+        metavar="NAME",
+        help="Run only the named smoke case. May be supplied multiple times.",
+    )
+    args = parser.parse_args()
+
     require_tool("ffmpeg")
     require_tool("ffprobe")
     require_tool("make")
@@ -588,10 +618,19 @@ def main() -> int:
     root = repo_root()
     data_dir = root / "data"
     output_dir = root / "output"
-    summary_path = output_dir / "smoke_matrix_summary.json"
+    selected_cases = CASES
+    if args.cases:
+        wanted = set(args.cases)
+        selected_cases = [case for case in CASES if case.name in wanted]
+        missing = sorted(wanted - {case.name for case in selected_cases})
+        if missing:
+            raise SystemExit(f"Unknown smoke case(s): {', '.join(missing)}")
+        summary_path = output_dir / "smoke_matrix_summary_filtered.json"
+    else:
+        summary_path = output_dir / "smoke_matrix_summary.json"
     results = []
 
-    for case in CASES:
+    for case in selected_cases:
         input_path = data_dir / case.input_file
         output_path = output_dir / case.output_file
         log_path = output_dir / f"{case.name}.sim.log"
@@ -684,6 +723,11 @@ def main() -> int:
                 f"{case.name} expected at least {case.require_bi_min} B_BI macroblocks, "
                 f"saw {b_mode_summary.get('total_bi', 0)}"
             )
+        if b_mode_summary.get("total_l1", 0) < case.require_l1_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_l1_min} B_L1 macroblocks, "
+                f"saw {b_mode_summary.get('total_l1', 0)}"
+            )
         if b_mode_summary.get("total_direct", 0) < case.require_direct_min:
             raise RuntimeError(
                 f"{case.name} expected at least {case.require_direct_min} B_DIRECT macroblocks, "
@@ -720,6 +764,7 @@ def main() -> int:
         print(
             f"[PASS] {case.name}: profile={stream.get('profile')} "
             f"pix_fmt={stream.get('pix_fmt')} {stream.get('width')}x{stream.get('height')} "
+            f"b_l1_max={b_mode_summary.get('max_l1', 0)} "
             f"b_direct_max={b_mode_summary.get('max_direct', 0)} "
             f"b_l0_refgt0_max={b_mode_summary.get('max_l0_refgt0', 0)} "
             f"b_direct_refgt0_max={b_mode_summary.get('max_direct_refgt0', 0)} "

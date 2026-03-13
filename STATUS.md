@@ -349,8 +349,8 @@ Verified validation and tooling coverage around the encoder flow:
   tiny `I_PCM` inputs plus tiny forced spatial-direct, temporal-direct,
   auto temporal-direct reordered-`B` and reordered-`BREF` cases,
   temporal-direct reordered-`BREF` `B_DIRECT_16x16`, mixed reordered-`BREF`
-  ref-slot / B-slot temporal-direct cases, and multi-ref reordered
-  `B_BI_16x16` cases
+  ref-slot / B-slot temporal-direct cases, explicit reordered-`BREF`
+  ref-slot `B_L1_16x16` guards, and multi-ref reordered `B_BI_16x16` cases
 - multi-frame validation at `320x176`
 - multi-frame validation at `1280x720`
 - PSNR / SSIM comparison scripts
