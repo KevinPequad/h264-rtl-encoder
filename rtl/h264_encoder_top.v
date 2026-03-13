@@ -2499,6 +2499,7 @@ pred_buf = {(256*BD){1'b0}};
                         integer bi_final_idx, bi_final_sample, bi_final_orig_sample, bi_final_sad_i;
                         integer direct_sad_i;
                         integer direct_final_sad_i;
+                        integer direct_auto_bias_i;
                         integer direct_final_idx, direct_final_sample, direct_final_orig_sample;
                         integer frac_x_i, frac_y_i, base_x_i, base_y_i;
                         reg [3:0] qpel_idx_i;
@@ -2736,6 +2737,7 @@ pred_buf = {(256*BD){1'b0}};
 
                                 b_bi_luma_fetch_l1_phase <= 1'b0;
                                 direct_final_sad_i = 32'h7fffffff;
+                                direct_auto_bias_i = 0;
                                 direct_final_pred_buf_i = {(256*BD){1'b0}};
                                 if (b_direct_pending_valid) begin
                                     if (b_direct_pending_use_bi) begin
@@ -2760,13 +2762,17 @@ pred_buf = {(256*BD){1'b0}};
                                         direct_final_pred_buf_i = b_direct_luma_pred_l0;
                                         direct_final_sad_i = b_direct_luma_sad_l0;
                                     end
+                                    if (direct_temporal_slice_mode_reg &&
+                                        b_direct_pending_use_bi &&
+                                        (b_direct_pending_ref_idx_l0 != 2'd0))
+                                        direct_auto_bias_i = 32;
                                 end
 
                                 if (b_direct_pending_valid &&
                                     (direct_final_sad_i < INTER_SAD_THRESHOLD) &&
-                                    (direct_final_sad_i <= bi_final_sad_i) &&
-                                    (direct_final_sad_i <= best_sad_i) &&
-                                    (direct_final_sad_i <= b_bi_luma_sad_l0)) begin
+                                    (direct_final_sad_i <= (bi_final_sad_i + direct_auto_bias_i)) &&
+                                    (direct_final_sad_i <= (best_sad_i + direct_auto_bias_i)) &&
+                                    (direct_final_sad_i <= (b_bi_luma_sad_l0 + direct_auto_bias_i))) begin
                                     if (b_direct_pending_use_bi) begin
                                         me_best_mvx <= b_direct_pending_mvx_l0;
                                         me_best_mvy <= b_direct_pending_mvy_l0;
