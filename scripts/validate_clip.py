@@ -17,6 +17,10 @@ from rtl_runner import BuildConfig, build_sim, repo_root, require_tool, run_cmd,
 PSNR_RE = re.compile(r"PSNR y:(?P<y>[0-9.inf-]+).*average:(?P<avg>[0-9.inf-]+)")
 SSIM_RE = re.compile(r"SSIM Y:(?P<y>[0-9.]+).*All:(?P<all>[0-9.]+)")
 SIM_SUMMARY_RE = re.compile(r"\[TB\]\s+(?P<frames>\d+)\s+frames encoded,\s+(?P<cycles>\d+)\s+cycles,\s+(?P<bytes>\d+)\s+bytes")
+PSKIP_RE = re.compile(
+    r"\[PSKIP\]\s+Frame\s+(?P<frame>\d+)\s+skip_mbs=(?P<skip>\d+)\s+"
+    r"b_l1_mbs=(?P<b_l1>\d+)\s+b_bi_mbs=(?P<b_bi>\d+)\s+b_direct_mbs=(?P<b_direct>\d+)"
+)
 DECODE_ERROR_PATTERNS = (
     "error while decoding",
     "mb_type ",
@@ -55,6 +59,58 @@ def parse_sim_summary(sim_log: str) -> dict[str, int]:
         "frames_encoded": int(match.group("frames")),
         "cycles": int(match.group("cycles")),
         "bytes": int(match.group("bytes")),
+    }
+
+
+def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
+    frames_with_skip = 0
+    frames_with_l1 = 0
+    frames_with_bi = 0
+    frames_with_direct = 0
+    max_skip = 0
+    max_l1 = 0
+    max_bi = 0
+    max_direct = 0
+    total_skip = 0
+    total_l1 = 0
+    total_bi = 0
+    total_direct = 0
+
+    for match in PSKIP_RE.finditer(sim_log):
+        skip = int(match.group("skip"))
+        l1 = int(match.group("b_l1"))
+        bi = int(match.group("b_bi"))
+        direct = int(match.group("b_direct"))
+        total_skip += skip
+        total_l1 += l1
+        total_bi += bi
+        total_direct += direct
+        if skip:
+            frames_with_skip += 1
+        if l1:
+            frames_with_l1 += 1
+        if bi:
+            frames_with_bi += 1
+        if direct:
+            frames_with_direct += 1
+        max_skip = max(max_skip, skip)
+        max_l1 = max(max_l1, l1)
+        max_bi = max(max_bi, bi)
+        max_direct = max(max_direct, direct)
+
+    return {
+        "frames_with_skip": frames_with_skip,
+        "frames_with_l1": frames_with_l1,
+        "frames_with_bi": frames_with_bi,
+        "frames_with_direct": frames_with_direct,
+        "max_skip": max_skip,
+        "max_l1": max_l1,
+        "max_bi": max_bi,
+        "max_direct": max_direct,
+        "total_skip": total_skip,
+        "total_l1": total_l1,
+        "total_bi": total_bi,
+        "total_direct": total_direct,
     }
 
 
@@ -356,6 +412,7 @@ def main() -> int:
     sim_log = (sim_proc.stdout or "") + (sim_proc.stderr or "")
     sim_log_path.write_text(sim_log, encoding="utf-8")
     sim_summary = parse_sim_summary(sim_log)
+    b_mode_summary = parse_b_mode_summary(sim_log)
     decode_probe = run_cmd(
         ["ffmpeg", "-v", "error", "-i", str(rtl_h264), "-f", "null", "-"],
         capture=True,
@@ -432,6 +489,7 @@ def main() -> int:
         "build_log": str(build_log_path),
         "sim_log": str(sim_log_path),
         "sim_summary": sim_summary,
+        "b_mode_summary": b_mode_summary,
         "decode_errors": decode_errors,
         "validation_mode": {
             "decode_only": args.decode_only,
