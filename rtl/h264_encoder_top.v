@@ -413,6 +413,9 @@ module h264_encoder_top #(
     reg signed [7:0] refmeta_mvy_l0 [0:4][0:TOTAL_MBS-1];
     reg signed [7:0] refmeta_mvx_l1 [0:4][0:TOTAL_MBS-1];
     reg signed [7:0] refmeta_mvy_l1 [0:4][0:TOTAL_MBS-1];
+    reg [8:0]  refbank_poc_lsb [0:4];
+    reg        refbank_has_l0_ref0 [0:4];
+    reg [2:0]  refbank_l0_ref0_bank [0:4];
     // Pre-computed chroma DC prediction values (one per 4x4 sub-block, per plane)
     reg [BIT_DEPTH-1:0] chr_dc_pred [0:CHR_BLOCKS_PER_PLANE-1];
     // Chroma residual override: when in chroma mode, bypass h264_intra_pred
@@ -1740,6 +1743,9 @@ pred_buf = {(256*BD){1'b0}};
                     refmeta_mvx_l1[meta_bank_i][meta_mb_i] = 8'sd0;
                     refmeta_mvy_l1[meta_bank_i][meta_mb_i] = 8'sd0;
                 end
+                refbank_poc_lsb[meta_bank_i] = 9'd0;
+                refbank_has_l0_ref0[meta_bank_i] = 1'b0;
+                refbank_l0_ref0_bank[meta_bank_i] = 3'd0;
             end
         end else begin
             fetch_start <= 1'b0; pred_start <= 1'b0; intra16_start <= 1'b0; xform_start <= 1'b0; quant_start <= 1'b0; zz_start <= 1'b0;
@@ -4358,7 +4364,10 @@ pred_buf = {(256*BD){1'b0}};
                              done <= 1'b1;
                              $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d",
                                       cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count);
+                             refbank_poc_lsb[current_write_bank] <= cur_pic_order_cnt_lsb;
                              if (is_p_frame) begin
+                                 refbank_has_l0_ref0[current_write_bank] <= (valid_ref_count != 3'd0);
+                                 refbank_l0_ref0_bank[current_write_bank] <= newest_ref_bank;
                                  ancient_ref_bank <= oldest_ref_bank;
                                  oldest_ref_bank <= older_ref_bank;
                                  older_ref_bank <= newest_ref_bank;
@@ -4366,6 +4375,8 @@ pred_buf = {(256*BD){1'b0}};
                                  valid_ref_count <= (valid_ref_count < 3'd4) ? (valid_ref_count + 3'd1) : 3'd4;
                                  next_write_bank <= pick_free_ref_bank(current_write_bank, newest_ref_bank, older_ref_bank, oldest_ref_bank);
                              end else if (is_b_ref_frame) begin
+                                 refbank_has_l0_ref0[current_write_bank] <= (valid_ref_count >= 3'd2);
+                                 refbank_l0_ref0_bank[current_write_bank] <= older_ref_bank;
                                  ancient_ref_bank <= oldest_ref_bank;
                                  oldest_ref_bank <= older_ref_bank;
                                  older_ref_bank <= newest_ref_bank;
@@ -4375,6 +4386,8 @@ pred_buf = {(256*BD){1'b0}};
                              end else if (is_b_frame) begin
                                  next_write_bank <= current_write_bank;
                              end else begin
+                                 refbank_has_l0_ref0[current_write_bank] <= 1'b0;
+                                 refbank_l0_ref0_bank[current_write_bank] <= 3'd0;
                                  newest_ref_bank <= current_write_bank;
                                  older_ref_bank <= current_write_bank;
                                  oldest_ref_bank <= current_write_bank;
