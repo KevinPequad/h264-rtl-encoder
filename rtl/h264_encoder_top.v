@@ -4481,21 +4481,21 @@ pred_buf = {(256*BD){1'b0}};
                              $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d",
                                       cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count);
                              refbank_poc_lsb[current_write_bank] <= cur_pic_order_cnt_lsb;
-                             if (is_p_frame) begin
-                                 refbank_has_l0_ref0[current_write_bank] <= (valid_ref_count != 3'd0);
-                                 refbank_l0_ref0_bank[current_write_bank] <= newest_ref_bank;
-                                 ancient_ref_bank <= oldest_ref_bank;
-                                 oldest_ref_bank <= older_ref_bank;
-                                 older_ref_bank <= newest_ref_bank;
-                                 newest_ref_bank <= current_write_bank;
-                                 valid_ref_count <= (valid_ref_count < 3'd4) ? (valid_ref_count + 3'd1) : 3'd4;
-                                 next_write_bank <= pick_free_ref_bank(current_write_bank, newest_ref_bank, older_ref_bank, oldest_ref_bank);
-                             end else if (is_b_ref_frame) begin
-                                 refbank_has_l0_ref0[current_write_bank] <= (valid_ref_count >= 3'd2);
-                                 refbank_l0_ref0_bank[current_write_bank] <= older_ref_bank;
-                                 ancient_ref_bank <= oldest_ref_bank;
-                                 oldest_ref_bank <= older_ref_bank;
-                                 older_ref_bank <= newest_ref_bank;
+                            if (is_p_frame) begin
+                                refbank_has_l0_ref0[current_write_bank] <= (valid_ref_count != 3'd0);
+                                refbank_l0_ref0_bank[current_write_bank] <= newest_ref_bank;
+                                ancient_ref_bank <= oldest_ref_bank;
+                                oldest_ref_bank <= older_ref_bank;
+                                older_ref_bank <= newest_ref_bank;
+                                newest_ref_bank <= current_write_bank;
+                                valid_ref_count <= (valid_ref_count < 3'd4) ? (valid_ref_count + 3'd1) : 3'd4;
+                                next_write_bank <= pick_free_ref_bank(current_write_bank, newest_ref_bank, older_ref_bank, oldest_ref_bank);
+                            end else if (is_b_ref_frame) begin
+                                refbank_has_l0_ref0[current_write_bank] <= (valid_ref_count != 3'd0);
+                                refbank_l0_ref0_bank[current_write_bank] <= b_l0_ref_bank_w;
+                                ancient_ref_bank <= oldest_ref_bank;
+                                oldest_ref_bank <= older_ref_bank;
+                                older_ref_bank <= newest_ref_bank;
                                  newest_ref_bank <= current_write_bank;
                                  valid_ref_count <= (valid_ref_count < 3'd4) ? (valid_ref_count + 3'd1) : 3'd4;
                                  next_write_bank <= pick_free_ref_bank(current_write_bank, newest_ref_bank, older_ref_bank, oldest_ref_bank);
