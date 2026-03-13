@@ -3574,9 +3574,9 @@ pred_buf = {(256*BD){1'b0}};
                                     use_i16_ac_zigzag <= 1'b1;
                                     use_i16_dc_zigzag <= 1'b0;
                                     zz_chroma_dc_mode <= 1'b0;
-                                    zz_chroma_ac_mode <= 1'b1;
+                                    zz_chroma_ac_mode <= 1'b0;
                                     cavlc_is_chroma_dc <= 1'b0;
-                                    cavlc_is_chroma_ac <= 1'b1;
+                                    cavlc_is_chroma_ac <= 1'b0;
                                     zz_start <= 1'b1;
                                     blk_state <= BS_ZIGZAG;
                                 end

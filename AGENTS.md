@@ -624,14 +624,15 @@ The testbench must not:
     `output/validation_320x176_1f_i16x16_fix2.h264`, and
     `output/validation_320x176_1f_i16x16_fix2.mp4`
   - strict FFmpeg-decodable one-frame IDR `Intra_16x16` validation at
-    `320x176`, `1` frame, `791,490` cycles,
-    `output/validation_i16idr2_320x176_1f.h264`, and
-    `output/validation_i16idr2_320x176_1f.mp4`
-  - strict FFmpeg-decodable short-GOP validation with an IDR `Intra_16x16`
-    first frame at `320x176`, `4` frames, `91,031,284` cycles, RTL PSNR avg
-    `31.628391`, RTL SSIM all `0.829910`,
-    `output/validation_i16idr_320x176_4f.h264`, and
-    `output/validation_i16idr_320x176_4f.mp4`
+    `320x176`, `1` frame, `796,556` cycles, `1,147` bytes, RTL PSNR avg
+    `69.336543`, RTL SSIM all `0.999940`,
+    `output/validation_validation_i16_dcquantfix_320x176_1f.h264`, and
+    `output/validation_validation_i16_dcquantfix_320x176_1f.mp4`
+  - strict FFmpeg-decodable all-IDR `Intra_16x16` validation at `320x176`,
+    `4` frames, `3,186,164` cycles, `4,588` bytes, RTL PSNR avg `69.336543`,
+    RTL SSIM all `0.999940`,
+    `output/validation_validation_i16_dcquantfix_clean_320x176_4f.h264`, and
+    `output/validation_validation_i16_dcquantfix_clean_320x176_4f.mp4`
   - strict FFmpeg-decodable forced-`I_PCM` IDR validation at `320x176`,
     `1` frame, `242,396` cycles, `84,963` bytes,
     `output/ipcm_320x176_1f.h264`, `output/ipcm_320x176_1f.mp4`, and decoded
@@ -1039,12 +1040,11 @@ The testbench must not:
   `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and
   `INTER_SAD_THRESHOLD` so staged validation can reproduce the `I_PCM` paths
   instead of relying on ad-hoc `make` commands
-- The `Intra_16x16` DC inverse path in `h264_luma_dc.v` now preserves the full
-  Hadamard dynamic range instead of truncating the top bits before inverse
-  scaling
-- The current `Intra_16x16` IDR path is now decodable on the RTL byte stream,
-  but it is still not visually correct enough to count as a finished quality
-  path
+- The `Intra_16x16` luma-DC path in `h264_luma_dc.v` now keeps the forward
+  rounded Hadamard output, uses the DC-specific forward quant step, latches
+  the input payload for execution, and restores the missing scaling-list
+  factor on inverse dequant; that re-closed the current IDR-path
+  `Intra_16x16` reconstruction quality on the validated `320x176` all-IDR run
 - Deferred inter headers and FIFO discard now prevent illegal zero-residual
   CAVLC payloads from leaking after `cbp=0` or `P_SKIP`
 
