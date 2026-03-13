@@ -780,13 +780,13 @@ The testbench must not:
     future-picture `List0 ref_idx` mappings
   - `temporal_direct_auto_32x16_7f_autoslice`: strict FFmpeg-decodable
     decode-only auto temporal-direct reordered-B validation at `32x16`, `7`
-    frames, `608,093` cycles, `277` bytes,
+    frames, `608,096` cycles, `274` bytes,
     `output/validation_temporal_direct_b_auto_32x16_7f_autoslice.h264`,
     `output/validation_temporal_direct_b_auto_32x16_7f_autoslice.json`, with
     header-trace proof that the reordered B slices emit
     `direct_spatial_mv_pred_flag = 0`, with the RTL auto-switching the slice
-    to temporal direct and `b_mode_summary` reporting `total_direct=3` and
-    `total_direct_refgt0=3`
+    to temporal direct and `b_mode_summary` reporting `total_direct=4` and
+    `total_direct_refgt0=4`
   - `temporal_direct_bref_auto_refslotl0_32x16_7f_autoslice`: strict
     FFmpeg-decodable decode-only auto temporal-direct reordered-`BREF`
     validation at `32x16`, `7` frames, `707,309` cycles, `253` bytes,
