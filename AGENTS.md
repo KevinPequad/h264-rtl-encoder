@@ -285,8 +285,10 @@ The testbench must not:
   - Limited `B_DIRECT_16x16` support on the current reordered dual-list
     `16x16` B path, with spatial direct derivation from neighbor state plus
     colocated MB metadata captured per reference bank, a current limited
-    temporal-direct mode, automatic selection, and force hooks for targeted
-    validation
+    temporal-direct mode, slice-level automatic temporal/spatial selection on
+    reordered `B` and reordered-`BREF` slices when the future picture's
+    `List0 ref0` bank maps back into the current past-reference set, and
+    force hooks for targeted validation
   - Limited `B_SKIP` support on the current reordered dual-list `16x16`
     `B_DIRECT_16x16` path when the chosen direct macroblock reaches zero
     residual
@@ -323,8 +325,9 @@ The testbench must not:
     handling future `ref_idx_l0=0`
   - The current limited reordered `B_DIRECT_16x16` path now also supports a
     temporal-direct mode when the future reference picture's `List0 ref0` bank
-    maps back to the current past reference, with RTL-owned
-    `direct_spatial_mv_pred_flag = 0` signaling
+    maps back to the current past reference, with slice-level automatic
+    temporal-direct selection on reordered `B` and reordered-`BREF` slices
+    plus RTL-owned `direct_spatial_mv_pred_flag = 0` signaling
   - The current limited `B_DIRECT_16x16` path can now collapse zero-residual
     macroblocks into RTL-owned B-slice skip-run syntax through the same late
     deferred-header path already used for zero-residual `P_SKIP`
@@ -454,9 +457,9 @@ The testbench must not:
   - MP4 remux of the RTL-generated stream
   - Reproducible smoke matrix for fast strict-decode/profile sanity on
     generated tiny `I_PCM` inputs plus tiny forced spatial-direct,
-    temporal-direct, temporal-direct reordered-`BREF`, mixed
-    reordered-`BREF` ref-slot / B-slot temporal-direct cases, and multi-ref
-    reordered `B_BI_16x16` cases
+    temporal-direct, auto temporal-direct reordered-`B` and reordered-`BREF`
+    cases, mixed reordered-`BREF` ref-slot / B-slot temporal-direct cases,
+    and multi-ref reordered `B_BI_16x16` cases
   - Multi-frame validation at `320x176`
   - Multi-frame validation at `1280x720`
   - PSNR / SSIM comparison scripts
@@ -775,6 +778,27 @@ The testbench must not:
     `b_mode_summary` reporting `total_direct=6` and `total_direct_refgt0=4`,
     proving the current limited temporal-direct path can now consume nonzero
     future-picture `List0 ref_idx` mappings
+  - `temporal_direct_auto_32x16_7f_autoslice`: strict FFmpeg-decodable
+    decode-only auto temporal-direct reordered-B validation at `32x16`, `7`
+    frames, `608,093` cycles, `277` bytes,
+    `output/validation_temporal_direct_b_auto_32x16_7f_autoslice.h264`,
+    `output/validation_temporal_direct_b_auto_32x16_7f_autoslice.json`, with
+    header-trace proof that the reordered B slices emit
+    `direct_spatial_mv_pred_flag = 0`, with the RTL auto-switching the slice
+    to temporal direct and `b_mode_summary` reporting `total_direct=3` and
+    `total_direct_refgt0=3`
+  - `temporal_direct_bref_auto_refslotl0_32x16_7f_autoslice`: strict
+    FFmpeg-decodable decode-only auto temporal-direct reordered-`BREF`
+    validation at `32x16`, `7` frames, `707,309` cycles, `253` bytes,
+    `output/validation_temporal_direct_bref_auto_from_refslotl0_32x16_7f_autoslice.h264`,
+    `output/validation_temporal_direct_bref_auto_from_refslotl0_32x16_7f_autoslice.json`,
+    with header-trace proof that the first reordered `BREF` ref slot stays
+    `direct_spatial_mv_pred_flag = 1` while the later reordered `BREF` slices
+    auto-switch to `0`, the future reordered `BREF` ref slot pinned to
+    `B_L0_16x16`, and the later reordered `BREF` slice auto-switching to
+    temporal direct,
+    `b_mode_summary` reporting `total_l0_refgt0=6`, `total_direct=2`, and
+    `total_direct_refgt0=2`
   - `temporal_direct_bref_mixed_refslotl0_32x16_7f`: strict
     FFmpeg-decodable decode-only mixed reordered-`BREF` validation at
     `32x16`, `7` frames, `718,775` cycles, `505` bytes,

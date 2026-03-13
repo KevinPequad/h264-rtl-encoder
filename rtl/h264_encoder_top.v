@@ -569,7 +569,8 @@ module h264_encoder_top #(
             ((valid_ref_count >= 3'd4) ? 2'd3 :
              (valid_ref_count >= 3'd3) ? 2'd2 : 2'd1) :
             2'd1;
-    wire direct_spatial_mv_pred_flag_w = ~force_b_direct_temporal_in;
+    reg        direct_temporal_slice_mode_reg;
+    wire direct_spatial_mv_pred_flag_w = ~direct_temporal_slice_mode_reg;
     wire weighted_pred_enable_cfg_w = (WEIGHTED_PRED_ENABLE != 0);
     wire [3:0] luma_log2_weight_denom_cfg_w = LUMA_LOG2_WEIGHT_DENOM[3:0];
     wire signed [8:0] luma_weight_cfg_w = LUMA_WEIGHT[8:0];
@@ -700,6 +701,24 @@ module h264_encoder_top #(
                 2'd2: b_l0_ref_bank_from_idx = ancient_ref_bank;
                 default: b_l0_ref_bank_from_idx = older_ref_bank;
             endcase
+        end
+    endfunction
+
+    function automatic direct_temporal_slice_mode_next;
+        input is_b_slice_in;
+        input is_idr_slice_in;
+        input [8:0] pic_order_cnt_lsb_in_f;
+        begin
+            direct_temporal_slice_mode_next =
+                ~is_idr_slice_in &&
+                is_b_slice_in &&
+                (force_b_direct_temporal_in ||
+                 ((valid_ref_count >= 3'd2) &&
+                  refbank_has_l0_ref0[newest_ref_bank] &&
+                  ((refbank_l0_ref0_bank[newest_ref_bank] == older_ref_bank) ||
+                   ((valid_ref_count >= 3'd3) && (refbank_l0_ref0_bank[newest_ref_bank] == oldest_ref_bank)) ||
+                   ((valid_ref_count >= 3'd4) && (refbank_l0_ref0_bank[newest_ref_bank] == ancient_ref_bank))) &&
+                  (refbank_poc_lsb[newest_ref_bank] != pic_order_cnt_lsb_in_f)));
         end
     endfunction
 
@@ -1866,7 +1885,7 @@ pred_buf = {(256*BD){1'b0}};
             blk_state <= BS_PRED; blk_started <= 1'b0; iq_done_latched <= 1'b0;
             recon_buf <= {(256*BD){1'b0}}; luma_recon_buf <= {(256*BD){1'b0}}; top_ref_flat <= {(MB_COLS*16*BD){1'b0}}; left_ref_flat <= {(16*BD){1'b0}};
             top_pixels_flat <= {(16*BD){1'b0}}; left_pixels_flat <= {(16*BD){1'b0}}; flush_pending <= 1'b0; flush_accepted <= 1'b0;
-            is_p_frame <= 1'b0; is_b_frame <= 1'b0; is_b_ref_frame <= 1'b0; is_inter_mb_reg <= 1'b0; is_skip_mb_reg <= 1'b0; is_b_l1_mb_reg <= 1'b0; is_b_bi_mb_reg <= 1'b0; is_b_direct_mb_reg <= 1'b0; use_intra16_mb_reg <= 1'b0; use_ipcm_mb_reg <= 1'b0; cur_frame_num <= 8'd0; cur_pic_order_cnt_lsb <= 9'd0;
+            is_p_frame <= 1'b0; is_b_frame <= 1'b0; is_b_ref_frame <= 1'b0; is_inter_mb_reg <= 1'b0; is_skip_mb_reg <= 1'b0; is_b_l1_mb_reg <= 1'b0; is_b_bi_mb_reg <= 1'b0; is_b_direct_mb_reg <= 1'b0; use_intra16_mb_reg <= 1'b0; use_ipcm_mb_reg <= 1'b0; cur_frame_num <= 8'd0; cur_pic_order_cnt_lsb <= 9'd0; direct_temporal_slice_mode_reg <= 1'b0;
             me_best_mvx <= 8'sd0; me_best_mvy <= 8'sd0; me_best_mvx_l0 <= 8'sd0; me_best_mvy_l0 <= 8'sd0; me_best_mvx_l1 <= 8'sd0; me_best_mvy_l1 <= 8'sd0; me_best_sad <= 18'd0; me_fullpel_best_sad <= 18'd0;
             inter_pred_buf <= {(256*BD){1'b0}}; ref_wr_idx <= 9'd0;
             intra16_pred_buf <= {(256*BD){1'b0}}; intra16_mode_mb <= 2'd2;
@@ -1978,6 +1997,7 @@ pred_buf = {(256*BD){1'b0}};
                     is_p_frame <= ~is_idr_in && !is_b_in;
                     is_b_frame <= ~is_idr_in && is_b_in;
                     is_b_ref_frame <= ~is_idr_in && is_b_in && is_bref_in;
+                    direct_temporal_slice_mode_reg <= direct_temporal_slice_mode_next(is_b_in, is_idr_in, pic_order_cnt_lsb_in);
                     mb_x <= 7'd0; mb_y <= 6'd0; mb_count <= 12'd0;
                     me_search_pass <= 2'd0;
                     mb_ref_idx_reg <= 2'd0;
@@ -2306,7 +2326,7 @@ pred_buf = {(256*BD){1'b0}};
                         end
 
                         if (is_b_frame && (valid_ref_count >= 3'd2) && !force_b_l0_in) begin
-                            if (force_b_direct_temporal_in) begin
+                            if (direct_temporal_slice_mode_reg) begin
                                 calc_b_direct16x16_temporal(
                                     direct_candidate_active,
                                     direct_use_l1, direct_use_bi,
