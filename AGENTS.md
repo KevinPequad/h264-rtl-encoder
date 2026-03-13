@@ -299,6 +299,10 @@ The testbench must not:
   - Current reordered B inter selection can choose past `List0`, future
     `List1`, or bidirectional `B_BI_16x16` prediction per macroblock on the
     current limited reordered dual-list `16x16` B path
+  - The current reordered dual-list `B_BI_16x16` path now seeds its past-side
+    search from the best stored past-reference/future-reference pair instead
+    of always collapsing to `List0 ref_idx 0`, so reordered validation can
+    exercise nonzero `ref_idx_l0` values on the limited B path
   - The current limited `B_BI_16x16` path now writes back both motion-vector
     lists into neighbor state and refines each list through the quarter-pel
     luma path before the bidirectional average is formed
@@ -445,8 +449,8 @@ The testbench must not:
   - MP4 remux of the RTL-generated stream
   - Reproducible smoke matrix for fast strict-decode/profile sanity on
     generated tiny `I_PCM` inputs plus tiny forced spatial-direct,
-    temporal-direct, and temporal-direct reordered-`BREF`
-    `B_DIRECT_16x16` cases
+    temporal-direct, temporal-direct reordered-`BREF`, and multi-ref
+    reordered `B_BI_16x16` cases
   - Multi-frame validation at `320x176`
   - Multi-frame validation at `1280x720`
   - PSNR / SSIM comparison scripts
@@ -479,8 +483,9 @@ The testbench must not:
     can prove that the current limited `B_DIRECT_16x16` path was actually
     selected, whether automatically or via force
   - Staged validation JSON and smoke summaries now carry parsed
-    `skip_mbs` / `b_l1_mbs` / `b_bi_mbs` / `b_direct_mbs` aggregates so B-path
-    behavior can be asserted without manual log scraping
+    `skip_mbs` / `b_l1_mbs` / `b_bi_mbs` / `b_direct_mbs` /
+    `b_l0_refgt0_mbs` aggregates so B-path behavior can be asserted without
+    manual log scraping
   - Reordered validation can now combine `--reorder-b-gop` and
     `--force-bref-slice` so the reference slots are emitted as `BREF`
     pictures
@@ -491,8 +496,8 @@ The testbench must not:
   reproducible, including simulator logs, cycle counts, and per-case
   `b_mode_summary` counters
   - Treat it as a fast strict-decode/profile sanity matrix on tiny `I_PCM`
-    cases plus a tiny forced `B_DIRECT_16x16` case, not the final
-    decode-quality gate
+    cases plus tiny forced `B_DIRECT_16x16` and multi-ref reordered
+    `B_BI_16x16` cases, not the final decode-quality gate
   - It now emits both `.build.log` and `.sim.log` artifacts per case
 
 - Use `scripts/validate_clip.py` for staged multi-frame validation, PSNR / SSIM,
@@ -677,6 +682,14 @@ The testbench must not:
     last two non-IDR pictures and `trace_headers` confirmation of
     `weighted_bipred_idc = 1`, `luma_log2_weight_denom = 2`,
     `chroma_log2_weight_denom = 2`, and list0/list1 luma/chroma weights of `5`
+  - `bmultiref_ref1win_32x16_5f_ipcmrefs`: strict FFmpeg-decodable current-tree
+    forced-`B_BI_16x16` reordered-B validation at `32x16`, `5` frames, exact
+    IDR/P `I_PCM` references, `329,003` cycles, `1,408` bytes,
+    `output/validation_bmultiref_ref1win_32x16_5f_ipcmrefs.h264`, and
+    `output/validation_bmultiref_ref1win_32x16_5f_ipcmrefs.json`, with
+    `b_mode_summary` showing `total_bi = 4` and `total_l0_refgt0 = 2`, proving
+    the limited reordered multi-ref `B_BI_16x16` path can now emit nonzero
+    `List0 ref_idx` values
   - `autobi_qpelcmp_weightedbi5_320x176_5f`: strict FFmpeg-decodable
     current-tree reordered all-`BREF` validation at `320x176`, `5` frames,
     non-default explicit B weights (`5` with denom `2`), `97,793,335` cycles,
