@@ -205,6 +205,10 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
   list0-reference-bank state alongside the per-MB colocated metadata, and the
   current limited temporal-direct path now consumes that metadata on reordered
   B and reordered-`BREF` slices
+- reference-bank metadata now also retains the additional stored future-picture
+  `List0` bank mappings needed for the current limited temporal-direct path, so
+  nonzero colocated future `ref_idx_l0` values can map back into the current B
+  picture's past-reference set instead of only handling future `ref_idx_l0=0`
 - the current limited `B_DIRECT_16x16` path can now collapse zero-residual
   macroblocks into RTL-owned B-slice skip-run syntax through the same late
   deferred-header path already used for zero-residual `P_SKIP`
@@ -365,8 +369,8 @@ Verified validation and tooling coverage around the encoder flow:
   whether automatically or via force
 - staged validation JSON and smoke summaries now carry parsed
   `skip_mbs` / `b_l1_mbs` / `b_bi_mbs` / `b_direct_mbs` /
-  `b_l0_refgt0_mbs` aggregates so B-path behavior can be asserted without
-  manual log scraping
+  `b_l0_refgt0_mbs` / `b_direct_refgt0_mbs` aggregates so B-path behavior can
+  be asserted without manual log scraping
 - reordered validation can now combine `--reorder-b-gop` and
   `--force-bref-slice` so the reference slots are emitted as `BREF` pictures
 - fast strict-decode-only validation mode in `validate_clip.py` for longer
@@ -657,6 +661,14 @@ Measured validation points:
   header-trace proof that both non-IDR `BREF` slices emit
   `direct_spatial_mv_pred_flag = 0` while the last picture reports
   `b_direct_mbs=220`
+- `temporal_direct_ref1_32x16_7f`: strict FFmpeg-decodable decode-only forced
+  temporal-direct reordered-B validation at `32x16`, `7` frames, `608,780`
+  cycles, `525` bytes, `output/validation_temporal_direct_ref1_32x16_7f.h264`,
+  `output/validation_temporal_direct_ref1_32x16_7f.json`, and header-trace
+  proof that the B slices emit `direct_spatial_mv_pred_flag = 0`, with
+  `b_mode_summary` reporting `total_direct=6` and `total_direct_refgt0=4`,
+  proving the current limited temporal-direct path can now consume nonzero
+  future-picture `List0 ref_idx` mappings
 - `bdirect_auto_weighted_32x16_3f`: strict FFmpeg-decodable weighted
   non-forced auto `B_DIRECT_16x16` reordered-B validation at `32x16`, `3`
   frames, `131,078` cycles, `180` bytes, RTL PSNR avg `30.158513`, RTL SSIM
