@@ -217,6 +217,10 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
   direct path can now derive a candidate from colocated `List1` motion when
   that stored future mapping is the usable path back into the current past-
   reference set
+- plain `B_L1_16x16` final selection now explicitly stores `List1 ref_idx 0`
+  instead of leaking stale `List0` ref-index state into the colocated
+  metadata, so reordered-`BREF` reference slots coded as `B_L1_16x16` can
+  seed later temporal-direct derivation from colocated `List1`
 - the current limited `B_DIRECT_16x16` path can now collapse zero-residual
   macroblocks into RTL-owned B-slice skip-run syntax through the same late
   deferred-header path already used for zero-residual `P_SKIP`
@@ -366,6 +370,8 @@ Verified validation and tooling coverage around the encoder flow:
   scripts for the current limited `B_BI_16x16` path
 - runtime-configurable `force_b_l0` support in the testbench and validation
   scripts for targeted validation of the current limited `B_L0_16x16` path
+- runtime-configurable `force_b_l1` support in the testbench and validation
+  scripts for targeted validation of the current limited `B_L1_16x16` path
 - runtime-configurable `force_b_direct` support in the testbench and
   validation scripts for targeted validation of the current limited
   `B_DIRECT_16x16` path
@@ -373,10 +379,11 @@ Verified validation and tooling coverage around the encoder flow:
   validation scripts so reordered B slices can switch to the current limited
   temporal-direct derivation and emit `direct_spatial_mv_pred_flag = 0`
 - runtime-configurable slot-scoped `force_b_bi` / `force_b_l0` /
-  `force_b_direct` / `force_b_direct_temporal` support on reordered
-  reference slots and reordered B slots, so mixed reordered-`BREF`
-  validations can pin the future reference slot to `B_L0_16x16` while
-  pinning the later B slot to temporal direct in the same run
+  `force_b_l1` / `force_b_direct` / `force_b_direct_temporal` support on
+  reordered reference slots and reordered B slots, so mixed reordered-`BREF`
+  validations can pin the future reference slot to `B_L0_16x16` or
+  `B_L1_16x16` while pinning the later B slot to temporal direct in the same
+  run
 - simulator-side per-frame `b_l1_mbs` logging so reordered B validation can
   prove that the future-reference `List1` path was actually selected
 - simulator-side per-frame `b_bi_mbs` logging so reordered B validation can
@@ -775,6 +782,45 @@ Measured validation points:
   and header-trace proof that the later reordered `BREF` slices still emit
   `direct_spatial_mv_pred_flag = 0`, with `b_mode_summary` reporting
   `total_direct=337`, `total_direct_refgt0=167`, and `total_direct_l1src=170`
+- `temporal_direct_bref_mixed_refslotl1_32x16_7f_inter_fix1`: strict
+  FFmpeg-decodable decode-only mixed reordered-`BREF` validation at `32x16`,
+  `7` frames, `724,380` cycles, `1,821` bytes,
+  `output/validation_temporal_direct_bref_mixed_refslotl1_32x16_7f_inter_fix1.h264`,
+  `output/validation_temporal_direct_bref_mixed_refslotl1_32x16_7f_inter_fix1.json`,
+  and header-trace proof in
+  `output/validation_temporal_direct_bref_mixed_refslotl1_32x16_7f_inter_fix1.trace_headers.txt`
+  that later reordered `BREF` slices emit `direct_spatial_mv_pred_flag = 0`,
+  with reordered reference slots pinned to `B_L1_16x16`, reordered B slots
+  pinned to temporal direct, and `b_mode_summary` reporting `total_l1=4`,
+  `total_direct=6`, and `total_direct_l1src=4`
+- `temporal_direct_bref_auto_from_refslotl1_32x16_7f_inter_fix1`: strict
+  FFmpeg-decodable decode-only mixed reordered-`BREF` auto validation at
+  `32x16`, `7` frames, `739,640` cycles, `1,587` bytes,
+  `output/validation_temporal_direct_bref_auto_from_refslotl1_32x16_7f_inter_fix1.h264`,
+  `output/validation_temporal_direct_bref_auto_from_refslotl1_32x16_7f_inter_fix1.json`,
+  and header-trace proof in
+  `output/validation_temporal_direct_bref_auto_from_refslotl1_32x16_7f_inter_fix1.trace_headers.txt`
+  that the first reordered `BREF` slice stays spatial while later ones switch
+  to temporal direct, with `b_mode_summary` reporting `total_l1=6`,
+  `total_direct=2`, and `total_direct_l1src=2`
+- `temporal_direct_bref_mixed_refslotl1_320x176_7f_fix1`: strict
+  FFmpeg-decodable decode-only mixed reordered-`BREF` validation at
+  `320x176`, `7` frames, `233,261,934` cycles, `129,453` bytes,
+  `output/validation_temporal_direct_bref_mixed_refslotl1_320x176_7f_fix1.h264`,
+  `output/validation_temporal_direct_bref_mixed_refslotl1_320x176_7f_fix1.json`,
+  and simulator-log proof that reordered reference slots pinned to
+  `B_L1_16x16` can drive later temporal-direct slices through colocated
+  `List1`, with `b_mode_summary` reporting `total_l1=20`, `total_direct=1080`,
+  `total_direct_refgt0=640`, and `total_direct_l1src=220`
+- `temporal_direct_bref_auto_from_refslotl1_320x176_7f_fix1`: strict
+  FFmpeg-decodable decode-only mixed reordered-`BREF` auto validation at
+  `320x176`, `7` frames, `233,399,683` cycles, `97,921` bytes,
+  `output/validation_temporal_direct_bref_auto_from_refslotl1_320x176_7f_fix1.h264`,
+  `output/validation_temporal_direct_bref_auto_from_refslotl1_320x176_7f_fix1.json`,
+  and simulator-log proof that the non-forced selector now reaches the same
+  colocated-`List1` temporal-direct path on the larger clip, with
+  `b_mode_summary` reporting `total_l1=341`, `total_bi=759`,
+  `total_direct=727`, `total_direct_refgt0=413`, and `total_direct_l1src=314`
 - `bl0_force_ref1_32x16_7f_ipcmrefs`: strict FFmpeg-decodable decode-only
   reordered-B validation at `32x16`, `7` frames, exact IDR/P `I_PCM`
   references, `581,041` cycles, `4,234` bytes,
