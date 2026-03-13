@@ -609,6 +609,13 @@ Measured validation points:
   `output/validation_bdirect_auto_probe_320x176_5f.h264`, and simulator
   logging showing nonzero `b_direct_mbs` across all three non-IDR pictures
   (`219`, `148`, and `31`)
+- `bdirect_bskip_auto_320x176_5f_json`: strict FFmpeg-decodable non-forced
+  decode-only reordered all-`BREF` validation at `320x176`, `5` frames,
+  `93,158,455` cycles, `4,541` bytes,
+  `output/validation_bdirect_bskip_auto_320x176_5f_json.h264`, with staged
+  JSON `b_mode_summary` reporting `frames_with_skip=3`, `total_skip=393`,
+  `max_skip=219`, `frames_with_direct=3`, and simulator skip counts of
+  `219`, `148`, and `26` across the three non-IDR pictures
 - `bdirect_auto_weighted_32x16_3f`: strict FFmpeg-decodable weighted
   non-forced auto `B_DIRECT_16x16` reordered-B validation at `32x16`, `3`
   frames, `131,078` cycles, `180` bytes, RTL PSNR avg `30.158513`, RTL SSIM
