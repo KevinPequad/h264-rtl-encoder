@@ -323,6 +323,11 @@ The testbench must not:
     temporal-direct path, so nonzero colocated future `ref_idx_l0` values can
     map back into the current B picture's past-reference set instead of only
     handling future `ref_idx_l0=0`
+  - Reference-bank metadata now also retains the current limited future-
+    picture `List1 ref0` bank mapping for reordered `BREF` pictures, and the
+    temporal-direct path can now derive a candidate from colocated `List1`
+    motion when that stored future mapping is the usable path back into the
+    current past-reference set
   - The current limited reordered `B_DIRECT_16x16` path now also supports a
     temporal-direct mode when the future reference picture's `List0 ref0` bank
     maps back to the current past reference, with slice-level automatic
@@ -500,8 +505,8 @@ The testbench must not:
     selected, whether automatically or via force
   - Staged validation JSON and smoke summaries now carry parsed
     `skip_mbs` / `b_l1_mbs` / `b_bi_mbs` / `b_direct_mbs` /
-    `b_l0_refgt0_mbs` / `b_direct_refgt0_mbs` aggregates so B-path behavior
-    can be asserted without manual log scraping
+    `b_l0_refgt0_mbs` / `b_direct_refgt0_mbs` / `b_direct_l1src_mbs`
+    aggregates so B-path behavior can be asserted without manual log scraping
   - Reordered validation can now combine `--reorder-b-gop` and
     `--force-bref-slice` so the reference slots are emitted as `BREF`
     pictures
@@ -833,6 +838,32 @@ The testbench must not:
     can also consume nonzero future `List0` mappings coming from reordered
     `BREF` reference slots that were themselves coded on the limited
     `B_BI_16x16` path
+  - `temporal_direct_bref_bi_ref1_l1src_32x16_5f`: strict FFmpeg-decodable
+    decode-only mixed reordered-`BREF` validation at `32x16`, `5` frames,
+    `404,573` cycles, `1,537` bytes,
+    `output/validation_temporal_direct_bref_bi_ref1_l1src_32x16_5f.h264`, and
+    `output/validation_temporal_direct_bref_bi_ref1_l1src_32x16_5f.json`,
+    with reordered reference slots pinned to `B_BI_16x16` and reordered B
+    slots pinned to temporal direct, and `b_mode_summary` reporting
+    `total_direct=4` plus `total_direct_l1src=2`, proving the current limited
+    temporal-direct path can now derive direct macroblocks from colocated
+    `List1` on future reordered-`BREF` BI pictures
+  - `temporal_direct_bref_bi_ref1_l1src_320x176_5f`: strict FFmpeg-decodable
+    decode-only mixed reordered-`BREF` validation at `320x176`, `5` frames,
+    `119,819,413` cycles, `152,910` bytes,
+    `output/validation_temporal_direct_bref_bi_ref1_l1src_320x176_5f.h264`,
+    `output/validation_temporal_direct_bref_bi_ref1_l1src_320x176_5f.json`,
+    and header-trace proof that the later reordered `BREF` slices still emit
+    `direct_spatial_mv_pred_flag = 0`, with `b_mode_summary` reporting
+    `total_direct=607`, `total_direct_refgt0=357`, and `total_direct_l1src=30`
+  - `temporal_direct_bref_auto_from_refslotbi_320x176_5f_l1src`: strict
+    FFmpeg-decodable decode-only mixed reordered-`BREF` auto validation at
+    `320x176`, `5` frames, `121,592,814` cycles, `150,112` bytes,
+    `output/validation_temporal_direct_bref_auto_from_refslotbi_320x176_5f_l1src.h264`,
+    `output/validation_temporal_direct_bref_auto_from_refslotbi_320x176_5f_l1src.json`,
+    and header-trace proof that the later reordered `BREF` slices still emit
+    `direct_spatial_mv_pred_flag = 0`, with `b_mode_summary` reporting
+    `total_direct=337`, `total_direct_refgt0=167`, and `total_direct_l1src=170`
   - `bl0_force_ref1_32x16_7f_ipcmrefs`: strict FFmpeg-decodable decode-only
     reordered-B validation at `32x16`, `7` frames, exact IDR/P `I_PCM`
     references, `581,041` cycles, `4,234` bytes,
