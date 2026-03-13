@@ -246,6 +246,9 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - integer-pel motion estimation
 - fixed search range motion estimation
 - diamond-style luma ME search
+- the integer-pel ME core now resets its per-search diamond/refine state on
+  every new macroblock search, preventing stale candidate state from leaking
+  between macroblocks
 - quarter-pel luma refinement on the current `16x16` P-macroblock inter path
 - luma inter prediction from the previous reconstructed frame
 - chroma fractional interpolation on the current inter path
@@ -273,7 +276,9 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - reconstruction loop in RTL
 - reference-frame writeback for reconstructed luma
 - reference-frame writeback for reconstructed chroma
-- standalone CABAC arithmetic coder core RTL
+- standalone CABAC arithmetic coder core RTL, plus a current final-path CABAC
+  subset for skip-only P slices with dual PPS emission, CABAC slice-header
+  fields, CABAC-coded `mb_skip_flag`, and CABAC-coded `end_of_slice_flag`
 - parameterized resolution
 - parameterized bit depth
 - parameterized chroma format
@@ -283,6 +288,8 @@ Implemented now relative to the chosen `x264` baseline:
 - Annex B bitstream generation owned by RTL
 - SPS / PPS / slice-header / macroblock-header ownership in RTL
 - CAVLC entropy path owned by RTL
+- current CABAC final-path subset on skip-only P slices, with CABAC PPS
+  selection, CABAC-coded `mb_skip_flag`, and CABAC-coded `end_of_slice_flag`
 - I-picture and P-picture coding
 - non-reference `B`-picture syntax on the current intra / `I_PCM` path
 - limited non-reference `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` inter
@@ -350,7 +357,8 @@ Verified validation and tooling coverage around the encoder flow:
   auto temporal-direct reordered-`B` and reordered-`BREF` cases,
   temporal-direct reordered-`BREF` `B_DIRECT_16x16`, mixed reordered-`BREF`
   ref-slot / B-slot temporal-direct cases, explicit reordered-`BREF`
-  ref-slot `B_L1_16x16` guards, and multi-ref reordered `B_BI_16x16` cases
+  ref-slot `B_L1_16x16` guards, multi-ref reordered `B_BI_16x16` cases, and
+  a generated flat exact-reference CABAC P-skip case
 - multi-frame validation at `320x176`
 - multi-frame validation at `1280x720`
 - PSNR / SSIM comparison scripts
@@ -404,6 +412,11 @@ Verified validation and tooling coverage around the encoder flow:
 Measured validation points:
 
 - `docker_320x176_1f`: `816,975` cycles
+- `32x16_4f_cabac_pskip_ipcmidr`: strict FFmpeg-decodable CABAC skip-only
+  P-slice validation on a flat exact-reference clip, `234,131` cycles,
+  `473` bytes, `Main` profile, `output/validation_cabac_pskip_ipcmidr_32x16_4f.h264`,
+  `output/validation_cabac_pskip_ipcmidr_32x16_4f.mp4`, and
+  `b_mode_summary.total_skip = 6`
 - `32x16_1f_nonipcm_10b420_main_ncfix`: strict FFmpeg-decodable one-frame
   non-`I_PCM` `10-bit 4:2:0` probe, RTL PSNR avg `7.9009`, RTL SSIM
   `0.345989`
@@ -976,7 +989,7 @@ Important missing features, so this does not get confused with a full-standard
 H.264 encoder yet:
 
 - CABAC context modelling, syntax binarization, and final bitstream-path
-  integration
+  integration beyond the current skip-only P-slice subset
 - no broader `B` / `BREF` picture support beyond the current limited
   reordered dual-list `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` `16x16` path
 - direct prediction modes beyond the current limited
@@ -993,8 +1006,8 @@ H.264 encoder yet:
 
 Still missing relative to the chosen `x264` software baseline:
 
-- final CABAC slice integration instead of the current standalone arithmetic
-  core only
+- full CABAC slice integration beyond the current standalone arithmetic core
+  and skip-only P-slice subset
 - broader inter-coded `B` / `BREF` picture handling and the associated
   reference management
 - reference-picture management beyond the current four-reference P-slice subset

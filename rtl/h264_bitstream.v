@@ -36,6 +36,9 @@ module h264_bitstream #(
     input  wire [7:0]  mb_qp_delta,
     /* verilator lint_on UNUSED */
     input  wire        mb_has_residual,
+    input  wire        cabac_feature_enable,
+    input  wire        cabac_slice_enable,
+    input  wire [1:0]  cabac_skip_ctx,
 
     // Slice-type support
     input  wire        is_p_slice,
@@ -145,7 +148,10 @@ module h264_bitstream #(
     wire use_high_profile = (BIT_DEPTH > 8) || (CHROMA_FORMAT_IDC != 1);
     wire use_high444_profile = (CHROMA_FORMAT_IDC == 3);
     wire use_high422_profile = (CHROMA_FORMAT_IDC == 2) || (BIT_DEPTH > 10);
-    wire use_main_profile = weighted_pred_enable && !use_high_profile;
+    // The current CABAC P-skip subset and weighted-P path cannot be signaled
+    // as Baseline. Keep the existing non-High CAVLC subset on Baseline for
+    // now, and switch to Main when these tools are enabled.
+    wire use_main_profile = (weighted_pred_enable || cabac_feature_enable) && !use_high_profile;
     wire weighted_pred_flag = weighted_pred_enable;
     wire [1:0] weighted_bipred_idc = weighted_pred_enable ? 2'b01 : 2'b00;
     wire slice_multi_ref_enable = (slice_num_ref_idx_l0_active_minus1 != 2'd0);
@@ -290,6 +296,66 @@ module h264_bitstream #(
 
     // Skip emulation prevention during start code output
     reg        skip_ep;
+    reg        pps_secondary_active;
+    reg        cabac_slice_active;
+    reg [11:0] cabac_mb_counter;
+    reg [6:0]  cabac_skip_ctx_state_0;
+    reg [6:0]  cabac_skip_ctx_state_1;
+    reg [6:0]  cabac_skip_ctx_state_2;
+    reg [1:0]  cabac_pending_skip_ctx_idx;
+    reg        cabac_start;
+    reg        cabac_bin_valid;
+    reg        cabac_bin_value;
+    reg        cabac_bin_bypass;
+    reg        cabac_bin_terminate;
+    reg [6:0]  cabac_ctx_state_in;
+    wire       cabac_bin_ready;
+    wire       cabac_bits_valid;
+    wire [127:0] cabac_bits_out;
+    wire [7:0] cabac_bits_count;
+    wire       cabac_bits_overflow;
+    wire       cabac_ctx_state_wr;
+    wire [6:0] cabac_ctx_state_out;
+    wire       cabac_done;
+    wire       cabac_active;
+
+    function automatic [6:0] cabac_init_state;
+        input integer m;
+        input integer n;
+        input integer qp;
+        integer state_i;
+        integer clipped_i;
+        integer pstate_i;
+        integer mps_i;
+        begin
+            state_i = ((m * qp) >>> 4) + n;
+            if (state_i < 1)
+                clipped_i = 1;
+            else if (state_i > 126)
+                clipped_i = 126;
+            else
+                clipped_i = state_i;
+            if (clipped_i <= (127 - clipped_i)) begin
+                pstate_i = clipped_i;
+                mps_i = 0;
+            end else begin
+                pstate_i = 127 - clipped_i;
+                mps_i = 1;
+            end
+            cabac_init_state = {pstate_i[5:0], mps_i[0]};
+        end
+    endfunction
+
+    function automatic [6:0] cabac_pskip_ctx_init;
+        input [1:0] skip_ctx_i;
+        begin
+            case (skip_ctx_i)
+                2'd0: cabac_pskip_ctx_init = cabac_init_state(23, 33, 26);
+                2'd1: cabac_pskip_ctx_init = cabac_init_state(23, 2, 26);
+                default: cabac_pskip_ctx_init = cabac_init_state(21, 0, 26);
+            endcase
+        end
+    endfunction
 
     // UE(v) encoder — general-purpose unsigned Exp-Golomb
     // Used by SPS and other parameter sets
@@ -399,6 +465,26 @@ module h264_bitstream #(
                                      (mvd_y_l1[8])       ? ({(~mvd_y_l1 + 9'd1), 1'b0}) :
                                                             ({mvd_y_l1, 1'b0} - 10'd1);
 
+    h264_cabac_core u_cabac_core (
+        .clk(clk),
+        .rst_n(rst_n),
+        .start(cabac_start),
+        .bin_valid(cabac_bin_valid),
+        .bin_value(cabac_bin_value),
+        .bin_bypass(cabac_bin_bypass),
+        .bin_terminate(cabac_bin_terminate),
+        .ctx_state_in(cabac_ctx_state_in),
+        .bin_ready(cabac_bin_ready),
+        .bits_valid(cabac_bits_valid),
+        .bits_out(cabac_bits_out),
+        .bits_count(cabac_bits_count),
+        .bits_overflow(cabac_bits_overflow),
+        .ctx_state_wr(cabac_ctx_state_wr),
+        .ctx_state_out(cabac_ctx_state_out),
+        .done(cabac_done),
+        .active(cabac_active)
+    );
+
     // Find MSB position of se_code1 (priority encoder)
     reg [3:0] se_msb;
     always @(*) begin
@@ -468,9 +554,27 @@ module h264_bitstream #(
             ue_input         <= 10'd0;
             pending_skip_run <= 13'd0;
             ipcm_sample_idx  <= 10'd0;
+            pps_secondary_active <= 1'b0;
+            cabac_slice_active <= 1'b0;
+            cabac_mb_counter <= 12'd0;
+            cabac_skip_ctx_state_0 <= 7'd0;
+            cabac_skip_ctx_state_1 <= 7'd0;
+            cabac_skip_ctx_state_2 <= 7'd0;
+            cabac_pending_skip_ctx_idx <= 2'd0;
+            cabac_start <= 1'b0;
+            cabac_bin_valid <= 1'b0;
+            cabac_bin_value <= 1'b0;
+            cabac_bin_bypass <= 1'b0;
+            cabac_bin_terminate <= 1'b0;
+            cabac_ctx_state_in <= 7'd0;
         end else begin
             bs_mem_wr <= 1'b0;
             cmd_done  <= 1'b0;
+            cabac_start <= 1'b0;
+            cabac_bin_valid <= 1'b0;
+            cabac_bin_value <= 1'b0;
+            cabac_bin_bypass <= 1'b0;
+            cabac_bin_terminate <= 1'b0;
 
             // Push to FIFO on valid (if full, we drop, but 64 entries should be plenty)
             if (cavlc_valid && cavlc_count > 6'd0) begin
@@ -514,9 +618,9 @@ module h264_bitstream #(
                         end else if (cmd_write_sps) begin
                             state <= S_SPS; sub <= 6'd0; busy <= 1'b1;
                         end else if (cmd_write_pps) begin
-                            state <= S_PPS; sub <= 6'd0; busy <= 1'b1;
+                            state <= S_PPS; sub <= 6'd0; busy <= 1'b1; pps_secondary_active <= 1'b0;
                         end else if (cmd_write_slice_hdr) begin
-                            state <= S_SLICE; sub <= 6'd0; busy <= 1'b1;
+                            state <= S_SLICE; sub <= 6'd0; busy <= 1'b1; cabac_slice_active <= cabac_slice_enable; cabac_mb_counter <= 12'd0;
                         end else if (cmd_write_mb_header) begin
                             state <= S_MB_HDR; sub <= 6'd0; busy <= 1'b1; ipcm_sample_idx <= 10'd0;
                         end else if (cmd_write_trailing) begin
@@ -776,56 +880,106 @@ module h264_bitstream #(
                             6'd1:  begin bs_mem_data<=8'h00; bs_mem_wr<=1'b1; bs_mem_addr<=bs_bytes_written; bs_bytes_written<=bs_bytes_written+24'd1; sub<=sub+6'd1; end
                             6'd2:  begin bs_mem_data<=8'h00; bs_mem_wr<=1'b1; bs_mem_addr<=bs_bytes_written; bs_bytes_written<=bs_bytes_written+24'd1; sub<=sub+6'd1; end
                             6'd3:  begin bs_mem_data<=8'h01; bs_mem_wr<=1'b1; bs_mem_addr<=bs_bytes_written; bs_bytes_written<=bs_bytes_written+24'd1; sub<=sub+6'd1; zero_cnt<=2'd0; end
-                            6'd4:  begin write_byte<=8'h68; do_write<=1'b1; sub<=sub+6'd1; end
+                            6'd4:  begin write_byte<=8'h68; do_write<=1'b1; sub<=6'd5; end
                             6'd5: begin
+                                ue_input <= pps_secondary_active ? 10'd1 : 10'd0;
+                                sub <= 6'd14;
+                            end
+                            6'd14: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= 10'd0; // seq_parameter_set_id
+                                sub <= 6'd15;
+                            end
+                            6'd15: begin
+                                bit_buf <= bit_buf |
+                                           ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]) |
+                                           (({pps_secondary_active, 1'b0, 94'd0}) >> (bit_cnt + {2'b0, ue_total_bits}));
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits} + 7'd2;
+                                ue_input <= 10'd0; // num_slice_groups_minus1
+                                sub <= 6'd16;
+                            end
+                            6'd16: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= 10'd0; // num_ref_idx_l0_default_active_minus1
+                                sub <= 6'd17;
+                            end
+                            6'd17: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= 10'd0; // num_ref_idx_l1_default_active_minus1
+                                sub <= 6'd18;
+                            end
+                            6'd18: begin
+                                bit_buf <= bit_buf |
+                                           ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]) |
+                                           (({weighted_pred_flag, weighted_bipred_idc, 93'd0}) >> (bit_cnt + {2'b0, ue_total_bits}));
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits} + 7'd3;
+                                se_input <= 9'sd0; // pic_init_qp_minus26
+                                sub <= 6'd19;
+                            end
+                            6'd19: begin
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                se_input <= 9'sd0; // pic_init_qs_minus26
+                                sub <= 6'd20;
+                            end
+                            6'd20: begin
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                se_input <= 9'sd0; // chroma_qp_index_offset
+                                sub <= 6'd21;
+                            end
+                            6'd21: begin
                                 if (use_high_profile) begin
-                                    // High-profile PPS: baseline fields plus transform_8x8_mode_flag,
-                                    // pic_scaling_matrix_present_flag, second_chroma_qp_index_offset.
-                                    // Fields before rbsp_stop_one_bit:
-                                    // entropy_coding_mode=0 (CAVLC), pic_order_present=0,
-                                    // num_slice_groups=UE(0)'1', num_ref_idx_l0=UE(0)'1',
-                                    // num_ref_idx_l1=UE(0)'1', weighted_pred=0,
-                                    // weighted_bipred is explicit (01) when weighted prediction is enabled.
-                                    // pic_init_qs=SE(0)'1', chroma_qp_offset=SE(0)'1',
-                                    // deblocking_filter_control=1, constrained_intra=0, redundant_pic_cnt=0,
-                                    // transform_8x8_mode=0, pic_scaling_matrix_present=0,
-                                    // second_chroma_qp_index_offset=SE(0)'1'
-                                    // = 19 bits before rbsp_stop_one_bit.
-                                    bit_buf <= {7'b1100111, weighted_pred_flag,
-                                                (weighted_bipred_idc == 2'b01) ? 8'b01111100 : 8'b00111100,
-                                                3'b001, 77'd0};
-                                    bit_cnt <= 7'd19;
-                                    sub <= 6'd10; // jump to emit+trailing
+                                    bit_buf <= bit_buf |
+                                               ({se_ue_bits, 75'd0} >> bit_cnt[6:0]) |
+                                               (({5'b10000, 91'd0}) >> (bit_cnt + {2'b0, se_total_bits}));
+                                    bit_cnt <= bit_cnt + {2'b0, se_total_bits} + 7'd5;
+                                    se_input <= 9'sd0; // second_chroma_qp_index_offset
+                                    sub <= 6'd22;
                                 end else begin
-                                    // Baseline/Main PPS: first byte varies only with weighted_pred_flag.
-                                    write_byte <= weighted_pred_flag ? 8'hCF : 8'hCE;
-                                    do_write <= 1'b1;
-                                    sub <= sub + 6'd1;
+                                    bit_buf <= bit_buf |
+                                               ({se_ue_bits, 75'd0} >> bit_cnt[6:0]) |
+                                               (({3'b100, 93'd0}) >> (bit_cnt + {2'b0, se_total_bits}));
+                                    bit_cnt <= bit_cnt + {2'b0, se_total_bits} + 7'd3;
+                                    sub <= 6'd10;
                                 end
                             end
-                            6'd6:  begin write_byte<=weighted_pred_enable ? 8'h7C : 8'h3C; do_write<=1'b1; sub<=sub+6'd1; end
-                            6'd7:  begin write_byte<=8'h80; do_write<=1'b1; sub<=sub+6'd1; end
-                            6'd8:  begin cmd_done<=1'b1; busy<=1'b0; state<=S_IDLE; zero_cnt<=2'd0; end
-                            // High 10 PPS path: add RBSP trailing and emit
+                            6'd22: begin
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
+                                sub <= 6'd10;
+                            end
                             6'd10: begin
-                                // Add RBSP stop bit
                                 bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + 7'd1;
-                                sub <= sub + 6'd1;
+                                sub <= 6'd11;
                             end
                             6'd11: begin
-                                // Pad to byte boundary
                                 if (bit_cnt[2:0] != 3'd0)
                                     bit_cnt <= bit_cnt + 7'd1;
                                 else
-                                    sub <= sub + 6'd1;
+                                    sub <= 6'd12;
                             end
                             6'd12: begin
                                 state <= S_EMIT;
                                 return_state <= S_PPS;
-                                sub <= sub + 6'd1;
+                                sub <= 6'd13;
                             end
-                            6'd13: begin cmd_done<=1'b1; busy<=1'b0; state<=S_IDLE; zero_cnt<=2'd0; end
+                            6'd13: begin
+                                if (cabac_feature_enable && !pps_secondary_active) begin
+                                    pps_secondary_active <= 1'b1;
+                                    bit_buf <= 96'd0;
+                                    bit_cnt <= 7'd0;
+                                    zero_cnt <= 2'd0;
+                                    sub <= 6'd0;
+                                end else begin
+                                    pps_secondary_active <= 1'b0;
+                                    cmd_done<=1'b1; busy<=1'b0; state<=S_IDLE; zero_cnt<=2'd0;
+                                end
+                            end
                             default: state <= S_IDLE;
                         endcase
                     end
@@ -850,7 +1004,17 @@ module h264_bitstream #(
                             end
                             6'd5: begin
                                 if (is_p_slice) begin
-                                    if (weighted_pred_flag) begin
+                                    if (cabac_slice_active) begin
+                                        // Minimal CABAC P-slice subset:
+                                        // first_mb=UE(0), slice_type=P, pic_parameter_set_id=UE(1),
+                                        // frame_num, pic_order_cnt_lsb, num_ref_idx_active_override_flag=0,
+                                        // ref_pic_list_reordering_flag_l0=0, adaptive_ref_pic_marking_mode_flag=0,
+                                        // cabac_init_idc=UE(0), slice_qp_delta=SE(0), deblocking=UE(1).
+                                        bit_buf <= {1'b1, 1'b1, 3'b010, frame_num, pic_order_cnt_lsb,
+                                                    1'b0, 1'b0, 1'b0, 1'b1, 1'b1, 3'b010, 66'd0};
+                                        bit_cnt <= 7'd30;
+                                        sub <= 6'd30;
+                                    end else if (weighted_pred_flag) begin
                                         if (use_high_profile) begin
                                             // P-slice base header up to ref_pic_list_reordering_flag_l0.
                                             if (slice_multi_ref_enable) begin
@@ -962,6 +1126,12 @@ module h264_bitstream #(
                                 sub <= sub + 6'd1;
                             end
                             6'd7: begin
+                                if (cabac_slice_active) begin
+                                    cabac_skip_ctx_state_0 <= cabac_pskip_ctx_init(2'd0);
+                                    cabac_skip_ctx_state_1 <= cabac_pskip_ctx_init(2'd1);
+                                    cabac_skip_ctx_state_2 <= cabac_pskip_ctx_init(2'd2);
+                                    cabac_start <= 1'b1;
+                                end
                                 cmd_done <= 1'b1;
                                 busy     <= 1'b0;
                                 state    <= S_IDLE;
@@ -1113,6 +1283,14 @@ module h264_bitstream #(
                                 end
                                 sub <= 6'd6;
                             end
+                            6'd30: begin
+                                if (bit_cnt[2:0] != 3'd0) begin
+                                    bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + 7'd1;
+                                end else begin
+                                    sub <= 6'd6;
+                                end
+                            end
                             default: state <= S_IDLE;
                         endcase
                     end
@@ -1120,7 +1298,30 @@ module h264_bitstream #(
                     S_MB_HDR: begin
                         case (sub)
                             6'd0: begin
-                                if (slice_has_skip_run && is_skip_mb) begin
+                                if (cabac_slice_active) begin
+                                    if (!is_skip_mb) begin
+                                        $fatal(1, "[CABAC_PSKIP] Non-skip MB reached CABAC subset path");
+                                    end else if (cabac_mb_counter != 12'd0) begin
+                                        cabac_bin_valid <= 1'b1;
+                                        cabac_bin_value <= 1'b0;
+                                        cabac_bin_bypass <= 1'b0;
+                                        cabac_bin_terminate <= 1'b1;
+                                        cabac_ctx_state_in <= 7'd0;
+                                        sub <= 6'd32;
+                                    end else begin
+                                        case (cabac_skip_ctx)
+                                            2'd0: cabac_ctx_state_in <= cabac_skip_ctx_state_0;
+                                            2'd1: cabac_ctx_state_in <= cabac_skip_ctx_state_1;
+                                            default: cabac_ctx_state_in <= cabac_skip_ctx_state_2;
+                                        endcase
+                                        cabac_pending_skip_ctx_idx <= cabac_skip_ctx;
+                                        cabac_bin_valid <= 1'b1;
+                                        cabac_bin_value <= 1'b1;
+                                        cabac_bin_bypass <= 1'b0;
+                                        cabac_bin_terminate <= 1'b0;
+                                        sub <= 6'd33;
+                                    end
+                                end else if (slice_has_skip_run && is_skip_mb) begin
                                     pending_skip_run <= pending_skip_run + 13'd1;
                                     cmd_done <= 1'b1;
                                     busy     <= 1'b0;
@@ -1203,6 +1404,54 @@ module h264_bitstream #(
                                 sub <= 6'd4;
                             end
                             6'd4: begin
+                                cmd_done <= 1'b1;
+                                busy     <= 1'b0;
+                                state    <= S_IDLE;
+                            end
+                            6'd32: begin
+                                if (cabac_bits_overflow)
+                                    $fatal(1, "[CABAC_PSKIP] CABAC terminate(0) bit overflow");
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                sub <= 6'd33;
+                            end
+                            6'd33: begin
+                                case (cabac_skip_ctx)
+                                    2'd0: cabac_ctx_state_in <= cabac_skip_ctx_state_0;
+                                    2'd1: cabac_ctx_state_in <= cabac_skip_ctx_state_1;
+                                    default: cabac_ctx_state_in <= cabac_skip_ctx_state_2;
+                                endcase
+                                cabac_pending_skip_ctx_idx <= cabac_skip_ctx;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= 1'b1;
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                sub <= 6'd34;
+                            end
+                            6'd34: begin
+                                if (cabac_bits_overflow)
+                                    $fatal(1, "[CABAC_PSKIP] CABAC skip-flag bit overflow");
+                                if (cabac_ctx_state_wr) begin
+                                    case (cabac_pending_skip_ctx_idx)
+                                        2'd0: cabac_skip_ctx_state_0 <= cabac_ctx_state_out;
+                                        2'd1: cabac_skip_ctx_state_1 <= cabac_ctx_state_out;
+                                        default: cabac_skip_ctx_state_2 <= cabac_ctx_state_out;
+                                    endcase
+                                end
+                                cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                sub <= 6'd35;
+                            end
+                            6'd35: begin
                                 cmd_done <= 1'b1;
                                 busy     <= 1'b0;
                                 state    <= S_IDLE;
@@ -1416,7 +1665,14 @@ module h264_bitstream #(
                     S_TRAIL: begin
                         case (sub)
                             6'd0: begin
-                                if (slice_has_skip_run && pending_skip_run != 13'd0) begin
+                                if (cabac_slice_active) begin
+                                    cabac_bin_valid <= 1'b1;
+                                    cabac_bin_value <= 1'b1;
+                                    cabac_bin_bypass <= 1'b0;
+                                    cabac_bin_terminate <= 1'b1;
+                                    cabac_ctx_state_in <= 7'd0;
+                                    sub <= 6'd20;
+                                end else if (slice_has_skip_run && pending_skip_run != 13'd0) begin
                                     bit_buf <= bit_buf | ({ue_big_bits, 71'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, ue_big_total_bits};
                                     pending_skip_run <= 13'd0;
@@ -1448,6 +1704,23 @@ module h264_bitstream #(
                                 sub <= sub + 6'd1;
                             end
                             6'd5: begin
+                                cmd_done <= 1'b1;
+                                busy     <= 1'b0;
+                                state    <= S_IDLE;
+                            end
+                            6'd20: begin
+                                if (cabac_bits_overflow)
+                                    $fatal(1, "[CABAC_PSKIP] CABAC terminate(1) bit overflow");
+                                cabac_slice_active <= 1'b0;
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_TRAIL;
+                                end
+                                sub <= 6'd21;
+                            end
+                            6'd21: begin
                                 cmd_done <= 1'b1;
                                 busy     <= 1'b0;
                                 state    <= S_IDLE;

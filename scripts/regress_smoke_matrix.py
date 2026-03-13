@@ -64,6 +64,7 @@ class SmokeCase:
     enable_p_ipcm: int = 0
     ipcm_sad_threshold: int = 18000
     inter_sad_threshold: int = 8000
+    enable_cabac_pskip: int = 0
     idr_interval: int = 12
     force_b_slice: int = 0
     force_bref_slice: int = 0
@@ -84,6 +85,7 @@ class SmokeCase:
     force_b_direct_temporal_on_reorder_b_slot: int = 0
     reorder_b_gop: int = 0
     flat_y_frames: tuple[int, ...] | None = None
+    require_skip_min: int = 0
     require_bi_min: int = 0
     require_direct_min: int = 0
     require_l1_min: int = 0
@@ -160,6 +162,18 @@ CASES = [
         inter_sad_threshold=0,
     ),
     SmokeCase(
+        "smoke_8b_420_cabac_pskip",
+        8,
+        1,
+        "smoke_32x16_4f_cabac_pskip.yuv",
+        "smoke_32x16_4f_cabac_pskip.h264",
+        frames=4,
+        enable_idr_ipcm=1,
+        enable_cabac_pskip=1,
+        flat_y_frames=(32, 32, 32, 32),
+        require_skip_min=6,
+    ),
+    SmokeCase(
         "smoke_8b_420_bdirect",
         8,
         1,
@@ -169,6 +183,8 @@ CASES = [
         force_bref_slice=1,
         force_b_direct=1,
         reorder_b_gop=1,
+        flat_y_frames=(128, 128, 128),
+        require_direct_min=1,
     ),
     SmokeCase(
         "smoke_8b_420_bdirect_temporal",
@@ -656,6 +672,7 @@ def main() -> int:
             enable_p_ipcm=case.enable_p_ipcm,
             ipcm_sad_threshold=case.ipcm_sad_threshold,
             inter_sad_threshold=case.inter_sad_threshold,
+            enable_cabac_pskip=case.enable_cabac_pskip,
             luma_log2_weight_denom=case.luma_log2_weight_denom,
             luma_weight=case.luma_weight,
             luma_offset=case.luma_offset,
@@ -723,6 +740,11 @@ def main() -> int:
                 f"{case.name} expected at least {case.require_bi_min} B_BI macroblocks, "
                 f"saw {b_mode_summary.get('total_bi', 0)}"
             )
+        if b_mode_summary.get("total_skip", 0) < case.require_skip_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_skip_min} skip macroblocks, "
+                f"saw {b_mode_summary.get('total_skip', 0)}"
+            )
         if b_mode_summary.get("total_l1", 0) < case.require_l1_min:
             raise RuntimeError(
                 f"{case.name} expected at least {case.require_l1_min} B_L1 macroblocks, "
@@ -764,6 +786,7 @@ def main() -> int:
         print(
             f"[PASS] {case.name}: profile={stream.get('profile')} "
             f"pix_fmt={stream.get('pix_fmt')} {stream.get('width')}x{stream.get('height')} "
+            f"skip_max={b_mode_summary.get('max_skip', 0)} "
             f"b_l1_max={b_mode_summary.get('max_l1', 0)} "
             f"b_direct_max={b_mode_summary.get('max_direct', 0)} "
             f"b_l0_refgt0_max={b_mode_summary.get('max_l0_refgt0', 0)} "

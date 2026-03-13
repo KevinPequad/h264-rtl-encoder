@@ -35,6 +35,7 @@ class BuildConfig:
     enable_p_ipcm: int = 0
     ipcm_sad_threshold: int = 18000
     inter_sad_threshold: int = 8000
+    enable_cabac_pskip: int = 0
     idr_interval: int = 12
     force_b_slice: int = 0
     force_bref_slice: int = 0
@@ -126,6 +127,7 @@ def build_sim(workspace: Path, config: BuildConfig, build_log_path: Path | None 
         f"ENABLE_P_IPCM={config.enable_p_ipcm}",
         f"IPCM_SAD_THRESHOLD={config.ipcm_sad_threshold}",
         f"INTER_SAD_THRESHOLD={config.inter_sad_threshold}",
+        f"ENABLE_CABAC_PSKIP={config.enable_cabac_pskip}",
     ]
     if config.extra_verilator_args:
         cmd.append(f"EXTRA_VERILATOR_ARGS={' '.join(config.extra_verilator_args)}")
