@@ -354,6 +354,8 @@ Verified validation and tooling coverage around the encoder flow:
   scripts for reordered B-picture encode order
 - runtime-configurable `force_b_bi` support in the testbench and validation
   scripts for the current limited `B_BI_16x16` path
+- runtime-configurable `force_b_l0` support in the testbench and validation
+  scripts for targeted validation of the current limited `B_L0_16x16` path
 - runtime-configurable `force_b_direct` support in the testbench and
   validation scripts for targeted validation of the current limited
   `B_DIRECT_16x16` path
@@ -669,6 +671,16 @@ Measured validation points:
   `b_mode_summary` reporting `total_direct=6` and `total_direct_refgt0=4`,
   proving the current limited temporal-direct path can now consume nonzero
   future-picture `List0 ref_idx` mappings
+- `bl0_force_ref1_32x16_7f_ipcmrefs`: strict FFmpeg-decodable decode-only
+  reordered-B validation at `32x16`, `7` frames, exact IDR/P `I_PCM`
+  references, `581,041` cycles, `4,234` bytes,
+  `output/validation_bl0_force_ref1_32x16_7f_ipcmrefs.h264`, and
+  `output/validation_bl0_force_ref1_32x16_7f_ipcmrefs.json`, with
+  `force_b_l0=1` pinning the current limited `B_L0_16x16` path and
+  `b_mode_summary` reporting `total_l0_refgt0=2` while `total_bi=0`,
+  `total_direct=0`, and `total_direct_refgt0=0`, proving the plain
+  `B_L0_16x16` path can emit nonzero past-reference indices without BI/direct
+  fallback
 - `bdirect_auto_weighted_32x16_3f`: strict FFmpeg-decodable weighted
   non-forced auto `B_DIRECT_16x16` reordered-B validation at `32x16`, `3`
   frames, `131,078` cycles, `180` bytes, RTL PSNR avg `30.158513`, RTL SSIM
