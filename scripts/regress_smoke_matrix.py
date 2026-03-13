@@ -65,6 +65,7 @@ class SmokeCase:
     force_bref_slice: int = 0
     force_b_bi: int = 0
     force_b_direct: int = 0
+    force_b_direct_temporal: int = 0
     reorder_b_gop: int = 0
 
 
@@ -144,6 +145,17 @@ CASES = [
         frames=3,
         force_bref_slice=1,
         force_b_direct=1,
+        reorder_b_gop=1,
+    ),
+    SmokeCase(
+        "smoke_8b_420_bdirect_temporal",
+        8,
+        1,
+        "smoke_32x16_3f_bdirect.yuv",
+        "smoke_32x16_3f_bdirect_temporal.h264",
+        frames=3,
+        force_b_direct=1,
+        force_b_direct_temporal=1,
         reorder_b_gop=1,
     ),
 ]
@@ -361,6 +373,7 @@ def main() -> int:
             force_bref_slice=case.force_bref_slice,
             force_b_bi=case.force_b_bi,
             force_b_direct=case.force_b_direct,
+            force_b_direct_temporal=case.force_b_direct_temporal,
             reorder_b_gop=case.reorder_b_gop,
         )
         sim_bin = build_sim(workspace, config, build_log_path=build_log_path)
@@ -375,6 +388,7 @@ def main() -> int:
             force_bref_slice=case.force_bref_slice,
             force_b_bi=case.force_b_bi,
             force_b_direct=case.force_b_direct,
+            force_b_direct_temporal=case.force_b_direct_temporal,
             reorder_b_gop=case.reorder_b_gop,
             capture=True,
         )

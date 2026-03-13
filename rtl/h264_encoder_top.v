@@ -51,6 +51,9 @@ module h264_encoder_top #(
     // Validation override: force eligible reordered B inter MBs onto the
     // current B_DIRECT_16x16 path.
     input  wire        force_b_direct_in,
+    // Validation override: switch direct-mode derivation to the current
+    // limited temporal-direct path for the whole B slice.
+    input  wire        force_b_direct_temporal_in,
 
     // Raw frame memory read port (YUV420 planar)
     output wire [20:0] raw_mem_addr,
@@ -540,6 +543,7 @@ module h264_encoder_top #(
     wire use_weighted_pred_w = WEIGHTED_PRED_ENABLE && (is_p_frame || is_b_frame);
     wire use_post_weighted_pred_w = use_weighted_pred_w && !(is_b_frame && is_b_bi_mb_reg);
     wire [2:0] b_l0_ref_bank_w = (is_b_frame && (valid_ref_count >= 3'd2)) ? older_ref_bank : newest_ref_bank;
+    wire direct_spatial_mv_pred_flag_w = ~force_b_direct_temporal_in;
     wire weighted_pred_enable_cfg_w = (WEIGHTED_PRED_ENABLE != 0);
     wire [3:0] luma_log2_weight_denom_cfg_w = LUMA_LOG2_WEIGHT_DENOM[3:0];
     wire signed [8:0] luma_weight_cfg_w = LUMA_WEIGHT[8:0];
@@ -881,6 +885,107 @@ module h264_encoder_top #(
 
             direct_use_bi = has_l0 && has_l1;
             direct_use_l1 = !has_l0 && has_l1;
+        end
+    endtask
+
+    function integer clip_temporal_delta;
+        input integer delta_in;
+        begin
+            if (delta_in < -128)
+                clip_temporal_delta = -128;
+            else if (delta_in > 127)
+                clip_temporal_delta = 127;
+            else
+                clip_temporal_delta = delta_in;
+        end
+    endfunction
+
+    function signed [7:0] clip_mv_qpel8;
+        input integer mv_in;
+        begin
+            if (mv_in < -128)
+                clip_mv_qpel8 = -128;
+            else if (mv_in > 127)
+                clip_mv_qpel8 = 127;
+            else
+                clip_mv_qpel8 = mv_in;
+        end
+    endfunction
+
+    task automatic calc_b_direct16x16_temporal;
+        output       direct_valid;
+        output       direct_use_l1;
+        output       direct_use_bi;
+        output [1:0] direct_ref_idx_l0;
+        output [1:0] direct_ref_idx_l1;
+        output signed [7:0] direct_mvx_l0;
+        output signed [7:0] direct_mvy_l0;
+        output signed [7:0] direct_mvx_l1;
+        output signed [7:0] direct_mvy_l1;
+        reg col_is_intra, col_has_l0;
+        reg [1:0] col_ref_idx_l0;
+        reg signed [7:0] col_mvx_l0, col_mvy_l0;
+        integer poc0_i, poc1_i, cur_poc_i;
+        integer td_i, tb_i, tx_i, dist_scale_i;
+        integer mv_col_x_i, mv_col_y_i;
+        integer mv_l0_x_i, mv_l0_y_i;
+        integer mv_l1_x_i, mv_l1_y_i;
+        begin
+            direct_valid = 1'b0;
+            direct_use_l1 = 1'b0;
+            direct_use_bi = 1'b0;
+            direct_ref_idx_l0 = 2'd0;
+            direct_ref_idx_l1 = 2'd0;
+            direct_mvx_l0 = 8'sd0;
+            direct_mvy_l0 = 8'sd0;
+            direct_mvx_l1 = 8'sd0;
+            direct_mvy_l1 = 8'sd0;
+
+            if ((valid_ref_count >= 3'd2) &&
+                refbank_has_l0_ref0[newest_ref_bank] &&
+                (refbank_l0_ref0_bank[newest_ref_bank] == older_ref_bank)) begin
+                col_is_intra = refmeta_is_intra[newest_ref_bank][mb_count];
+                col_has_l0 = refmeta_has_l0[newest_ref_bank][mb_count];
+                col_ref_idx_l0 = refmeta_ref_idx_l0[newest_ref_bank][mb_count];
+                col_mvx_l0 = refmeta_mvx_l0[newest_ref_bank][mb_count];
+                col_mvy_l0 = refmeta_mvy_l0[newest_ref_bank][mb_count];
+
+                if (col_is_intra) begin
+                    direct_valid = 1'b1;
+                    direct_use_bi = 1'b1;
+                end else if (col_has_l0 && (col_ref_idx_l0 == 2'd0)) begin
+                    poc0_i = refbank_poc_lsb[older_ref_bank];
+                    poc1_i = refbank_poc_lsb[newest_ref_bank];
+                    cur_poc_i = cur_pic_order_cnt_lsb;
+                    td_i = clip_temporal_delta(poc1_i - poc0_i);
+                    mv_col_x_i = $signed(col_mvx_l0);
+                    mv_col_y_i = $signed(col_mvy_l0);
+
+                    if (td_i == 0) begin
+                        dist_scale_i = 256;
+                    end else begin
+                        tb_i = clip_temporal_delta(cur_poc_i - poc0_i);
+                        tx_i = (16384 + ((td_i < 0 ? -td_i : td_i) >> 1)) / td_i;
+                        dist_scale_i = (tb_i * tx_i + 32) >>> 6;
+                        if (dist_scale_i < -1024)
+                            dist_scale_i = -1024;
+                        else if (dist_scale_i > 1023)
+                            dist_scale_i = 1023;
+                    end
+
+                    mv_l0_x_i = (dist_scale_i * mv_col_x_i + 128) >>> 8;
+                    mv_l0_y_i = (dist_scale_i * mv_col_y_i + 128) >>> 8;
+                    mv_l1_x_i = mv_l0_x_i - mv_col_x_i;
+                    mv_l1_y_i = mv_l0_y_i - mv_col_y_i;
+
+                    direct_valid = 1'b1;
+                    direct_use_bi = 1'b1;
+                    direct_mvx_l0 = clip_mv_qpel8(mv_l0_x_i);
+                    direct_mvy_l0 = clip_mv_qpel8(mv_l0_y_i);
+                    direct_mvx_l1 = clip_mv_qpel8(mv_l1_x_i);
+                    direct_mvy_l1 = clip_mv_qpel8(mv_l1_y_i);
+                end
+            end
         end
     endtask
 
@@ -1632,6 +1737,7 @@ pred_buf = {(256*BD){1'b0}};
         .is_inter_mb(is_inter_mb_reg), .is_skip_mb(is_skip_mb_reg),
         .is_b_direct_mb(is_b_direct_mb_reg),
         .is_b_l1_mb(is_b_l1_mb_reg), .is_b_bi_mb(is_b_bi_mb_reg),
+        .direct_spatial_mv_pred_flag(direct_spatial_mv_pred_flag_w),
         .mb_ref_idx_l0(mb_ref_idx_reg), .mb_ref_idx_l1(mb_ref_idx_l1_reg),
         .mvd_x_l0(mvd_x_l0_w), .mvd_y_l0(mvd_y_l0_w),
         .mvd_x_l1(mvd_x_l1_w), .mvd_y_l1(mvd_y_l1_w),
@@ -2007,14 +2113,24 @@ pred_buf = {(256*BD){1'b0}};
                         end
 
                         if (is_b_frame && (valid_ref_count >= 3'd2)) begin
-                            direct_candidate_active = 1'b1;
-                            calc_b_direct16x16(
-                                direct_use_l1, direct_use_bi,
-                                direct_ref_idx_l0, direct_ref_idx_l1,
-                                direct_mvx_l0, direct_mvy_l0,
-                                direct_mvx_l1, direct_mvy_l1
-                            );
-                            direct_force_active = force_b_direct_in;
+                            if (force_b_direct_temporal_in) begin
+                                calc_b_direct16x16_temporal(
+                                    direct_candidate_active,
+                                    direct_use_l1, direct_use_bi,
+                                    direct_ref_idx_l0, direct_ref_idx_l1,
+                                    direct_mvx_l0, direct_mvy_l0,
+                                    direct_mvx_l1, direct_mvy_l1
+                                );
+                            end else begin
+                                direct_candidate_active = 1'b1;
+                                calc_b_direct16x16(
+                                    direct_use_l1, direct_use_bi,
+                                    direct_ref_idx_l0, direct_ref_idx_l1,
+                                    direct_mvx_l0, direct_mvy_l0,
+                                    direct_mvx_l1, direct_mvy_l1
+                                );
+                            end
+                            direct_force_active = force_b_direct_in && direct_candidate_active;
                         end
 
                         me_fullpel_mvx <= sel_fullpel_mvx;
