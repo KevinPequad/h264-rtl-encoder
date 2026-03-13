@@ -1341,7 +1341,7 @@ module h264_bitstream #(
                     S_TRAIL: begin
                         case (sub)
                             6'd0: begin
-                                if (is_p_slice && pending_skip_run != 13'd0) begin
+                                if (slice_has_skip_run && pending_skip_run != 13'd0) begin
                                     bit_buf <= bit_buf | ({ue_big_bits, 71'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, ue_big_total_bits};
                                     pending_skip_run <= 13'd0;

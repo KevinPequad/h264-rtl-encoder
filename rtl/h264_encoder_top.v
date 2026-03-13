@@ -145,7 +145,7 @@ module h264_encoder_top #(
     localparam TS_I16_PRED     = 5'd20;  // Run Intra_16x16 prediction once per intra MB
     localparam TS_LUMA16       = 5'd21;  // I_16x16 luma DC/AC coding and reconstruction
     localparam TS_LUMA_FETCH   = 5'd22;  // Fetch luma window for quarter-pel refinement
-    localparam TS_SKIP_MB_HDR   = 5'd23; // Emit P_SKIP macroblock syntax after early probe
+    localparam TS_SKIP_MB_HDR   = 5'd23; // Emit skip-run syntax after early probe
     localparam TS_SKIP_CLR_FIFO = 5'd24; // Drop deferred residual syntax before emitting P_SKIP
     localparam TS_DEFER_DRAIN   = 5'd25; // Drain deferred residual FIFO after buffered MB header
 
@@ -428,6 +428,7 @@ module h264_encoder_top #(
     reg         is_ipcm_mb_hdr;
     reg [5:0]   intra_mb_type_code_num;
     reg         pskip_syntax_eligible_reg;
+    reg         bskip_syntax_eligible_reg;
 
     // Neighbor storage
     reg [MB_COLS*16*BIT_DEPTH-1:0] top_ref_flat;
@@ -1722,6 +1723,7 @@ pred_buf = {(256*BD){1'b0}};
             is_intra16_mb_hdr <= 1'b0; is_ipcm_mb_hdr <= 1'b0; intra_mb_type_code_num <= 6'd0;
             i16_dc_total_coeff <= 5'd0; i16_luma_ac_nonzero <= 1'b0; i16_chroma_dc_nonzero <= 1'b0; i16_chroma_ac_nonzero <= 1'b0; i16_cbp_chroma <= 2'd0;
             pskip_syntax_eligible_reg <= 1'b0;
+            bskip_syntax_eligible_reg <= 1'b0;
             frame_skip_mb_count <= 16'd0;
             frame_b_l1_mb_count <= 16'd0;
             frame_b_bi_mb_count <= 16'd0;
@@ -1823,6 +1825,7 @@ pred_buf = {(256*BD){1'b0}};
                     inter_chr_prefetched_valid <= 1'b0;
                     mb_has_residual <= 1'b0;
                     pskip_syntax_eligible_reg <= 1'b0;
+                    bskip_syntax_eligible_reg <= 1'b0;
                     is_intra16_mb_hdr <= 1'b0;
                     is_ipcm_mb_hdr <= 1'b0;
                     top_state <= TS_WAIT_FETCH;
@@ -2280,6 +2283,7 @@ pred_buf = {(256*BD){1'b0}};
                                     is_b_l1_mb_reg <= 1'b0;
                                     is_b_bi_mb_reg <= 1'b1;
                                     is_b_direct_mb_reg <= 1'b1;
+                                    bskip_syntax_eligible_reg <= 1'b1;
                                     mvp_x <= me_best_mvx_l0;
                                     mvp_y <= me_best_mvy_l0;
                                     mvp_x_l0 <= me_best_mvx_l0;
@@ -2289,7 +2293,23 @@ pred_buf = {(256*BD){1'b0}};
                                     ref_rd_bank_sel <= older_ref_bank;
                                     use_intra16_mb_reg <= 1'b0;
                                     use_ipcm_mb_reg <= 1'b0;
-                                    top_state <= TS_MB_HDR;
+                                    if (bi_final_sad_i == 0) begin
+                                        skip_probe_pending <= 1'b1;
+                                        chr_fetch_cnt <= {CHR_FETCH_W{1'b0}};
+                                        chr_fetch_started <= 1'b0;
+                                        chr_raw_cb <= {(CHR_RAW_SAMPLES*BD){1'b0}};
+                                        chr_raw_cr <= {(CHR_RAW_SAMPLES*BD){1'b0}};
+                                        chr_f_row <= 5'd0;
+                                        chr_f_col <= {CHR_FETCH_COL_W{1'b0}};
+                                        b_bi_chr_fetch_l1_phase <= 1'b0;
+                                        chr_frac_x <= me_best_mvx_l0[2:0];
+                                        chr_frac_y <= me_best_mvy_l0[2:0];
+                                        chr_fetch_cols <= (me_best_mvx_l0[2:0] != 3'd0) ? (CHR_MB_WIDTH[CHR_FETCH_COL_W-1:0] + {{(CHR_FETCH_COL_W-1){1'b0}}, 1'b1}) : CHR_MB_WIDTH[CHR_FETCH_COL_W-1:0];
+                                        chr_fetch_rows <= (me_best_mvy_l0[2:0] != 3'd0) ? (CHR_MB_HEIGHT[4:0] + 5'd1) : CHR_MB_HEIGHT[4:0];
+                                        top_state <= TS_CHR_FETCH;
+                                    end else begin
+                                        top_state <= TS_MB_HDR;
+                                    end
                                 end
                             end else begin
                                 build_exact_luma_pred(me_best_mvx, me_best_mvy, direct_pred_buf_i, direct_sad_i);
@@ -2312,13 +2332,30 @@ pred_buf = {(256*BD){1'b0}};
                                 inter_pred_buf <= direct_pred_buf_i;
                                 is_inter_mb_reg <= 1'b1;
                                 is_b_direct_mb_reg <= 1'b1;
+                                bskip_syntax_eligible_reg <= 1'b1;
                                 if (is_b_l1_mb_reg)
                                     ref_rd_bank_sel <= newest_ref_bank;
                                 else
                                     ref_rd_bank_sel <= older_ref_bank;
                                 use_intra16_mb_reg <= 1'b0;
                                 use_ipcm_mb_reg <= 1'b0;
-                                top_state <= TS_MB_HDR;
+                                if (direct_sad_i == 0) begin
+                                    skip_probe_pending <= 1'b1;
+                                    chr_fetch_cnt <= {CHR_FETCH_W{1'b0}};
+                                    chr_fetch_started <= 1'b0;
+                                    chr_raw_cb <= {(CHR_RAW_SAMPLES*BD){1'b0}};
+                                    chr_raw_cr <= {(CHR_RAW_SAMPLES*BD){1'b0}};
+                                    chr_f_row <= 5'd0;
+                                    chr_f_col <= {CHR_FETCH_COL_W{1'b0}};
+                                    b_bi_chr_fetch_l1_phase <= 1'b0;
+                                    chr_frac_x <= is_b_l1_mb_reg ? me_best_mvx_l1[2:0] : me_best_mvx_l0[2:0];
+                                    chr_frac_y <= is_b_l1_mb_reg ? me_best_mvy_l1[2:0] : me_best_mvy_l0[2:0];
+                                    chr_fetch_cols <= ((is_b_l1_mb_reg ? me_best_mvx_l1[2:0] : me_best_mvx_l0[2:0]) != 3'd0) ? (CHR_MB_WIDTH[CHR_FETCH_COL_W-1:0] + {{(CHR_FETCH_COL_W-1){1'b0}}, 1'b1}) : CHR_MB_WIDTH[CHR_FETCH_COL_W-1:0];
+                                    chr_fetch_rows <= ((is_b_l1_mb_reg ? me_best_mvy_l1[2:0] : me_best_mvy_l0[2:0]) != 3'd0) ? (CHR_MB_HEIGHT[4:0] + 5'd1) : CHR_MB_HEIGHT[4:0];
+                                    top_state <= TS_CHR_FETCH;
+                                end else begin
+                                    top_state <= TS_MB_HDR;
+                                end
                             end
                         end else if (is_b_frame && is_b_bi_mb_reg) begin
                             if (!b_bi_luma_fetch_l1_phase) begin
@@ -2450,10 +2487,31 @@ pred_buf = {(256*BD){1'b0}};
                                     is_b_l1_mb_reg <= b_direct_pending_use_l1;
                                     is_b_bi_mb_reg <= b_direct_pending_use_bi;
                                     is_b_direct_mb_reg <= 1'b1;
+                                    bskip_syntax_eligible_reg <= 1'b1;
                                     b_direct_pending_valid <= 1'b0;
                                     use_intra16_mb_reg <= 1'b0;
                                     use_ipcm_mb_reg <= 1'b0;
-                                    top_state <= TS_MB_HDR;
+                                    if (direct_final_sad_i == 0) begin
+                                        skip_probe_pending <= 1'b1;
+                                        chr_fetch_cnt <= {CHR_FETCH_W{1'b0}};
+                                        chr_fetch_started <= 1'b0;
+                                        chr_raw_cb <= {(CHR_RAW_SAMPLES*BD){1'b0}};
+                                        chr_raw_cr <= {(CHR_RAW_SAMPLES*BD){1'b0}};
+                                        chr_f_row <= 5'd0;
+                                        chr_f_col <= {CHR_FETCH_COL_W{1'b0}};
+                                        b_bi_chr_fetch_l1_phase <= 1'b0;
+                                        chr_frac_x <= b_direct_pending_use_bi ? b_direct_pending_mvx_l0[2:0] :
+                                                      (b_direct_pending_use_l1 ? b_direct_pending_mvx_l1[2:0] : b_direct_pending_mvx_l0[2:0]);
+                                        chr_frac_y <= b_direct_pending_use_bi ? b_direct_pending_mvy_l0[2:0] :
+                                                      (b_direct_pending_use_l1 ? b_direct_pending_mvy_l1[2:0] : b_direct_pending_mvy_l0[2:0]);
+                                        chr_fetch_cols <= ((b_direct_pending_use_bi ? b_direct_pending_mvx_l0[2:0] :
+                                                           (b_direct_pending_use_l1 ? b_direct_pending_mvx_l1[2:0] : b_direct_pending_mvx_l0[2:0])) != 3'd0) ? (CHR_MB_WIDTH[CHR_FETCH_COL_W-1:0] + {{(CHR_FETCH_COL_W-1){1'b0}}, 1'b1}) : CHR_MB_WIDTH[CHR_FETCH_COL_W-1:0];
+                                        chr_fetch_rows <= ((b_direct_pending_use_bi ? b_direct_pending_mvy_l0[2:0] :
+                                                           (b_direct_pending_use_l1 ? b_direct_pending_mvy_l1[2:0] : b_direct_pending_mvy_l0[2:0])) != 3'd0) ? (CHR_MB_HEIGHT[4:0] + 5'd1) : CHR_MB_HEIGHT[4:0];
+                                        top_state <= TS_CHR_FETCH;
+                                    end else begin
+                                        top_state <= TS_MB_HDR;
+                                    end
                                 end else if (force_b_bi_in || ((bi_final_sad_i <= b_bi_luma_sad_l0) && (bi_final_sad_i <= best_sad_i))) begin
                                     me_best_mvx <= me_best_mvx_l0;
                                     me_best_mvy <= me_best_mvy_l0;
@@ -3500,6 +3558,9 @@ pred_buf = {(256*BD){1'b0}};
                                             ((b_bi_chr_pred_cr_l0[bi_chr_idx*BD +: BD] + interp_cr_i[bi_chr_idx*BD +: BD] + 1'b1) >> 1);
                                         interp_cb_i[bi_chr_idx*BD +: BD] = bi_cb_i;
                                         interp_cr_i[bi_chr_idx*BD +: BD] = bi_cr_i;
+                                        if (fetched_cb[bi_chr_idx*BD +: BD] != bi_cb_i ||
+                                            fetched_cr[bi_chr_idx*BD +: BD] != bi_cr_i)
+                                            skip_chroma_exact_i = 1'b0;
                                     end
                                 end
                                 inter_chr_pred_cb <= interp_cb_i;
@@ -3696,7 +3757,7 @@ pred_buf = {(256*BD){1'b0}};
                                                 end
                                                 mb_has_residual <= mb_nonzero_i;
                                                 if (!mb_nonzero_i) begin
-                                                    is_skip_mb_reg <= pskip_syntax_eligible_reg;
+                                                    is_skip_mb_reg <= pskip_syntax_eligible_reg || bskip_syntax_eligible_reg;
                                                     top_state <= TS_SKIP_CLR_FIFO;
                                                 end else begin
                                                     top_state <= TS_DEFER_MB_HDR;
@@ -4165,7 +4226,7 @@ pred_buf = {(256*BD){1'b0}};
                                                 end
                                                 mb_has_residual <= mb_nonzero_i;
                                                 if (!mb_nonzero_i) begin
-                                                    is_skip_mb_reg <= pskip_syntax_eligible_reg;
+                                                    is_skip_mb_reg <= pskip_syntax_eligible_reg || bskip_syntax_eligible_reg;
                                                     top_state <= TS_SKIP_CLR_FIFO;
                                                 end else begin
                                                     top_state <= TS_DEFER_MB_HDR;

@@ -24,6 +24,9 @@ Current state:
 - the current tree now also supports a limited `B_DIRECT_16x16` path on that
   reordered dual-list `16x16` B flow, with automatic selection plus a force
   hook for targeted validation
+- the current tree now also supports limited `B_SKIP` emission on that
+  reordered dual-list `16x16` direct path when a chosen direct macroblock
+  reaches zero residual
 - the current tree now also supports limited reference-`B` / `BREF`
   `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` pictures on that reordered
   dual-list `16x16` B path
@@ -189,6 +192,9 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
   instead of the normal qpel search loop, and can now win automatically
   against the current reordered `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16`
   candidates instead of only via a force flag
+- the current limited `B_DIRECT_16x16` path can now collapse zero-residual
+  macroblocks into RTL-owned B-slice skip-run syntax through the same late
+  deferred-header path already used for zero-residual `P_SKIP`
 - reordered GOP forcing can now emit reference-slot pictures as `BREF` instead
   of `P`, so encode orders such as `0,2,1,4,3` can be driven as all-BREF
   non-IDR GOPs for validation
@@ -255,6 +261,8 @@ Implemented now relative to the chosen `x264` baseline:
 - limited `B_DIRECT_16x16` inter coding on the current reordered dual-list
   `16x16` B path, with automatic selection plus a force hook for targeted
   validation
+- limited `B_SKIP` ownership on the current reordered dual-list `16x16`
+  direct path when a chosen direct macroblock reaches zero residual
 - limited reference-`B` / `BREF` picture support on the current reordered
   dual-list `16x16` B path
 - explicit weighted prediction on the current single-list reordered B subpaths
@@ -590,6 +598,13 @@ Measured validation points:
   frames, `131,078` cycles, `180` bytes, RTL PSNR avg `30.158513`, RTL SSIM
   all `0.775715`, `output/validation_bdirect_auto_weighted_32x16_3f.h264`,
   and simulator logging showing `b_direct_mbs=1` on the last picture
+- `bdirect_bskip_auto_32x16_3f`: strict FFmpeg-decodable non-forced auto
+  reordered-`BREF` validation at `32x16`, `3` frames, `130,749` cycles,
+  `122` bytes, RTL PSNR avg `30.120198`, RTL SSIM all `0.774794`,
+  `output/validation_bdirect_bskip_auto_32x16_3f.h264`, and simulator logging
+  showing `skip_mbs=1`, `b_l1_mbs=2`, and `b_direct_mbs=1` on the last
+  picture, proving the current limited `B_DIRECT_16x16` path can collapse to
+  B-slice skip syntax on a zero-residual macroblock
 - `weightedp_small_32x16_2f`: strict FFmpeg-decodable small weighted-P
   validation at `32x16`, `2` frames, `51,117` cycles, `112` bytes, RTL PSNR
   avg `28.420753`, RTL SSIM all `0.66449`, and
