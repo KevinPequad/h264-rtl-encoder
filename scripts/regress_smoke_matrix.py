@@ -268,40 +268,51 @@ def parse_sim_summary(sim_log: str) -> dict[str, int]:
 
 
 def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
+    frames_with_skip = 0
     frames_with_l1 = 0
     frames_with_bi = 0
     frames_with_direct = 0
+    max_skip = 0
     max_l1 = 0
     max_bi = 0
     max_direct = 0
+    total_skip = 0
     total_l1 = 0
     total_bi = 0
     total_direct = 0
 
     for match in PSKIP_RE.finditer(sim_log):
+        skip = int(match.group("skip"))
         l1 = int(match.group("b_l1"))
         bi = int(match.group("b_bi"))
         direct = int(match.group("b_direct"))
+        total_skip += skip
         total_l1 += l1
         total_bi += bi
         total_direct += direct
+        if skip:
+            frames_with_skip += 1
         if l1:
             frames_with_l1 += 1
         if bi:
             frames_with_bi += 1
         if direct:
             frames_with_direct += 1
+        max_skip = max(max_skip, skip)
         max_l1 = max(max_l1, l1)
         max_bi = max(max_bi, bi)
         max_direct = max(max_direct, direct)
 
     return {
+        "frames_with_skip": frames_with_skip,
         "frames_with_l1": frames_with_l1,
         "frames_with_bi": frames_with_bi,
         "frames_with_direct": frames_with_direct,
+        "max_skip": max_skip,
         "max_l1": max_l1,
         "max_bi": max_bi,
         "max_direct": max_direct,
+        "total_skip": total_skip,
         "total_l1": total_l1,
         "total_bi": total_bi,
         "total_direct": total_direct,

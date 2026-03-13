@@ -345,6 +345,9 @@ Verified validation and tooling coverage around the encoder flow:
 - simulator-side per-frame `b_direct_mbs` logging so reordered B validation can
   prove that the current limited `B_DIRECT_16x16` path was actually selected,
   whether automatically or via force
+- staged validation JSON and smoke summaries now carry parsed
+  `skip_mbs` / `b_l1_mbs` / `b_bi_mbs` / `b_direct_mbs` aggregates so B-path
+  behavior can be asserted without manual log scraping
 - reordered validation can now combine `--reorder-b-gop` and
   `--force-bref-slice` so the reference slots are emitted as `BREF` pictures
 - fast strict-decode-only validation mode in `validate_clip.py` for longer
