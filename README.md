@@ -208,6 +208,9 @@ Current implemented features:
   instead of the normal qpel search loop, and can now win automatically
   against the current reordered `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16`
   candidates instead of only via a force flag
+- reference-bank metadata now also retains picture-order and frame-level
+  list0-reference-bank state alongside the per-MB colocated metadata, so the
+  RTL has the prerequisites needed for a future temporal-direct path
 - the current limited `B_DIRECT_16x16` path can now collapse zero-residual
   macroblocks into RTL-owned B-slice skip-run syntax through the same late
   deferred-header path already used for zero-residual `P_SKIP`
