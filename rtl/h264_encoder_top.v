@@ -52,6 +52,9 @@ module h264_encoder_top #(
     // current B_L0_16x16 path, preserving the selected past reference index.
     input  wire        force_b_l0_in,
     // Validation override: force eligible reordered B inter MBs onto the
+    // current B_L1_16x16 path.
+    input  wire        force_b_l1_in,
+    // Validation override: force eligible reordered B inter MBs onto the
     // current B_DIRECT_16x16 path.
     input  wire        force_b_direct_in,
     // Validation override: switch direct-mode derivation to the current
@@ -3005,7 +3008,8 @@ pred_buf = {(256*BD){1'b0}};
                                     end else begin
                                         top_state <= TS_MB_HDR;
                                     end
-                                end else if (!force_b_l0_in && (force_b_bi_in || ((bi_final_sad_i <= b_bi_luma_sad_l0) && (bi_final_sad_i <= best_sad_i)))) begin
+                                end else if (!force_b_l0_in && !force_b_l1_in &&
+                                               (force_b_bi_in || ((bi_final_sad_i <= b_bi_luma_sad_l0) && (bi_final_sad_i <= best_sad_i)))) begin
                                     me_best_mvx <= me_best_mvx_l0;
                                     me_best_mvy <= me_best_mvy_l0;
                                     me_best_mvx_l1 <= (me_fullpel_mvx <<< 2) + best_dx_i;
@@ -3035,7 +3039,9 @@ pred_buf = {(256*BD){1'b0}};
                                         use_ipcm_mb_reg <= (ENABLE_P_IPCM != 0);
                                         top_state <= TS_MB_HDR;
                                     end
-                                end else if (best_sad_i < b_bi_luma_sad_l0) begin
+                                end else if (!force_b_l0_in && (force_b_l1_in || (best_sad_i < b_bi_luma_sad_l0))) begin
+                                    mb_ref_idx_reg <= 2'd0;
+                                    mb_ref_idx_l1_reg <= 2'd0;
                                     me_best_mvx <= (me_fullpel_mvx <<< 2) + best_dx_i;
                                     me_best_mvy <= (me_fullpel_mvy <<< 2) + best_dy_i;
                                     me_best_mvx_l0 <= 8'sd0;
