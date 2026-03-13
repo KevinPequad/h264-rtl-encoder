@@ -326,8 +326,8 @@ Verified validation and tooling coverage around the encoder flow:
 - MP4 remux of the RTL-generated stream
 - Docker one-frame smoke run producing RTL-generated `.h264` and `.mp4`
 - reproducible smoke matrix for fast strict-decode/profile sanity on generated
-  tiny `I_PCM` inputs plus tiny forced spatial-direct and temporal-direct
-  `B_DIRECT_16x16` cases
+  tiny `I_PCM` inputs plus tiny forced spatial-direct, temporal-direct, and
+  temporal-direct reordered-`BREF` `B_DIRECT_16x16` cases
 - multi-frame validation at `320x176`
 - multi-frame validation at `1280x720`
 - PSNR / SSIM comparison scripts
