@@ -49,6 +49,9 @@ module h264_encoder_top #(
     // current B_BI_16x16 path.
     input  wire        force_b_bi_in,
     // Validation override: force eligible reordered B inter MBs onto the
+    // current B_L0_16x16 path, preserving the selected past reference index.
+    input  wire        force_b_l0_in,
+    // Validation override: force eligible reordered B inter MBs onto the
     // current B_DIRECT_16x16 path.
     input  wire        force_b_direct_in,
     // Validation override: switch direct-mode derivation to the current
@@ -2224,7 +2227,7 @@ pred_buf = {(256*BD){1'b0}};
                         bi_pred_buf_i = {(256*BD){1'b0}};
                         bi_candidate_buf_i = {(256*BD){1'b0}};
                         bi_sad_i = 32'h7fffffff;
-                        if (is_b_frame && (valid_ref_count >= 3'd2) && (me_search_pass == b_l1_search_pass_w)) begin
+                        if (is_b_frame && !force_b_l0_in && (valid_ref_count >= 3'd2) && (me_search_pass == b_l1_search_pass_w)) begin
                             sel_fullpel_mvx = me_pass0_mvx;
                             sel_fullpel_mvy = me_pass0_mvy;
                             sel_sad = me_pass0_sad;
@@ -2262,21 +2265,21 @@ pred_buf = {(256*BD){1'b0}};
                                     end
                                 end
                             end
-                        end else if ((valid_ref_count >= 3'd4) && (me_search_pass == 2'd3) && (me_sad_w < me_pass0_sad)) begin
+                        end else if (!force_b_l0_in && (valid_ref_count >= 3'd4) && (me_search_pass == 2'd3) && (me_sad_w < me_pass0_sad)) begin
                             sel_fullpel_mvx = me_mvx_w;
                             sel_fullpel_mvy = me_mvy_w;
                             sel_sad = me_sad_w;
                             sel_ref_mb = me_ref_mb_w;
                             sel_ref_idx = 2'd3;
                             ref_rd_bank_sel <= ancient_ref_bank;
-                        end else if ((valid_ref_count >= 3'd3) && (me_search_pass == 2'd2) && (me_sad_w < me_pass0_sad)) begin
+                        end else if (!force_b_l0_in && (valid_ref_count >= 3'd3) && (me_search_pass == 2'd2) && (me_sad_w < me_pass0_sad)) begin
                             sel_fullpel_mvx = me_mvx_w;
                             sel_fullpel_mvy = me_mvy_w;
                             sel_sad = me_sad_w;
                             sel_ref_mb = me_ref_mb_w;
                             sel_ref_idx = 2'd2;
                             ref_rd_bank_sel <= oldest_ref_bank;
-                        end else if ((valid_ref_count >= 3'd2) && (me_search_pass == 2'd1) && (me_sad_w < me_pass0_sad)) begin
+                        end else if (!force_b_l0_in && (valid_ref_count >= 3'd2) && (me_search_pass == 2'd1) && (me_sad_w < me_pass0_sad)) begin
                             sel_fullpel_mvx = me_mvx_w;
                             sel_fullpel_mvy = me_mvy_w;
                             sel_sad = me_sad_w;
@@ -2302,7 +2305,7 @@ pred_buf = {(256*BD){1'b0}};
                             ref_rd_bank_sel <= b_l0_ref_bank_w;
                         end
 
-                        if (is_b_frame && (valid_ref_count >= 3'd2)) begin
+                        if (is_b_frame && (valid_ref_count >= 3'd2) && !force_b_l0_in) begin
                             if (force_b_direct_temporal_in) begin
                                 calc_b_direct16x16_temporal(
                                     direct_candidate_active,
@@ -2824,7 +2827,7 @@ pred_buf = {(256*BD){1'b0}};
                                     end else begin
                                         top_state <= TS_MB_HDR;
                                     end
-                                end else if (force_b_bi_in || ((bi_final_sad_i <= b_bi_luma_sad_l0) && (bi_final_sad_i <= best_sad_i))) begin
+                                end else if (!force_b_l0_in && (force_b_bi_in || ((bi_final_sad_i <= b_bi_luma_sad_l0) && (bi_final_sad_i <= best_sad_i)))) begin
                                     me_best_mvx <= me_best_mvx_l0;
                                     me_best_mvy <= me_best_mvy_l0;
                                     me_best_mvx_l1 <= (me_fullpel_mvx <<< 2) + best_dx_i;

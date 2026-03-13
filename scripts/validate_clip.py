@@ -357,6 +357,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--force-b-slice", action="store_true")
     parser.add_argument("--force-bref-slice", action="store_true")
     parser.add_argument("--force-b-bi", action="store_true")
+    parser.add_argument("--force-b-l0", action="store_true")
     parser.add_argument("--force-b-direct", action="store_true")
     parser.add_argument("--force-b-direct-temporal", action="store_true")
     parser.add_argument("--reorder-b-gop", action="store_true")
@@ -416,6 +417,7 @@ def main() -> int:
         force_b_slice=1 if args.force_b_slice else 0,
         force_bref_slice=1 if args.force_bref_slice else 0,
         force_b_bi=1 if args.force_b_bi else 0,
+        force_b_l0=1 if args.force_b_l0 else 0,
         force_b_direct=1 if args.force_b_direct else 0,
         force_b_direct_temporal=1 if args.force_b_direct_temporal else 0,
         reorder_b_gop=1 if args.reorder_b_gop else 0,
@@ -431,6 +433,7 @@ def main() -> int:
         force_b_slice=1 if args.force_b_slice else 0,
         force_bref_slice=1 if args.force_bref_slice else 0,
         force_b_bi=1 if args.force_b_bi else 0,
+        force_b_l0=1 if args.force_b_l0 else 0,
         force_b_direct=1 if args.force_b_direct else 0,
         force_b_direct_temporal=1 if args.force_b_direct_temporal else 0,
         reorder_b_gop=1 if args.reorder_b_gop else 0,

@@ -39,6 +39,7 @@ class BuildConfig:
     force_b_slice: int = 0
     force_bref_slice: int = 0
     force_b_bi: int = 0
+    force_b_l0: int = 0
     force_b_direct: int = 0
     force_b_direct_temporal: int = 0
     reorder_b_gop: int = 0
@@ -139,6 +140,7 @@ def run_sim(
     force_b_slice: int = 0,
     force_bref_slice: int = 0,
     force_b_bi: int = 0,
+    force_b_l0: int = 0,
     force_b_direct: int = 0,
     force_b_direct_temporal: int = 0,
     reorder_b_gop: int = 0,
@@ -161,6 +163,8 @@ def run_sim(
         cmd.append("+force_bref_slice=1")
     if force_b_bi:
         cmd.append("+force_b_bi=1")
+    if force_b_l0:
+        cmd.append("+force_b_l0=1")
     if force_b_direct:
         cmd.append("+force_b_direct=1")
     if force_b_direct_temporal:
