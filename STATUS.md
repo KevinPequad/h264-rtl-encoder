@@ -200,7 +200,7 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - reference-bank metadata now also retains picture-order and frame-level
   list0-reference-bank state alongside the per-MB colocated metadata, and the
   current limited temporal-direct path now consumes that metadata on reordered
-  B slices
+  B and reordered-`BREF` slices
 - the current limited `B_DIRECT_16x16` path can now collapse zero-residual
   macroblocks into RTL-owned B-slice skip-run syntax through the same late
   deferred-header path already used for zero-residual `P_SKIP`
@@ -627,6 +627,22 @@ Measured validation points:
   `output/validation_temporal_direct_320x176_3f.h264`,
   `output/validation_temporal_direct_320x176_3f.json`, and header-trace proof
   of `direct_spatial_mv_pred_flag = 0` with `b_direct_mbs=220`
+- `temporal_direct_bref_force_32x16_3f`: strict FFmpeg-decodable forced
+  temporal-direct reordered-`BREF` validation at `32x16`, `3` frames,
+  `131,068` cycles, `265` bytes,
+  `output/validation_temporal_direct_bref_fix_32x16_3f.h264`,
+  `output/validation_temporal_direct_bref_fix_32x16_3f.json`, and
+  header-trace proof that both non-IDR `BREF` slices emit
+  `direct_spatial_mv_pred_flag = 0` while the last picture reports
+  `b_direct_mbs=2`
+- `temporal_direct_bref_force_320x176_3f`: strict FFmpeg-decodable decode-only
+  forced temporal-direct reordered-`BREF` validation at `320x176`, `3`
+  frames, `37,905,588` cycles, `21,534` bytes,
+  `output/validation_temporal_direct_bref_fix_320x176_3f.h264`,
+  `output/validation_temporal_direct_bref_fix_320x176_3f.json`, and
+  header-trace proof that both non-IDR `BREF` slices emit
+  `direct_spatial_mv_pred_flag = 0` while the last picture reports
+  `b_direct_mbs=220`
 - `bdirect_auto_weighted_32x16_3f`: strict FFmpeg-decodable weighted
   non-forced auto `B_DIRECT_16x16` reordered-B validation at `32x16`, `3`
   frames, `131,078` cycles, `180` bytes, RTL PSNR avg `30.158513`, RTL SSIM
