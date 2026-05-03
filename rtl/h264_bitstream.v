@@ -1412,11 +1412,13 @@ module h264_bitstream #(
                                           (slice_num_ref_idx_l0_active_minus1 == 2'd0) &&
                                           (mb_ref_idx_l0 == 2'd0) &&
                                           (mvd_x_l0 == 9'sd0) && (mvd_y_l0 == 9'sd0))) begin
+                                        `ifndef SYNTHESIS
                                         $fatal(1,
                                                "[CABAC_PSUBSET] Unsupported CABAC MB inter=%0d skip=%0d residual=%0d ref=%0d mvd=(%0d,%0d) refs=%0d",
                                                is_inter_mb, is_skip_mb, mb_has_residual, mb_ref_idx_l0,
                                                $signed(mvd_x_l0), $signed(mvd_y_l0),
                                                slice_num_ref_idx_l0_active_minus1 + 2'd1);
+                                        `endif
                                     end else if (cabac_mb_counter != 12'd0) begin
                                         cabac_bin_valid <= 1'b1;
                                         cabac_bin_value <= 1'b0;
@@ -1529,8 +1531,11 @@ module h264_bitstream #(
                             6'd32: begin
                                 if (DEBUG_CABAC_P16X16 && !is_skip_mb)
                                     $display("[CABACDBG] mb=%0d sub=32 terminate0", cabac_mb_counter);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC terminate(0) bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1559,8 +1564,11 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16 && !is_skip_mb)
                                     $display("[CABACDBG] mb=%0d sub=34 skip outstate=%0d bits_valid=%0d bits_count=%0d",
                                              cabac_mb_counter, cabac_ctx_state_out, cabac_bits_valid, cabac_bits_count);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC skip-flag bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1589,8 +1597,11 @@ module h264_bitstream #(
                             6'd36: begin
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=36 mbtype14 state=%0d", cabac_mb_counter, cabac_mb_type_ctx_state_14);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC mb_type[14] bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1609,8 +1620,11 @@ module h264_bitstream #(
                             6'd37: begin
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=37 mbtype15 state=%0d", cabac_mb_counter, cabac_mb_type_ctx_state_15);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC mb_type[15] bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1629,8 +1643,11 @@ module h264_bitstream #(
                             6'd38: begin
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=38 mbtype16 state=%0d", cabac_mb_counter, cabac_mb_type_ctx_state_16);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC mb_type[16] bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1654,8 +1671,11 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=39 mvdx ctx=%0d state=%0d",
                                              cabac_mb_counter, cabac_mvd_ctx_x, cabac_ctx_state_in);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC mvd_x bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1679,8 +1699,11 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=40 mvdy ctx=%0d state=%0d",
                                              cabac_mb_counter, cabac_mvd_ctx_y, cabac_ctx_state_in);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC mvd_y bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1705,8 +1728,11 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=41 cbp0 sel=%0d state=%0d",
                                              cabac_mb_counter, cabac_cbp_luma_ctx0_sel, cabac_ctx_state_in);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC cbp_luma[0] bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1731,8 +1757,11 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=42 cbp1 sel=%0d state=%0d",
                                              cabac_mb_counter, cabac_cbp_luma_ctx1_sel, cabac_ctx_state_in);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC cbp_luma[1] bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1757,8 +1786,11 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=43 cbp2 sel=%0d state=%0d",
                                              cabac_mb_counter, cabac_cbp_luma_ctx2_sel, cabac_ctx_state_in);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC cbp_luma[2] bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1778,8 +1810,11 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=44 cbp3 state=%0d",
                                              cabac_mb_counter, cabac_ctx_state_in);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC cbp_luma[3] bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1799,8 +1834,11 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=45 cbpchroma state=%0d",
                                              cabac_mb_counter, cabac_ctx_state_in);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC cbp_chroma bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -2068,8 +2106,11 @@ module h264_bitstream #(
                                 state    <= S_IDLE;
                             end
                             6'd20: begin
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSKIP] CABAC terminate(1) bit overflow");
+                                    `endif
+                                    end
                                 cabac_slice_active <= 1'b0;
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
