@@ -760,6 +760,7 @@ module h264_cavlc (
     reg [31:0] lev_emit_hi_bits;
     reg [31:0] lev_emit_lo_bits;
     reg [5:0]  lev_emit_lo_count;
+    integer lev_escape_i;
 
     always @(*) begin
         lev_out_data = 64'd0;
@@ -795,10 +796,12 @@ module h264_cavlc (
             lev_suffix_bits = {48'd0, lev_lcode_r} - (64'd15 << lev_suflen_r);
             if (lev_suflen_r == 4'd0)
                 lev_suffix_bits = lev_suffix_bits - 64'd15;
-            while ((lev_escape_prefix < 6'd17) &&
-                   (lev_suffix_bits >= (64'd1 << (lev_escape_prefix - 6'd3)))) begin
-                lev_suffix_bits = lev_suffix_bits - (64'd1 << (lev_escape_prefix - 6'd3));
-                lev_escape_prefix = lev_escape_prefix + 6'd1;
+            for (lev_escape_i = 0; lev_escape_i < 2; lev_escape_i = lev_escape_i + 1) begin
+                if ((lev_escape_prefix < 6'd17) &&
+                    (lev_suffix_bits >= (64'd1 << (lev_escape_prefix - 6'd3)))) begin
+                    lev_suffix_bits = lev_suffix_bits - (64'd1 << (lev_escape_prefix - 6'd3));
+                    lev_escape_prefix = lev_escape_prefix + 6'd1;
+                end
             end
             lev_out_bits = {1'b0, ((lev_escape_prefix << 1) - 6'd2)};
             lev_out_data = (64'd1 << (lev_escape_prefix - 6'd3))
