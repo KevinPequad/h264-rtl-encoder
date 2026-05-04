@@ -111,6 +111,8 @@ int main(int argc, char** argv) {
         else if (arg.rfind("+trace_file=", 0) == 0) trace_file = arg.substr(12);
     }
 
+    const bool stream_has_b_slices = force_b_slice || force_bref_slice || reorder_b_gop;
+
     std::ifstream f(input_file, std::ios::binary);
     if (!f.is_open()) { fprintf(stderr, "[TB] ERROR: Cannot open %s\n", input_file.c_str()); return 1; }
     f.seekg(0, std::ios::end);
@@ -149,8 +151,8 @@ int main(int argc, char** argv) {
 
     fprintf(stderr, "==========================================================\n");
     fprintf(stderr, "  H.264 RTL Encoder Testbench (%d-bit)\n", BD);
-    fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d  idr_interval=%d  force_b_slice=%d  force_bref_slice=%d  force_b_bi=%d  force_b_l0=%d  force_b_l1=%d  force_b_direct=%d  force_b_direct_temporal=%d  reorder_b_gop=%d\n",
-            num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC, idr_interval, force_b_slice ? 1 : 0, force_bref_slice ? 1 : 0, force_b_bi ? 1 : 0, force_b_l0 ? 1 : 0, force_b_l1 ? 1 : 0, force_b_direct ? 1 : 0, force_b_direct_temporal ? 1 : 0, reorder_b_gop ? 1 : 0);
+    fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d  idr_interval=%d  stream_has_b_slices=%d  force_b_slice=%d  force_bref_slice=%d  force_b_bi=%d  force_b_l0=%d  force_b_l1=%d  force_b_direct=%d  force_b_direct_temporal=%d  reorder_b_gop=%d\n",
+            num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC, idr_interval, stream_has_b_slices ? 1 : 0, force_b_slice ? 1 : 0, force_bref_slice ? 1 : 0, force_b_bi ? 1 : 0, force_b_l0 ? 1 : 0, force_b_l1 ? 1 : 0, force_b_direct ? 1 : 0, force_b_direct_temporal ? 1 : 0, reorder_b_gop ? 1 : 0);
     fprintf(stderr, "  Reorder ref-slot overrides: bi=%d l0=%d l1=%d direct=%d direct_temporal=%d\n",
             force_b_bi_on_reorder_ref_slot ? 1 : 0, force_b_l0_on_reorder_ref_slot ? 1 : 0, force_b_l1_on_reorder_ref_slot ? 1 : 0,
             force_b_direct_on_reorder_ref_slot ? 1 : 0, force_b_direct_temporal_on_reorder_ref_slot ? 1 : 0);
@@ -161,7 +163,7 @@ int main(int argc, char** argv) {
 
     Vh264_encoder_top* dut = new Vh264_encoder_top;
     dut->clk = 0; dut->rst_n = 0; dut->start = 0;
-    dut->frame_num_in = 0; dut->pic_order_cnt_lsb_in = 0; dut->is_idr_in = 0; dut->is_b_in = 0; dut->is_bref_in = 0; dut->ref_mem_rd_data = 0;
+    dut->frame_num_in = 0; dut->pic_order_cnt_lsb_in = 0; dut->is_idr_in = 0; dut->is_b_in = 0; dut->is_bref_in = 0; dut->stream_has_b_slices_in = stream_has_b_slices ? 1 : 0; dut->ref_mem_rd_data = 0;
     dut->force_b_bi_in = 0;
     dut->force_b_l0_in = 0;
     dut->force_b_l1_in = 0;

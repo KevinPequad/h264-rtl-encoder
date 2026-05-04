@@ -33,6 +33,11 @@ Implemented and validated now:
   residual
 - limited reference-`B` / `BREF` support on the current reordered dual-list
   `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` path
+- header/control signaling now uses a stream-level B-slice contract: I/P-only
+  8-bit 4:2:0 streams stay Constrained Baseline, while B/BREF/reordered-GOP
+  streams advertise Main profile and `max_num_reorder_frames = 1` from the
+  first SPS; HRD and `transform_8x8` signaling remain off until those lanes
+  exist
 - full directional `Intra_4x4` mode support in RTL
 - `Intra_16x16` luma prediction and syntax support in RTL
 - current IDR path now routes through RTL `Intra_16x16` macroblock coding
@@ -174,8 +179,10 @@ Current implemented features:
   `frame_num` field
 - SPS VUI timing signaling in RTL with `num_units_in_tick`,
   `time_scale`, and `fixed_frame_rate_flag`
-- SPS VUI bitstream-restriction signaling in RTL for the current no-reorder,
-  four-reference subset
+- SPS VUI bitstream-restriction signaling in RTL: I/P-only streams advertise
+  `max_num_reorder_frames = 0`, and B/BREF/reordered-GOP streams advertise
+  `max_num_reorder_frames = 1` while keeping the current four-reference
+  buffering subset
 - PPS generation in RTL
 - IDR slice header generation in RTL
 - non-IDR slice header generation in RTL
@@ -1090,6 +1097,11 @@ python3 scripts/package_mp4.py output.h264 output.mp4 --fps 24 --width 320 --hei
   inputs and emits paired `.build.log` / `.sim.log` artifacts per case
   - use `--case <name>` to run only specific smoke cases; filtered runs write
     `output/smoke_matrix_summary_filtered.json`
+- `python3 scripts/trace_header_matrix.py` regenerates focused smoke rows and
+  asserts decoded `trace_headers` fields for profile selection, VUI/HRD,
+  CABAC PPS selection, B/reorder signaling, and `transform_8x8` exclusions
+  - use `--case <name>` for a focused row; filtered runs write
+    `output/header_trace_matrix_summary_filtered.json`
 - `python3 scripts/validate_clip.py` runs staged multi-frame validation with
   a clean staged rebuild, strict decode checking, paired `.build.log` /
   `.sim.log` artifacts, MP4 output, and comparison metrics
