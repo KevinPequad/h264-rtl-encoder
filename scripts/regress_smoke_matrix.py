@@ -26,6 +26,8 @@ PSKIP_RE = re.compile(
     r"b_direct_refgt0_mbs=(?P<b_direct_refgt0>\d+)"
     r"(?:\s+b_direct_l1src_mbs=(?P<b_direct_l1src>\d+))?"
     r"(?:\s+cabac_p16x16_mbs=(?P<cabac_p16x16>\d+))?"
+    r"(?:\s+p16x8_mbs=(?P<p16x8>\d+))?"
+    r"(?:\s+p8x16_mbs=(?P<p8x16>\d+))?"
 )
 DECODE_ERROR_PATTERNS = (
     "error while decoding",
@@ -85,6 +87,8 @@ class SmokeCase:
     force_b_l1_on_reorder_b_slot: int = 0
     force_b_direct_on_reorder_b_slot: int = 0
     force_b_direct_temporal_on_reorder_b_slot: int = 0
+    force_p16x8: int = 0
+    force_p8x16: int = 0
     reorder_b_gop: int = 0
     flat_y_frames: tuple[int, ...] | None = None
     require_skip_min: int = 0
@@ -95,6 +99,8 @@ class SmokeCase:
     require_direct_refgt0_min: int = 0
     require_direct_l1src_min: int = 0
     require_cabac_p16x16_min: int = 0
+    require_p16x8_min: int = 0
+    require_p8x16_min: int = 0
 
 
 CASES = [
@@ -108,6 +114,56 @@ CASES = [
         enable_p_ipcm=1,
         ipcm_sad_threshold=0,
         inter_sad_threshold=0,
+    ),
+    SmokeCase(
+        "smoke_8b_420_p16x8_force",
+        8,
+        1,
+        "smoke_32x16_3f_p16x8.yuv",
+        "smoke_32x16_3f_p16x8.h264",
+        frames=3,
+        enable_idr_ipcm=1,
+        force_p16x8=1,
+        flat_y_frames=(64, 64, 64),
+        require_p16x8_min=4,
+    ),
+    SmokeCase(
+        "smoke_8b_420_p8x16_force",
+        8,
+        1,
+        "smoke_32x16_3f_p8x16.yuv",
+        "smoke_32x16_3f_p8x16.h264",
+        frames=3,
+        enable_idr_ipcm=1,
+        force_p8x16=1,
+        flat_y_frames=(64, 64, 64),
+        require_p8x16_min=4,
+    ),
+    SmokeCase(
+        "smoke_8b_420_p16x8_followref",
+        8,
+        1,
+        "smoke_32x16_3f_p16x8_followref.yuv",
+        "smoke_32x16_3f_p16x8_followref.h264",
+        frames=3,
+        enable_idr_ipcm=1,
+        force_p16x8=1,
+        # Frames 1 and 2 differ from the IDR but match each other, so the
+        # second P frame exercises consumption of the partition-coded reference.
+        flat_y_frames=(64, 80, 80),
+        require_p16x8_min=4,
+    ),
+    SmokeCase(
+        "smoke_8b_420_p8x16_followref",
+        8,
+        1,
+        "smoke_32x16_3f_p8x16_followref.yuv",
+        "smoke_32x16_3f_p8x16_followref.h264",
+        frames=3,
+        enable_idr_ipcm=1,
+        force_p8x16=1,
+        flat_y_frames=(64, 80, 80),
+        require_p8x16_min=4,
     ),
     SmokeCase(
         "smoke_8b_422",
@@ -555,6 +611,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     frames_with_direct_refgt0 = 0
     frames_with_direct_l1src = 0
     frames_with_cabac_p16x16 = 0
+    frames_with_p16x8 = 0
+    frames_with_p8x16 = 0
     max_skip = 0
     max_l1 = 0
     max_bi = 0
@@ -563,6 +621,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     max_direct_refgt0 = 0
     max_direct_l1src = 0
     max_cabac_p16x16 = 0
+    max_p16x8 = 0
+    max_p8x16 = 0
     total_skip = 0
     total_l1 = 0
     total_bi = 0
@@ -571,6 +631,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     total_direct_refgt0 = 0
     total_direct_l1src = 0
     total_cabac_p16x16 = 0
+    total_p16x8 = 0
+    total_p8x16 = 0
 
     for match in PSKIP_RE.finditer(sim_log):
         skip = int(match.group("skip"))
@@ -581,6 +643,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         direct_refgt0 = int(match.group("b_direct_refgt0"))
         direct_l1src = int(match.group("b_direct_l1src") or 0)
         cabac_p16x16 = int(match.group("cabac_p16x16") or 0)
+        p16x8 = int(match.group("p16x8") or 0)
+        p8x16 = int(match.group("p8x16") or 0)
         total_skip += skip
         total_l1 += l1
         total_bi += bi
@@ -589,6 +653,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         total_direct_refgt0 += direct_refgt0
         total_direct_l1src += direct_l1src
         total_cabac_p16x16 += cabac_p16x16
+        total_p16x8 += p16x8
+        total_p8x16 += p8x16
         if skip:
             frames_with_skip += 1
         if l1:
@@ -605,6 +671,10 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
             frames_with_direct_l1src += 1
         if cabac_p16x16:
             frames_with_cabac_p16x16 += 1
+        if p16x8:
+            frames_with_p16x8 += 1
+        if p8x16:
+            frames_with_p8x16 += 1
         max_skip = max(max_skip, skip)
         max_l1 = max(max_l1, l1)
         max_bi = max(max_bi, bi)
@@ -613,6 +683,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         max_direct_refgt0 = max(max_direct_refgt0, direct_refgt0)
         max_direct_l1src = max(max_direct_l1src, direct_l1src)
         max_cabac_p16x16 = max(max_cabac_p16x16, cabac_p16x16)
+        max_p16x8 = max(max_p16x8, p16x8)
+        max_p8x16 = max(max_p8x16, p8x16)
 
     return {
         "frames_with_skip": frames_with_skip,
@@ -623,6 +695,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "frames_with_direct_refgt0": frames_with_direct_refgt0,
         "frames_with_direct_l1src": frames_with_direct_l1src,
         "frames_with_cabac_p16x16": frames_with_cabac_p16x16,
+        "frames_with_p16x8": frames_with_p16x8,
+        "frames_with_p8x16": frames_with_p8x16,
         "max_skip": max_skip,
         "max_l1": max_l1,
         "max_bi": max_bi,
@@ -631,6 +705,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "max_direct_refgt0": max_direct_refgt0,
         "max_direct_l1src": max_direct_l1src,
         "max_cabac_p16x16": max_cabac_p16x16,
+        "max_p16x8": max_p16x8,
+        "max_p8x16": max_p8x16,
         "total_skip": total_skip,
         "total_l1": total_l1,
         "total_bi": total_bi,
@@ -639,6 +715,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "total_direct_refgt0": total_direct_refgt0,
         "total_direct_l1src": total_direct_l1src,
         "total_cabac_p16x16": total_cabac_p16x16,
+        "total_p16x8": total_p16x8,
+        "total_p8x16": total_p8x16,
     }
 
 
@@ -726,6 +804,8 @@ def main() -> int:
             force_b_l1_on_reorder_b_slot=case.force_b_l1_on_reorder_b_slot,
             force_b_direct_on_reorder_b_slot=case.force_b_direct_on_reorder_b_slot,
             force_b_direct_temporal_on_reorder_b_slot=case.force_b_direct_temporal_on_reorder_b_slot,
+            force_p16x8=case.force_p16x8,
+            force_p8x16=case.force_p8x16,
             reorder_b_gop=case.reorder_b_gop,
         )
         sim_bin = build_sim(workspace, config, build_log_path=build_log_path)
@@ -753,6 +833,8 @@ def main() -> int:
             force_b_l1_on_reorder_b_slot=case.force_b_l1_on_reorder_b_slot,
             force_b_direct_on_reorder_b_slot=case.force_b_direct_on_reorder_b_slot,
             force_b_direct_temporal_on_reorder_b_slot=case.force_b_direct_temporal_on_reorder_b_slot,
+            force_p16x8=case.force_p16x8,
+            force_p8x16=case.force_p8x16,
             reorder_b_gop=case.reorder_b_gop,
             capture=True,
         )
@@ -802,6 +884,16 @@ def main() -> int:
                 f"{case.name} expected at least {case.require_cabac_p16x16_min} CABAC P_L0_16x16 macroblocks, "
                 f"saw {b_mode_summary.get('total_cabac_p16x16', 0)}"
             )
+        if b_mode_summary.get("total_p16x8", 0) < case.require_p16x8_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_p16x8_min} P_L0_L0_16x8 macroblocks, "
+                f"saw {b_mode_summary.get('total_p16x8', 0)}"
+            )
+        if b_mode_summary.get("total_p8x16", 0) < case.require_p8x16_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_p8x16_min} P_L0_L0_8x16 macroblocks, "
+                f"saw {b_mode_summary.get('total_p8x16', 0)}"
+            )
 
         result = {
             "name": case.name,
@@ -823,7 +915,9 @@ def main() -> int:
             f"b_direct_max={b_mode_summary.get('max_direct', 0)} "
             f"b_l0_refgt0_max={b_mode_summary.get('max_l0_refgt0', 0)} "
             f"b_direct_refgt0_max={b_mode_summary.get('max_direct_refgt0', 0)} "
-            f"b_direct_l1src_max={b_mode_summary.get('max_direct_l1src', 0)}"
+            f"b_direct_l1src_max={b_mode_summary.get('max_direct_l1src', 0)} "
+            f"p16x8_max={b_mode_summary.get('max_p16x8', 0)} "
+            f"p8x16_max={b_mode_summary.get('max_p8x16', 0)}"
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)

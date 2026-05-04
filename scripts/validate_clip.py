@@ -24,6 +24,8 @@ PSKIP_RE = re.compile(
     r"b_direct_refgt0_mbs=(?P<b_direct_refgt0>\d+)"
     r"(?:\s+b_direct_l1src_mbs=(?P<b_direct_l1src>\d+))?"
     r"(?:\s+cabac_p16x16_mbs=(?P<cabac_p16x16>\d+))?"
+    r"(?:\s+p16x8_mbs=(?P<p16x8>\d+))?"
+    r"(?:\s+p8x16_mbs=(?P<p8x16>\d+))?"
 )
 DECODE_ERROR_PATTERNS = (
     "error while decoding",
@@ -75,6 +77,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     frames_with_direct_refgt0 = 0
     frames_with_direct_l1src = 0
     frames_with_cabac_p16x16 = 0
+    frames_with_p16x8 = 0
+    frames_with_p8x16 = 0
     max_skip = 0
     max_l1 = 0
     max_bi = 0
@@ -83,6 +87,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     max_direct_refgt0 = 0
     max_direct_l1src = 0
     max_cabac_p16x16 = 0
+    max_p16x8 = 0
+    max_p8x16 = 0
     total_skip = 0
     total_l1 = 0
     total_bi = 0
@@ -91,6 +97,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     total_direct_refgt0 = 0
     total_direct_l1src = 0
     total_cabac_p16x16 = 0
+    total_p16x8 = 0
+    total_p8x16 = 0
 
     for match in PSKIP_RE.finditer(sim_log):
         skip = int(match.group("skip"))
@@ -101,6 +109,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         direct_refgt0 = int(match.group("b_direct_refgt0"))
         direct_l1src = int(match.group("b_direct_l1src") or 0)
         cabac_p16x16 = int(match.group("cabac_p16x16") or 0)
+        p16x8 = int(match.group("p16x8") or 0)
+        p8x16 = int(match.group("p8x16") or 0)
         total_skip += skip
         total_l1 += l1
         total_bi += bi
@@ -109,6 +119,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         total_direct_refgt0 += direct_refgt0
         total_direct_l1src += direct_l1src
         total_cabac_p16x16 += cabac_p16x16
+        total_p16x8 += p16x8
+        total_p8x16 += p8x16
         if skip:
             frames_with_skip += 1
         if l1:
@@ -125,6 +137,10 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
             frames_with_direct_l1src += 1
         if cabac_p16x16:
             frames_with_cabac_p16x16 += 1
+        if p16x8:
+            frames_with_p16x8 += 1
+        if p8x16:
+            frames_with_p8x16 += 1
         max_skip = max(max_skip, skip)
         max_l1 = max(max_l1, l1)
         max_bi = max(max_bi, bi)
@@ -133,6 +149,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         max_direct_refgt0 = max(max_direct_refgt0, direct_refgt0)
         max_direct_l1src = max(max_direct_l1src, direct_l1src)
         max_cabac_p16x16 = max(max_cabac_p16x16, cabac_p16x16)
+        max_p16x8 = max(max_p16x8, p16x8)
+        max_p8x16 = max(max_p8x16, p8x16)
 
     return {
         "frames_with_skip": frames_with_skip,
@@ -143,6 +161,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "frames_with_direct_refgt0": frames_with_direct_refgt0,
         "frames_with_direct_l1src": frames_with_direct_l1src,
         "frames_with_cabac_p16x16": frames_with_cabac_p16x16,
+        "frames_with_p16x8": frames_with_p16x8,
+        "frames_with_p8x16": frames_with_p8x16,
         "max_skip": max_skip,
         "max_l1": max_l1,
         "max_bi": max_bi,
@@ -151,6 +171,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "max_direct_refgt0": max_direct_refgt0,
         "max_direct_l1src": max_direct_l1src,
         "max_cabac_p16x16": max_cabac_p16x16,
+        "max_p16x8": max_p16x8,
+        "max_p8x16": max_p8x16,
         "total_skip": total_skip,
         "total_l1": total_l1,
         "total_bi": total_bi,
@@ -159,6 +181,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "total_direct_refgt0": total_direct_refgt0,
         "total_direct_l1src": total_direct_l1src,
         "total_cabac_p16x16": total_cabac_p16x16,
+        "total_p16x8": total_p16x8,
+        "total_p8x16": total_p8x16,
     }
 
 
@@ -387,6 +411,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--force-b-l1", action="store_true")
     parser.add_argument("--force-b-direct", action="store_true")
     parser.add_argument("--force-b-direct-temporal", action="store_true")
+    parser.add_argument("--force-p16x8", action="store_true")
+    parser.add_argument("--force-p8x16", action="store_true")
+    parser.add_argument("--require-p16x8-min", type=int, default=0)
+    parser.add_argument("--require-p8x16-min", type=int, default=0)
     parser.add_argument("--force-b-bi-on-reorder-ref-slot", action="store_true")
     parser.add_argument("--force-b-l0-on-reorder-ref-slot", action="store_true")
     parser.add_argument("--force-b-l1-on-reorder-ref-slot", action="store_true")
@@ -460,6 +488,8 @@ def main() -> int:
         force_b_l1=1 if args.force_b_l1 else 0,
         force_b_direct=1 if args.force_b_direct else 0,
         force_b_direct_temporal=1 if args.force_b_direct_temporal else 0,
+        force_p16x8=1 if args.force_p16x8 else 0,
+        force_p8x16=1 if args.force_p8x16 else 0,
         force_b_bi_on_reorder_ref_slot=1 if args.force_b_bi_on_reorder_ref_slot else 0,
         force_b_l0_on_reorder_ref_slot=1 if args.force_b_l0_on_reorder_ref_slot else 0,
         force_b_l1_on_reorder_ref_slot=1 if args.force_b_l1_on_reorder_ref_slot else 0,
@@ -487,6 +517,8 @@ def main() -> int:
         force_b_l1=1 if args.force_b_l1 else 0,
         force_b_direct=1 if args.force_b_direct else 0,
         force_b_direct_temporal=1 if args.force_b_direct_temporal else 0,
+        force_p16x8=1 if args.force_p16x8 else 0,
+        force_p8x16=1 if args.force_p8x16 else 0,
         force_b_bi_on_reorder_ref_slot=1 if args.force_b_bi_on_reorder_ref_slot else 0,
         force_b_l0_on_reorder_ref_slot=1 if args.force_b_l0_on_reorder_ref_slot else 0,
         force_b_l1_on_reorder_ref_slot=1 if args.force_b_l1_on_reorder_ref_slot else 0,
@@ -512,6 +544,16 @@ def main() -> int:
     if decode_errors:
         raise RuntimeError(
             "FFmpeg decoder reported H.264 errors:\n" + "\n".join(decode_errors[:16])
+        )
+    if b_mode_summary.get("total_p16x8", 0) < args.require_p16x8_min:
+        raise RuntimeError(
+            f"Expected at least {args.require_p16x8_min} P_L0_L0_16x8 macroblocks, "
+            f"saw {b_mode_summary.get('total_p16x8', 0)}"
+        )
+    if b_mode_summary.get("total_p8x16", 0) < args.require_p8x16_min:
+        raise RuntimeError(
+            f"Expected at least {args.require_p8x16_min} P_L0_L0_8x16 macroblocks, "
+            f"saw {b_mode_summary.get('total_p8x16', 0)}"
         )
 
     rtl_psnr = None

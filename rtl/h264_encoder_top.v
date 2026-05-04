@@ -62,6 +62,10 @@ module h264_encoder_top #(
     // Validation override: switch direct-mode derivation to the current
     // limited temporal-direct path for the whole B slice.
     input  wire        force_b_direct_temporal_in,
+    // Validation override: force CAVLC P-slice inter MBs onto partitioned
+    // P_L0_L0_16x8 / P_L0_L0_8x16 syntax for RED/GREEN gates.
+    input  wire        force_p16x8_in,
+    input  wire        force_p8x16_in,
 
     // Raw frame memory read port (YUV420 planar)
     output wire [20:0] raw_mem_addr,
@@ -191,6 +195,7 @@ module h264_encoder_top #(
     reg        is_b_bi_mb_reg;     // 1 if current B inter MB uses bidirectional prediction
     reg        is_b_direct_mb_reg; // 1 if current B inter MB uses B_DIRECT_16x16 syntax
     reg        is_b_direct_from_l1_reg;
+    reg [1:0]  p_partition_mode_reg; // 0=P16x16, 1=P16x8, 2=P8x16
     reg        use_intra16_mb_reg; // 1 if current intra MB uses Intra_16x16
     reg        use_ipcm_mb_reg;    // 1 if current intra MB uses I_PCM
     reg [7:0]  cur_frame_num;      // Latched frame number
@@ -430,6 +435,8 @@ module h264_encoder_top #(
     reg [15:0] frame_b_direct_nonzero_ref_mb_count;
     reg [15:0] frame_b_direct_from_l1_mb_count;
     reg [15:0] frame_cabac_p16x16_mb_count;
+    reg [15:0] frame_p16x8_mb_count;
+    reg [15:0] frame_p8x16_mb_count;
 
     // Reference-bank MB metadata for colocated/direct derivation.
     reg        refmeta_is_intra [0:4][0:TOTAL_MBS-1];
@@ -689,6 +696,7 @@ module h264_encoder_top #(
         is_p_frame &&
         is_inter_mb_reg &&
         !use_weighted_pred_w &&
+        (p_partition_mode_reg == 2'd0) &&
         (slice_num_ref_idx_l0_active_minus1 == 2'd0) &&
         (mb_ref_idx_reg == 2'd0) &&
         (mvd_x_l0_w == 9'sd0) &&
@@ -2056,8 +2064,10 @@ pred_buf = {(256*BD){1'b0}};
         .is_b_direct_mb(is_b_direct_mb_reg),
         .is_b_l1_mb(is_b_l1_mb_reg), .is_b_bi_mb(is_b_bi_mb_reg),
         .direct_spatial_mv_pred_flag(direct_spatial_mv_pred_flag_w),
-        .mb_ref_idx_l0(mb_ref_idx_reg), .mb_ref_idx_l1(mb_ref_idx_l1_reg),
+        .mb_ref_idx_l0(mb_ref_idx_reg), .mb_ref_idx_l0_part1(mb_ref_idx_reg),
+        .mb_ref_idx_l1(mb_ref_idx_l1_reg), .p_partition_mode(p_partition_mode_reg),
         .mvd_x_l0(mvd_x_l0_w), .mvd_y_l0(mvd_y_l0_w),
+        .mvd_x_l0_part1(mvd_x_l0_w), .mvd_y_l0_part1(mvd_y_l0_w),
         .mvd_x_l1(mvd_x_l1_w), .mvd_y_l1(mvd_y_l1_w),
         .cabac_mvd_ctx_x(cabac_mvd_ctx_x_w), .cabac_mvd_ctx_y(cabac_mvd_ctx_y_w),
         .cabac_cbp_luma_ctx0_sel(cabac_cbp_luma_ctx0_sel_w),
@@ -2093,7 +2103,7 @@ pred_buf = {(256*BD){1'b0}};
             blk_state <= BS_PRED; blk_started <= 1'b0; iq_done_latched <= 1'b0;
             recon_buf <= {(256*BD){1'b0}}; luma_recon_buf <= {(256*BD){1'b0}}; top_ref_flat <= {(MB_COLS*16*BD){1'b0}}; left_ref_flat <= {(16*BD){1'b0}};
             top_pixels_flat <= {(16*BD){1'b0}}; left_pixels_flat <= {(16*BD){1'b0}}; flush_pending <= 1'b0; flush_accepted <= 1'b0;
-            is_p_frame <= 1'b0; is_b_frame <= 1'b0; is_b_ref_frame <= 1'b0; is_inter_mb_reg <= 1'b0; is_skip_mb_reg <= 1'b0; is_b_l1_mb_reg <= 1'b0; is_b_bi_mb_reg <= 1'b0; is_b_direct_mb_reg <= 1'b0; is_b_direct_from_l1_reg <= 1'b0; use_intra16_mb_reg <= 1'b0; use_ipcm_mb_reg <= 1'b0; cur_frame_num <= 8'd0; cur_pic_order_cnt_lsb <= 9'd0; direct_temporal_slice_mode_reg <= 1'b0;
+            is_p_frame <= 1'b0; is_b_frame <= 1'b0; is_b_ref_frame <= 1'b0; is_inter_mb_reg <= 1'b0; is_skip_mb_reg <= 1'b0; is_b_l1_mb_reg <= 1'b0; is_b_bi_mb_reg <= 1'b0; is_b_direct_mb_reg <= 1'b0; is_b_direct_from_l1_reg <= 1'b0; p_partition_mode_reg <= 2'd0; use_intra16_mb_reg <= 1'b0; use_ipcm_mb_reg <= 1'b0; cur_frame_num <= 8'd0; cur_pic_order_cnt_lsb <= 9'd0; direct_temporal_slice_mode_reg <= 1'b0;
             cabac_skip_ctx_reg <= 2'd0;
             me_best_mvx <= 8'sd0; me_best_mvy <= 8'sd0; me_best_mvx_l0 <= 8'sd0; me_best_mvy_l0 <= 8'sd0; me_best_mvx_l1 <= 8'sd0; me_best_mvy_l1 <= 8'sd0; me_best_sad <= 18'd0; me_fullpel_best_sad <= 18'd0;
             inter_pred_buf <= {(256*BD){1'b0}}; ref_wr_idx <= 9'd0;
@@ -2177,6 +2187,8 @@ pred_buf = {(256*BD){1'b0}};
             frame_b_direct_nonzero_ref_mb_count <= 16'd0;
             frame_b_direct_from_l1_mb_count <= 16'd0;
             frame_cabac_p16x16_mb_count <= 16'd0;
+            frame_p16x8_mb_count <= 16'd0;
+            frame_p8x16_mb_count <= 16'd0;
             for (meta_bank_i = 0; meta_bank_i < 5; meta_bank_i = meta_bank_i + 1) begin
                 for (meta_mb_i = 0; meta_mb_i < TOTAL_MBS; meta_mb_i = meta_mb_i + 1) begin
                     refmeta_is_intra[meta_bank_i][meta_mb_i] = 1'b1;
@@ -2229,6 +2241,8 @@ pred_buf = {(256*BD){1'b0}};
                     frame_b_direct_nonzero_ref_mb_count <= 16'd0;
                     frame_b_direct_from_l1_mb_count <= 16'd0;
                     frame_cabac_p16x16_mb_count <= 16'd0;
+                    frame_p16x8_mb_count <= 16'd0;
+                    frame_p8x16_mb_count <= 16'd0;
                     left_is_skip <= 1'b0;
                     cabac_skip_ctx_reg <= 2'd0;
                     for (idx_rb = 0; idx_rb < MB_COLS; idx_rb = idx_rb + 1)
@@ -2275,6 +2289,8 @@ pred_buf = {(256*BD){1'b0}};
                     is_b_bi_mb_reg <= 1'b0;
                     is_b_direct_mb_reg <= 1'b0;
                     is_b_direct_from_l1_reg <= 1'b0;
+                    p_partition_mode_reg <= (is_p_frame && force_p16x8_in) ? 2'd1 :
+                                            (is_p_frame && force_p8x16_in) ? 2'd2 : 2'd0;
                     b_direct_pending_valid <= 1'b0;
                     b_direct_pending_use_l1 <= 1'b0;
                     b_direct_pending_use_bi <= 1'b0;
@@ -3322,7 +3338,7 @@ pred_buf = {(256*BD){1'b0}};
                                     pskip_y = pskip_med_y;
                                 end
                             end
-                            pskip_syntax_eligible_reg <= is_p_frame && !use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
+                            pskip_syntax_eligible_reg <= is_p_frame && (p_partition_mode_reg == 2'd0) && !use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
                                                          ($signed((me_fullpel_mvx <<< 2) + best_dx_i) == pskip_x) &&
                                                          ($signed((me_fullpel_mvy <<< 2) + best_dy_i) == pskip_y);
                             /* verilator lint_off WIDTH */
@@ -3347,7 +3363,7 @@ pred_buf = {(256*BD){1'b0}};
                             if (best_sad_i < INTER_SAD_THRESHOLD) begin
                                 use_intra16_mb_reg <= 1'b0;
                                 use_ipcm_mb_reg <= 1'b0;
-                                if (is_p_frame && !use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
+                                if (is_p_frame && (p_partition_mode_reg == 2'd0) && !use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
                                     pskip_luma_exact &&
                                     ($signed((me_fullpel_mvx <<< 2) + best_dx_i) == pskip_x) &&
                                     ($signed((me_fullpel_mvy <<< 2) + best_dy_i) == pskip_y)) begin
@@ -3868,6 +3884,10 @@ pred_buf = {(256*BD){1'b0}};
                         frame_b_direct_from_l1_mb_count <= frame_b_direct_from_l1_mb_count + 16'd1;
                     if (cabac_non_skip_subset_ok_w)
                         frame_cabac_p16x16_mb_count <= frame_cabac_p16x16_mb_count + 16'd1;
+                    if (is_p_frame && is_inter_mb_reg && !is_skip_mb_reg && (p_partition_mode_reg == 2'd1))
+                        frame_p16x8_mb_count <= frame_p16x8_mb_count + 16'd1;
+                    if (is_p_frame && is_inter_mb_reg && !is_skip_mb_reg && (p_partition_mode_reg == 2'd2))
+                        frame_p8x16_mb_count <= frame_p8x16_mb_count + 16'd1;
                     top_is_skip[mb_x] <= is_skip_mb_reg;
                     left_is_skip <= is_skip_mb_reg;
                     if (is_inter_mb_reg && !is_b_frame && !is_skip_mb_reg) begin
@@ -4376,8 +4396,9 @@ pred_buf = {(256*BD){1'b0}};
                                                 end
                                                 mb_has_residual <= mb_nonzero_i;
                                                 if (!mb_nonzero_i) begin
-                                                    is_skip_mb_reg <= cabac_zero_cbp_p16x16_eligible_w ? 1'b0 :
-                                                                      (pskip_syntax_eligible_reg || bskip_syntax_eligible_reg);
+                                                    is_skip_mb_reg <= (is_p_frame && (p_partition_mode_reg != 2'd0)) ? 1'b0 :
+                                                                      (cabac_zero_cbp_p16x16_eligible_w ? 1'b0 :
+                                                                       (pskip_syntax_eligible_reg || bskip_syntax_eligible_reg));
                                                     top_state <= TS_SKIP_CLR_FIFO;
                                                 end else begin
                                                     top_state <= TS_DEFER_MB_HDR;
@@ -4977,8 +4998,8 @@ pred_buf = {(256*BD){1'b0}};
                          else if (!flush_accepted) flush_accepted <= 1'b1;
                          else if (bs_cmd_done) begin
                              done <= 1'b1;
-                            $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d",
-                                     cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count);
+                            $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d p16x8_mbs=%0d p8x16_mbs=%0d",
+                                     cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count, frame_p16x8_mb_count, frame_p8x16_mb_count);
                              refbank_poc_lsb[current_write_bank] <= cur_pic_order_cnt_lsb;
                             if (is_p_frame) begin
                                 refbank_has_l0_ref0[current_write_bank] <= (valid_ref_count != 3'd0);

@@ -53,9 +53,13 @@ module h264_bitstream #(
     input  wire        is_b_bi_mb,
     input  wire        direct_spatial_mv_pred_flag,
     input  wire [1:0]  mb_ref_idx_l0,
+    input  wire [1:0]  mb_ref_idx_l0_part1,
     input  wire [1:0]  mb_ref_idx_l1,
+    input  wire [1:0]  p_partition_mode,
     input  wire signed [8:0] mvd_x_l0,
     input  wire signed [8:0] mvd_y_l0,
+    input  wire signed [8:0] mvd_x_l0_part1,
+    input  wire signed [8:0] mvd_y_l0_part1,
     input  wire signed [8:0] mvd_x_l1,
     input  wire signed [8:0] mvd_y_l1,
     input  wire [1:0]  cabac_mvd_ctx_x,
@@ -494,6 +498,12 @@ module h264_bitstream #(
     wire [9:0]  mvd_y_l0_codenum_w = (mvd_y_l0 == 9'sd0) ? 10'd0 :
                                      (mvd_y_l0[8])       ? ({(~mvd_y_l0 + 9'd1), 1'b0}) :
                                                             ({mvd_y_l0, 1'b0} - 10'd1);
+    wire [9:0]  mvd_x_l0_part1_codenum_w = (mvd_x_l0_part1 == 9'sd0) ? 10'd0 :
+                                            (mvd_x_l0_part1[8])       ? ({(~mvd_x_l0_part1 + 9'd1), 1'b0}) :
+                                                                        ({mvd_x_l0_part1, 1'b0} - 10'd1);
+    wire [9:0]  mvd_y_l0_part1_codenum_w = (mvd_y_l0_part1 == 9'sd0) ? 10'd0 :
+                                            (mvd_y_l0_part1[8])       ? ({(~mvd_y_l0_part1 + 9'd1), 1'b0}) :
+                                                                        ({mvd_y_l0_part1, 1'b0} - 10'd1);
     wire [9:0]  mvd_x_l1_codenum_w = (mvd_x_l1 == 9'sd0) ? 10'd0 :
                                      (mvd_x_l1[8])       ? ({(~mvd_x_l1 + 9'd1), 1'b0}) :
                                                             ({mvd_x_l1, 1'b0} - 10'd1);
@@ -1409,6 +1419,7 @@ module h264_bitstream #(
                                 if (cabac_slice_active) begin
                                     if (!is_skip_mb &&
                                         !(is_inter_mb && !is_b_slice && !mb_has_residual &&
+                                          (p_partition_mode == 2'd0) &&
                                           (slice_num_ref_idx_l0_active_minus1 == 2'd0) &&
                                           (mb_ref_idx_l0 == 2'd0) &&
                                           (mvd_x_l0 == 9'sd0) && (mvd_y_l0 == 9'sd0))) begin
@@ -1477,10 +1488,18 @@ module h264_bitstream #(
                                             sub <= 6'd22;
                                         end
                                     end else begin
-                                        // Current P inter path uses P_L0_16x16, which is mb_type=0.
-                                        bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
-                                        bit_cnt <= bit_cnt + 7'd1;
-                                        sub <= 6'd10;  // jump to inter path
+                                        // P inter mb_type: P_L0_16x16=0, P_L0_L0_16x8=1, P_L0_L0_8x16=2.
+                                        if (p_partition_mode == 2'd1) begin
+                                            ue_input <= 10'd1;
+                                            sub <= 6'd22;
+                                        end else if (p_partition_mode == 2'd2) begin
+                                            ue_input <= 10'd2;
+                                            sub <= 6'd22;
+                                        end else begin
+                                            bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
+                                            bit_cnt <= bit_cnt + 7'd1;
+                                            sub <= 6'd10;  // jump to inter path
+                                        end
                                     end
                                 end else begin
                                     ue_input <= {4'd0, intra_mb_type_code_num};
@@ -1896,7 +1915,7 @@ module h264_bitstream #(
                                     if (slice_num_ref_idx_l0_active_minus1 == 2'd1) begin
                                         bit_buf <= bit_buf | ({(~mb_ref_idx_l0[0]), 95'd0} >> bit_cnt[6:0]);
                                         bit_cnt <= bit_cnt + 7'd1;
-                                        sub <= 6'd11;
+                                        sub <= (p_partition_mode != 2'd0) ? 6'd47 : 6'd11;
                                     end else begin
                                         ue_input <= {8'd0, mb_ref_idx_l0};
                                         sub <= 6'd23;
@@ -1929,6 +1948,9 @@ module h264_bitstream #(
                                 if (is_b_slice && is_b_bi_mb) begin
                                     ue_input <= mvd_x_l1_codenum_w;
                                     sub <= 6'd27;
+                                end else if (!is_b_slice && (p_partition_mode != 2'd0)) begin
+                                    ue_input <= mvd_x_l0_part1_codenum_w;
+                                    sub <= 6'd49;
                                 end else begin
                                     sub <= 6'd15;
                                 end
@@ -1978,9 +2000,38 @@ module h264_bitstream #(
                                 if (is_b_slice) begin
                                     ue_input <= is_b_l1_mb ? mvd_x_l1_codenum_w : mvd_x_l0_codenum_w;
                                     sub <= 6'd12;
+                                end else if ((p_partition_mode != 2'd0) && slice_multi_ref_enable) begin
+                                    ue_input <= {8'd0, mb_ref_idx_l0_part1};
+                                    sub <= 6'd48;
                                 end else begin
                                     sub <= 6'd11;
                                 end
+                            end
+                            6'd47: begin
+                                bit_buf <= bit_buf | ({(~mb_ref_idx_l0_part1[0]), 95'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd1;
+                                sub <= 6'd11;
+                            end
+                            6'd48: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                sub <= 6'd11;
+                            end
+                            6'd49: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= mvd_y_l0_part1_codenum_w;
+                                sub <= 6'd50;
+                            end
+                            6'd50: begin
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
+                                sub <= 6'd51;
+                            end
+                            6'd51: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                sub <= 6'd15;
                             end
                             6'd27: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);

@@ -70,6 +70,8 @@ int main(int argc, char** argv) {
     bool force_b_l1 = false;
     bool force_b_direct = false;
     bool force_b_direct_temporal = false;
+    bool force_p16x8 = false;
+    bool force_p8x16 = false;
     bool force_b_bi_on_reorder_ref_slot = false;
     bool force_b_l0_on_reorder_ref_slot = false;
     bool force_b_l1_on_reorder_ref_slot = false;
@@ -96,6 +98,8 @@ int main(int argc, char** argv) {
         else if (arg.rfind("+force_b_l1=", 0) == 0) force_b_l1 = std::atoi(arg.c_str() + 12) != 0;
         else if (arg.rfind("+force_b_direct=", 0) == 0) force_b_direct = std::atoi(arg.c_str() + 16) != 0;
         else if (arg.rfind("+force_b_direct_temporal=", 0) == 0) force_b_direct_temporal = std::atoi(arg.c_str() + 25) != 0;
+        else if (arg.rfind("+force_p16x8=", 0) == 0) force_p16x8 = std::atoi(arg.c_str() + 13) != 0;
+        else if (arg.rfind("+force_p8x16=", 0) == 0) force_p8x16 = std::atoi(arg.c_str() + 13) != 0;
         else if (arg.rfind("+force_b_bi_on_reorder_ref_slot=", 0) == 0) force_b_bi_on_reorder_ref_slot = std::atoi(arg.c_str() + 32) != 0;
         else if (arg.rfind("+force_b_l0_on_reorder_ref_slot=", 0) == 0) force_b_l0_on_reorder_ref_slot = std::atoi(arg.c_str() + 32) != 0;
         else if (arg.rfind("+force_b_l1_on_reorder_ref_slot=", 0) == 0) force_b_l1_on_reorder_ref_slot = std::atoi(arg.c_str() + 32) != 0;
@@ -149,8 +153,8 @@ int main(int argc, char** argv) {
 
     fprintf(stderr, "==========================================================\n");
     fprintf(stderr, "  H.264 RTL Encoder Testbench (%d-bit)\n", BD);
-    fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d  idr_interval=%d  force_b_slice=%d  force_bref_slice=%d  force_b_bi=%d  force_b_l0=%d  force_b_l1=%d  force_b_direct=%d  force_b_direct_temporal=%d  reorder_b_gop=%d\n",
-            num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC, idr_interval, force_b_slice ? 1 : 0, force_bref_slice ? 1 : 0, force_b_bi ? 1 : 0, force_b_l0 ? 1 : 0, force_b_l1 ? 1 : 0, force_b_direct ? 1 : 0, force_b_direct_temporal ? 1 : 0, reorder_b_gop ? 1 : 0);
+    fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d  idr_interval=%d  force_b_slice=%d  force_bref_slice=%d  force_b_bi=%d  force_b_l0=%d  force_b_l1=%d  force_b_direct=%d  force_b_direct_temporal=%d  force_p16x8=%d  force_p8x16=%d  reorder_b_gop=%d\n",
+            num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC, idr_interval, force_b_slice ? 1 : 0, force_bref_slice ? 1 : 0, force_b_bi ? 1 : 0, force_b_l0 ? 1 : 0, force_b_l1 ? 1 : 0, force_b_direct ? 1 : 0, force_b_direct_temporal ? 1 : 0, force_p16x8 ? 1 : 0, force_p8x16 ? 1 : 0, reorder_b_gop ? 1 : 0);
     fprintf(stderr, "  Reorder ref-slot overrides: bi=%d l0=%d l1=%d direct=%d direct_temporal=%d\n",
             force_b_bi_on_reorder_ref_slot ? 1 : 0, force_b_l0_on_reorder_ref_slot ? 1 : 0, force_b_l1_on_reorder_ref_slot ? 1 : 0,
             force_b_direct_on_reorder_ref_slot ? 1 : 0, force_b_direct_temporal_on_reorder_ref_slot ? 1 : 0);
@@ -167,6 +171,8 @@ int main(int argc, char** argv) {
     dut->force_b_l1_in = 0;
     dut->force_b_direct_in = 0;
     dut->force_b_direct_temporal_in = 0;
+    dut->force_p16x8_in = 0;
+    dut->force_p8x16_in = 0;
     dut->chr_cb_ref_rd_data = CHROMA_MID; dut->chr_cr_ref_rd_data = CHROMA_MID;
 
 #if VM_TRACE
@@ -289,6 +295,8 @@ int main(int argc, char** argv) {
             const bool is_ref_picture = is_idr || !is_b || is_bref;
             const int frame_num = is_idr ? 0 : (is_ref_picture ? next_ref_frame_num : last_ref_frame_num);
             set_frame_force_flags(is_b, reorder_ref_slot, reorder_b_slot);
+            dut->force_p16x8_in = (!is_idr && !is_b && force_p16x8) ? 1 : 0;
+            dut->force_p8x16_in = (!is_idr && !is_b && force_p8x16) ? 1 : 0;
             dut->frame_num_in = frame_num & 0xFF;
             dut->pic_order_cnt_lsb_in = (display_idx * 2) & 0x1FF;
             dut->is_idr_in = is_idr ? 1 : 0;
@@ -303,6 +311,9 @@ int main(int argc, char** argv) {
                     active_frame_num, (display_idx * 2) & 0x1FF,
                     dut->force_b_bi_in, dut->force_b_l0_in, dut->force_b_l1_in, dut->force_b_direct_in, dut->force_b_direct_temporal_in,
                     (unsigned long long)cycle);
+            if (dut->force_p16x8_in || dut->force_p8x16_in) {
+                fprintf(stderr, "[TB] P partition force: p16x8=%d p8x16=%d\n", dut->force_p16x8_in, dut->force_p8x16_in);
+            }
         }
 
         dut->clk = 1;
