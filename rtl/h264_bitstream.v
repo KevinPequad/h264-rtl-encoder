@@ -46,6 +46,10 @@ module h264_bitstream #(
     input  wire        is_p_slice,
     input  wire        is_b_slice,
     input  wire        is_b_ref_slice,
+    // Stream-level GOP control captured before SPS emission. B slices can be
+    // requested after the IDR/SPS frame, so profile/VUI signalling must not
+    // depend only on the current slice type.
+    input  wire        stream_has_b_slices,
     input  wire [7:0]  frame_num,
     input  wire [8:0]  pic_order_cnt_lsb,
     input  wire        is_inter_mb,
@@ -155,10 +159,11 @@ module h264_bitstream #(
     wire use_high_profile = (BIT_DEPTH > 8) || (CHROMA_FORMAT_IDC != 1);
     wire use_high444_profile = (CHROMA_FORMAT_IDC == 3);
     wire use_high422_profile = (CHROMA_FORMAT_IDC == 2) || (BIT_DEPTH > 10);
-    // The current CABAC P-skip subset and weighted-P path cannot be signaled
-    // as Baseline. Keep the existing non-High CAVLC subset on Baseline for
-    // now, and switch to Main when these tools are enabled.
-    wire use_main_profile = (weighted_pred_enable || cabac_feature_enable) && !use_high_profile;
+    // The current CABAC P-skip subset, weighted-prediction path, and B-slice
+    // GOP controls cannot be signaled as Baseline. B slices can appear after
+    // the first IDR/SPS, so use the stream-level GOP control input rather than
+    // the instantaneous is_b_slice value for SPS profile selection.
+    wire use_main_profile = (weighted_pred_enable || cabac_feature_enable || stream_has_b_slices) && !use_high_profile;
     wire weighted_pred_flag = weighted_pred_enable;
     wire [1:0] weighted_bipred_idc = weighted_pred_enable ? 2'b01 : 2'b00;
     wire slice_multi_ref_enable = (slice_num_ref_idx_l0_active_minus1 != 2'd0);
@@ -273,6 +278,7 @@ module h264_bitstream #(
     localparam [31:0] VUI_NUM_UNITS_IN_TICK = 32'd1;
     localparam [31:0] VUI_TIME_SCALE = FRAME_RATE * 2;
     localparam [9:0]  VUI_LOG2_MAX_MV_LENGTH = 10'd6;
+    wire [9:0]        vui_max_num_reorder_frames = stream_has_b_slices ? 10'd1 : 10'd0;
 
     function [7:0] select_level_idc;
         input integer frame_mbs;
@@ -872,7 +878,7 @@ module h264_bitstream #(
                             6'd18: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
-                                ue_input <= 10'd0; // num_reorder_frames
+                                ue_input <= vui_max_num_reorder_frames; // max_num_reorder_frames: zero for I/P subset, one for current reordered-B GOP
                                 sub <= sub + 6'd1;
                             end
                             6'd19: begin
