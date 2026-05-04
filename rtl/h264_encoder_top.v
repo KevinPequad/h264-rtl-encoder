@@ -695,8 +695,9 @@ module h264_encoder_top #(
         (mvd_y_l0_w == 9'sd0);
     wire        cabac_non_skip_subset_ok_w =
         cabac_zero_cbp_p16x16_eligible_w &&
-        !mb_has_residual &&
         !is_skip_mb_reg;
+    wire        cabac_suppress_cavlc_payload_w =
+        cabac_slice_enable_w && cabac_zero_cbp_p16x16_eligible_w && !is_skip_mb_reg;
 
     function [BD-1:0] apply_luma_bi_weight;
         input [BD-1:0] sample0_in;
@@ -1501,7 +1502,7 @@ module h264_encoder_top #(
                                   (use_intra16_mb_reg && is_luma) ? intra16_resid_4x4 :
                                   chr_pred_mode ? chr_resid_4x4 : resid_4x4_w;
 
-    integer idx_ei, idx_pi, idx_ir, idx_rb, meta_bank_i, meta_mb_i;
+    integer idx_ei, idx_pi, idx_ir, idx_rb, meta_bank_i, meta_mb_i, cabac_luma_i;
     // Chroma pixel index helper for 4:2:0, 4:2:2, and 4:4:4.
     // The transformed chroma path still targets the current 4:2:0 / 4:2:2 flow;
     // this helper is widened so the tree also compiles for 4:4:4 I_PCM work.
@@ -1929,6 +1930,22 @@ pred_buf = {(256*BD){1'b0}};
     localparam [3:0] INTRA_MODE_DC   = 4'd2;
 
     reg [4:0] nz_coeff [0:TOTAL_SUB_BLOCKS-1];
+    reg [255:0] cabac_luma_scan_buf [0:15];
+    reg [15:0] cabac_luma_nz_mask_reg;
+    wire [15:0] cabac_luma_nz_mask_w = cabac_luma_nz_mask_reg;
+    wire [3:0] cabac_cbp_luma_w = {
+        |cabac_luma_nz_mask_w[15:12],
+        |cabac_luma_nz_mask_w[11:8],
+        |cabac_luma_nz_mask_w[7:4],
+        |cabac_luma_nz_mask_w[3:0]
+    };
+    wire [4095:0] cabac_luma_scan_flat_w = {
+        cabac_luma_scan_buf[15], cabac_luma_scan_buf[14], cabac_luma_scan_buf[13], cabac_luma_scan_buf[12],
+        cabac_luma_scan_buf[11], cabac_luma_scan_buf[10], cabac_luma_scan_buf[9],  cabac_luma_scan_buf[8],
+        cabac_luma_scan_buf[7],  cabac_luma_scan_buf[6],  cabac_luma_scan_buf[5],  cabac_luma_scan_buf[4],
+        cabac_luma_scan_buf[3],  cabac_luma_scan_buf[2],  cabac_luma_scan_buf[1],  cabac_luma_scan_buf[0]
+    };
+    wire        cavlc_bits_valid_to_bs = cavlc_bits_valid && !cabac_suppress_cavlc_payload_w;
     reg [4:0] left_mb_nz [0:3];
     reg [4:0] top_mb_nz [0:MB_COLS*4-1];
     reg [3:0] intra_mode_cur [0:15];
@@ -2045,7 +2062,7 @@ pred_buf = {(256*BD){1'b0}};
         .clk(clk), .rst_n(rst_n), .cmd_write_sps(bs_cmd_sps), .cmd_write_pps(bs_cmd_pps), .cmd_write_slice_hdr(bs_cmd_slice),
         .cmd_write_mb_header(bs_cmd_mb_hdr), .cmd_write_trailing(bs_cmd_trailing), .cmd_flush(bs_cmd_flush),
         .cmd_clear_fifo(bs_cmd_clear_fifo),
-        .cavlc_valid(cavlc_bits_valid), .cavlc_bits(cavlc_bits), .cavlc_count(cavlc_count),
+        .cavlc_valid(cavlc_bits_valid_to_bs), .cavlc_bits(cavlc_bits), .cavlc_count(cavlc_count),
         .mb_qp_delta(8'd0), .mb_has_residual(mb_has_residual),
         .cabac_feature_enable(cabac_feature_enable_w),
         .cabac_slice_enable(cabac_slice_enable_w),
@@ -2063,6 +2080,9 @@ pred_buf = {(256*BD){1'b0}};
         .cabac_cbp_luma_ctx0_sel(cabac_cbp_luma_ctx0_sel_w),
         .cabac_cbp_luma_ctx1_sel(cabac_cbp_luma_ctx1_sel_w),
         .cabac_cbp_luma_ctx2_sel(cabac_cbp_luma_ctx2_sel_w),
+        .cabac_luma_scan_flat(cabac_luma_scan_flat_w),
+        .cabac_luma_nz_mask(cabac_luma_nz_mask_w),
+        .cabac_cbp_luma(cabac_cbp_luma_w),
         .slice_num_ref_idx_l0_active_minus1(slice_num_ref_idx_l0_active_minus1),
         .hold_fifo_drain(bs_hold_fifo_drain), .is_intra16_mb(is_intra16_mb_hdr), .is_ipcm_mb(is_ipcm_mb_hdr), .intra_mb_type_code_num(intra_mb_type_code_num),
         .intra_pred_bits(intra_pred_bits_mb), .intra_pred_count(intra_pred_count_mb),
@@ -2177,6 +2197,10 @@ pred_buf = {(256*BD){1'b0}};
             frame_b_direct_nonzero_ref_mb_count <= 16'd0;
             frame_b_direct_from_l1_mb_count <= 16'd0;
             frame_cabac_p16x16_mb_count <= 16'd0;
+            cabac_luma_nz_mask_reg <= 16'd0;
+            for (cabac_luma_i = 0; cabac_luma_i < 16; cabac_luma_i = cabac_luma_i + 1) begin
+                cabac_luma_scan_buf[cabac_luma_i] <= 256'd0;
+            end
             for (meta_bank_i = 0; meta_bank_i < 5; meta_bank_i = meta_bank_i + 1) begin
                 for (meta_mb_i = 0; meta_mb_i < TOTAL_MBS; meta_mb_i = meta_mb_i + 1) begin
                     refmeta_is_intra[meta_bank_i][meta_mb_i] = 1'b1;
@@ -2300,6 +2324,7 @@ pred_buf = {(256*BD){1'b0}};
                     skip_probe_pending <= 1'b0;
                     inter_chr_prefetched_valid <= 1'b0;
                     mb_has_residual <= 1'b0;
+                    cabac_luma_nz_mask_reg <= 16'd0;
                     pskip_syntax_eligible_reg <= 1'b0;
                     bskip_syntax_eligible_reg <= 1'b0;
                     is_intra16_mb_hdr <= 1'b0;
@@ -3419,6 +3444,7 @@ pred_buf = {(256*BD){1'b0}};
                         top_state <= TS_DEFER_MB_HDR;
                     end else begin
                         mb_has_residual <= is_inter_mb_reg ? 1'b0 : 1'b1;
+                        cabac_luma_nz_mask_reg <= 16'd0;
                         sub_blk <= 5'd0;
                         blk_state <= is_inter_mb_reg ? BS_XFORM : (use_intra16_mb_reg ? BS_XFORM : BS_PRED);
                         blk_started <= 1'b0;
@@ -3486,7 +3512,14 @@ pred_buf = {(256*BD){1'b0}};
                                        end
                                    end
                         BS_ZIGZAG: if (!blk_started) begin zz_start <= 1'b1; iq_start <= 1'b1; blk_started <= 1'b1; iq_done_latched <= 1'b0; end
-                                   else begin if (iq_done) iq_done_latched <= 1'b1; if (zz_done) begin nz_coeff[sub_blk] <= total_coeffs; blk_state <= BS_CAVLC; blk_started <= 1'b0; end end
+                                   else begin if (iq_done) iq_done_latched <= 1'b1; if (zz_done) begin
+                                       nz_coeff[sub_blk] <= total_coeffs;
+                                       if (is_inter_mb_reg && is_luma) begin
+                                           cabac_luma_scan_buf[sub_blk[3:0]] <= scan_flat;
+                                           cabac_luma_nz_mask_reg[sub_blk[3:0]] <= (total_coeffs != 5'd0);
+                                       end
+                                       blk_state <= BS_CAVLC; blk_started <= 1'b0;
+                                   end end
                         BS_CAVLC:  if (!blk_started && !bs_busy) begin cavlc_start <= 1'b1; blk_started <= 1'b1; end
                                    else begin if (iq_done) iq_done_latched <= 1'b1; if (cavlc_done) begin blk_state <= BS_IQ; blk_started <= 1'b0; end end
                         BS_IQ:     if (iq_done || iq_done_latched) begin blk_state <= BS_IT; blk_started <= 1'b0; end else if (iq_done) iq_done_latched <= 1'b1;
