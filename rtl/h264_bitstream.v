@@ -56,6 +56,7 @@ module h264_bitstream #(
     input  wire [1:0]  mb_ref_idx_l0_part1,
     input  wire [1:0]  mb_ref_idx_l1,
     input  wire [1:0]  p_partition_mode,
+    input  wire [1:0]  p_sub_mb_type,
     input  wire signed [8:0] mvd_x_l0,
     input  wire signed [8:0] mvd_y_l0,
     input  wire signed [8:0] mvd_x_l0_part1,
@@ -470,6 +471,10 @@ module h264_bitstream #(
         endcase
     end
     reg [12:0] pending_skip_run;
+    reg [2:0]  p8x8_sub_idx;
+    reg [4:0]  p8x8_mvd_idx;
+    wire [4:0] p8x8_mvd_total_w = (p_sub_mb_type == 2'd0) ? 5'd4 :
+                                      (p_sub_mb_type == 2'd3) ? 5'd16 : 5'd8;
     wire [5:0] ue_big_total_bits = {ue_big_msb, 1'b0} + 6'd1;
     reg [24:0] ue_big_bits;
     always @(*) begin
@@ -726,7 +731,7 @@ module h264_bitstream #(
                         end else if (cmd_write_slice_hdr) begin
                             state <= S_SLICE; sub <= 6'd0; busy <= 1'b1; cabac_slice_active <= cabac_slice_enable; cabac_mb_counter <= 12'd0; cabac_pending_ctx_kind <= CABAC_CTX_NONE; cabac_pending_ctx_sel <= 2'd0;
                         end else if (cmd_write_mb_header) begin
-                            state <= S_MB_HDR; sub <= 6'd0; busy <= 1'b1; ipcm_sample_idx <= 10'd0;
+                            state <= S_MB_HDR; sub <= 6'd0; busy <= 1'b1; ipcm_sample_idx <= 10'd0; p8x8_sub_idx <= 3'd0; p8x8_mvd_idx <= 5'd0;
                         end else if (cmd_write_trailing) begin
                             state <= S_TRAIL; sub <= 6'd0; busy <= 1'b1;
                         end else if (cmd_flush) begin
@@ -898,7 +903,6 @@ module h264_bitstream #(
                                 else
                                     sub <= 6'd27;
                             end
-                            // Emit remaining bytes
                             6'd27: begin
                                 state <= S_EMIT;
                                 return_state <= S_SPS;
@@ -1488,12 +1492,15 @@ module h264_bitstream #(
                                             sub <= 6'd22;
                                         end
                                     end else begin
-                                        // P inter mb_type: P_L0_16x16=0, P_L0_L0_16x8=1, P_L0_L0_8x16=2.
+                                        // P inter mb_type: P_L0_16x16=0, P_L0_L0_16x8=1, P_L0_L0_8x16=2, P_8x8=3.
                                         if (p_partition_mode == 2'd1) begin
                                             ue_input <= 10'd1;
                                             sub <= 6'd22;
                                         end else if (p_partition_mode == 2'd2) begin
                                             ue_input <= 10'd2;
+                                            sub <= 6'd22;
+                                        end else if (p_partition_mode == 2'd3) begin
+                                            ue_input <= 10'd3;
                                             sub <= 6'd22;
                                         end else begin
                                             bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
@@ -1885,7 +1892,13 @@ module h264_bitstream #(
                             6'd22: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
-                                sub <= 6'd10;
+                                if (!is_b_slice && (p_partition_mode == 2'd3)) begin
+                                    p8x8_sub_idx <= 3'd0;
+                                    ue_input <= {8'd0, p_sub_mb_type};
+                                    sub <= 6'd52;
+                                end else begin
+                                    sub <= 6'd10;
+                                end
                             end
 
                             // ===== Inter MB path (sub 10+) =====
@@ -2047,6 +2060,94 @@ module h264_bitstream #(
                             6'd29: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                sub <= 6'd15;
+                            end
+                            // P_8x8 / sub-macroblock syntax. This CAVLC path forces all four
+                            // sub-macroblocks to the same sub_mb_type/ref. The datapath currently
+                            // uses one uniform luma/chroma predictor for the whole MB; to keep the
+                            // decoder's per-partition MVs equal to that predictor, emit the external
+                            // MVP delta on the first subpartition and zero MVDs for internal
+                            // subpartitions whose MVP is the previous same-MV neighbor.
+                            6'd52: begin
+`ifndef SYNTHESIS
+                                $display("[P8X8DBG] sub52 ue_input=%0d ue_bits=%0d subidx=%0d p_sub=%0d ref=%0d mvdidx=%0d bitcnt=%0d", ue_input, ue_total_bits, p8x8_sub_idx, p_sub_mb_type, mb_ref_idx_l0, p8x8_mvd_idx, bit_cnt);
+`endif
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                if (p8x8_sub_idx == 3'd3) begin
+                                    if (slice_multi_ref_enable) begin
+                                        p8x8_sub_idx <= 3'd0;
+                                        ue_input <= {8'd0, mb_ref_idx_l0};
+                                        sub <= 6'd54;
+                                    end else begin
+                                        p8x8_mvd_idx <= 5'd0;
+                                        ue_input <= mvd_x_l0_codenum_w;
+                                        sub <= 6'd58;
+                                    end
+                                end else begin
+                                    p8x8_sub_idx <= p8x8_sub_idx + 3'd1;
+                                    ue_input <= {8'd0, p_sub_mb_type};
+                                    sub <= 6'd53;
+                                end
+                            end
+                            6'd53: begin
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
+                                sub <= 6'd52;
+                            end
+                            6'd54: begin
+                                if (slice_num_ref_idx_l0_active_minus1 == 2'd1) begin
+                                    bit_buf <= bit_buf | ({(~mb_ref_idx_l0[0]), 95'd0} >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + 7'd1;
+                                end else begin
+                                    bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                end
+                                if (p8x8_sub_idx == 3'd3) begin
+                                    p8x8_mvd_idx <= 5'd0;
+                                    ue_input <= mvd_x_l0_codenum_w;
+                                    sub <= 6'd58;
+                                end else begin
+                                    p8x8_sub_idx <= p8x8_sub_idx + 3'd1;
+                                    ue_input <= {8'd0, mb_ref_idx_l0};
+                                    sub <= 6'd55;
+                                end
+                            end
+                            6'd55: begin
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
+                                sub <= 6'd54;
+                            end
+                            6'd58: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= (p8x8_mvd_idx == 5'd0) ? mvd_y_l0_codenum_w : 10'd0;
+                                sub <= 6'd59;
+                            end
+                            6'd59: begin
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
+                                sub <= 6'd60;
+                            end
+                            6'd60: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                if (p8x8_mvd_idx == (p8x8_mvd_total_w - 5'd1)) begin
+                                    sub <= 6'd62;
+                                end else begin
+                                    p8x8_mvd_idx <= p8x8_mvd_idx + 5'd1;
+                                    ue_input <= 10'd0;
+                                    sub <= 6'd61;
+                                end
+                            end
+                            6'd61: begin
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
+                                sub <= 6'd58;
+                            end
+                            6'd62: begin
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
                                 sub <= 6'd15;
                             end
                             6'd25: begin

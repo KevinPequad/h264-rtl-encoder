@@ -47,6 +47,10 @@ class BuildConfig:
     force_b_direct_temporal: int = 0
     force_p16x8: int = 0
     force_p8x16: int = 0
+    force_p8x8: int = 0
+    force_p8x4: int = 0
+    force_p4x8: int = 0
+    force_p4x4: int = 0
     force_b_bi_on_reorder_ref_slot: int = 0
     force_b_l0_on_reorder_ref_slot: int = 0
     force_b_l1_on_reorder_ref_slot: int = 0
@@ -163,6 +167,10 @@ def run_sim(
     force_b_direct_temporal: int = 0,
     force_p16x8: int = 0,
     force_p8x16: int = 0,
+    force_p8x8: int = 0,
+    force_p8x4: int = 0,
+    force_p4x8: int = 0,
+    force_p4x4: int = 0,
     force_b_bi_on_reorder_ref_slot: int = 0,
     force_b_l0_on_reorder_ref_slot: int = 0,
     force_b_l1_on_reorder_ref_slot: int = 0,
@@ -205,6 +213,14 @@ def run_sim(
         cmd.append("+force_p16x8=1")
     if force_p8x16:
         cmd.append("+force_p8x16=1")
+    if force_p8x8:
+        cmd.append("+force_p8x8=1")
+    if force_p8x4:
+        cmd.append("+force_p8x4=1")
+    if force_p4x8:
+        cmd.append("+force_p4x8=1")
+    if force_p4x4:
+        cmd.append("+force_p4x4=1")
     if force_b_bi_on_reorder_ref_slot:
         cmd.append("+force_b_bi_on_reorder_ref_slot=1")
     if force_b_l0_on_reorder_ref_slot:
