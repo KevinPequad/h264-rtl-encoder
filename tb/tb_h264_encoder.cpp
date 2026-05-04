@@ -6,6 +6,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <array>
+#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <string>
@@ -60,6 +61,8 @@ int main(int argc, char** argv) {
     std::string input_file = "data/raw_frames.yuv";
     std::string output_file = "output/encoded.h264";
     std::string trace_file = "output/trace.vcd";
+    std::string expected_ref_file;
+    bool check_expected_ref = false;
     uint64_t timeout_cycles = 50000000;
     bool enable_trace = false;
     int idr_interval = 12;
@@ -87,6 +90,7 @@ int main(int argc, char** argv) {
         if (arg.rfind("+frames=", 0) == 0) num_frames = std::atoi(arg.c_str() + 8);
         else if (arg.rfind("+input=", 0) == 0) input_file = arg.substr(7);
         else if (arg.rfind("+output=", 0) == 0) output_file = arg.substr(8);
+        else if (arg.rfind("+expected_ref=", 0) == 0) { expected_ref_file = arg.substr(14); check_expected_ref = true; }
         else if (arg.rfind("+timeout=", 0) == 0) timeout_cycles = std::strtoull(arg.c_str() + 9, nullptr, 10);
         else if (arg.rfind("+idr_interval=", 0) == 0) idr_interval = std::atoi(arg.c_str() + 14);
         else if (arg.rfind("+force_b_slice=", 0) == 0) force_b_slice = std::atoi(arg.c_str() + 15) != 0;
@@ -141,6 +145,50 @@ int main(int argc, char** argv) {
     f.close();
 
     bitstream_mem.assign(DEFAULT_MAX_BITSTREAM, 0);
+    std::vector<pixel_t> expected_ref_y;
+    std::vector<pixel_t> expected_ref_cb;
+    std::vector<pixel_t> expected_ref_cr;
+    uint64_t expected_ref_luma_reads = 0;
+    uint64_t expected_ref_chroma_reads = 0;
+    uint64_t expected_ref_mismatches = 0;
+    if (check_expected_ref) {
+        std::ifstream erf(expected_ref_file, std::ios::binary | std::ios::ate);
+        if (!erf) {
+            fprintf(stderr, "[TB][REFCHK] ERROR: could not open expected_ref=%s\n", expected_ref_file.c_str());
+            return 1;
+        }
+        std::streamsize expected_size = erf.tellg();
+        erf.seekg(0, std::ios::beg);
+        if (expected_size < FRAME_SIZE) {
+            fprintf(stderr, "[TB][REFCHK] ERROR: expected_ref too small: %lld < %d\n", (long long)expected_size, FRAME_SIZE);
+            return 1;
+        }
+        std::vector<uint8_t> expected_bytes(FRAME_SIZE);
+        erf.read(reinterpret_cast<char*>(expected_bytes.data()), FRAME_SIZE);
+        expected_ref_y.resize(LUMA_SIZE);
+        expected_ref_cb.resize(CHROMA_SIZE);
+        expected_ref_cr.resize(CHROMA_SIZE);
+        if constexpr (BD > 8) {
+            for (int i = 0; i < LUMA_SIZE; i++)
+                expected_ref_y[i] = expected_bytes[i*2] | (expected_bytes[i*2+1] << 8);
+            int cb_base = LUMA_SIZE * BYTES_PER_PEL;
+            int cr_base = cb_base + CHROMA_SIZE * BYTES_PER_PEL;
+            for (int i = 0; i < CHROMA_SIZE; i++) {
+                expected_ref_cb[i] = expected_bytes[cb_base + i*2] | (expected_bytes[cb_base + i*2+1] << 8);
+                expected_ref_cr[i] = expected_bytes[cr_base + i*2] | (expected_bytes[cr_base + i*2+1] << 8);
+            }
+        } else {
+            for (int i = 0; i < LUMA_SIZE; i++)
+                expected_ref_y[i] = expected_bytes[i];
+            int cb_base = LUMA_SIZE;
+            int cr_base = cb_base + CHROMA_SIZE;
+            for (int i = 0; i < CHROMA_SIZE; i++) {
+                expected_ref_cb[i] = expected_bytes[cb_base + i];
+                expected_ref_cr[i] = expected_bytes[cr_base + i];
+            }
+        }
+        fprintf(stderr, "[TB][REFCHK] Loaded expected reference %s\n", expected_ref_file.c_str());
+    }
     for (size_t bank = 0; bank < ref_frame_bank.size(); ++bank) {
         ref_frame_bank[bank].assign(LUMA_SIZE, 0);
         ref_cb_bank[bank].assign(CHROMA_SIZE, CHROMA_MID);
@@ -190,6 +238,7 @@ int main(int argc, char** argv) {
     int active_display_idx = 0;
     int active_frame_num = 0;
     bool active_is_ref = false;
+    bool active_is_idr = false;
     uint32_t total_bs_bytes = 0;
     bool frame_active = false;
     auto dump_trace = [&]() {
@@ -297,6 +346,7 @@ int main(int argc, char** argv) {
             active_display_idx = display_idx;
             active_frame_num = frame_num & 0xFF;
             active_is_ref = is_ref_picture;
+            active_is_idr = is_idr;
             frame_active = true;
             fprintf(stderr, "[TB] Enc %d -> Disp %d (%s) frame_num=%d poc_lsb=%d force_bi=%d force_l0=%d force_l1=%d force_direct=%d force_direct_temporal=%d start @ cycle %llu\n",
                     frame_idx, display_idx, is_idr ? "IDR" : (is_bref ? "BREF" : (is_b ? "B" : "P")),
@@ -320,23 +370,57 @@ int main(int argc, char** argv) {
         { // Reference frame memory read (from previous frame's reconstruction)
             uint32_t bank = dut->ref_rd_bank_sel & 0x7;
             uint32_t addr = dut->ref_mem_rd_addr;
-            if (bank < ref_frame_bank.size() && addr < ref_frame_bank[bank].size())
-                dut->ref_mem_rd_data = ref_frame_bank[bank][addr];
-            else
-                dut->ref_mem_rd_data = 0;
+            bool valid_ref_addr = bank < ref_frame_bank.size() && addr < ref_frame_bank[bank].size();
+            pixel_t ref_val = valid_ref_addr ? ref_frame_bank[bank][addr] : 0;
+            dut->ref_mem_rd_data = ref_val;
+            uint32_t cur_wr_bank = dut->ref_wr_bank_sel & 0x7;
+            if (check_expected_ref && frame_active && !active_is_idr && (bank != cur_wr_bank) && valid_ref_addr && addr < expected_ref_y.size()) {
+                expected_ref_luma_reads++;
+                if (ref_val != expected_ref_y[addr]) {
+                    if (expected_ref_mismatches < 16) {
+                        fprintf(stderr, "[TB][REFCHK] LUMA mismatch frame=%d bank=%u addr=%u got=%u expected=%u\n",
+                                frame_idx, bank, addr, (unsigned)ref_val, (unsigned)expected_ref_y[addr]);
+                    }
+                    expected_ref_mismatches++;
+                }
+            }
         }
 
         { // Chroma Cb reference read
             uint32_t bank = dut->ref_rd_bank_sel & 0x7;
             uint32_t addr = dut->chr_cb_ref_rd_addr;
-            dut->chr_cb_ref_rd_data =
-                (bank < ref_cb_bank.size() && addr < ref_cb_bank[bank].size()) ? ref_cb_bank[bank][addr] : CHROMA_MID;
+            bool valid_ref_addr = bank < ref_cb_bank.size() && addr < ref_cb_bank[bank].size();
+            pixel_t ref_val = valid_ref_addr ? ref_cb_bank[bank][addr] : CHROMA_MID;
+            dut->chr_cb_ref_rd_data = ref_val;
+            uint32_t cur_wr_bank = dut->ref_wr_bank_sel & 0x7;
+            if (check_expected_ref && frame_active && !active_is_idr && (bank != cur_wr_bank) && valid_ref_addr && addr < expected_ref_cb.size()) {
+                expected_ref_chroma_reads++;
+                if (ref_val != expected_ref_cb[addr]) {
+                    if (expected_ref_mismatches < 16) {
+                        fprintf(stderr, "[TB][REFCHK] CB mismatch frame=%d bank=%u addr=%u got=%u expected=%u\n",
+                                frame_idx, bank, addr, (unsigned)ref_val, (unsigned)expected_ref_cb[addr]);
+                    }
+                    expected_ref_mismatches++;
+                }
+            }
         }
         { // Chroma Cr reference read
             uint32_t bank = dut->ref_rd_bank_sel & 0x7;
             uint32_t addr = dut->chr_cr_ref_rd_addr;
-            dut->chr_cr_ref_rd_data =
-                (bank < ref_cr_bank.size() && addr < ref_cr_bank[bank].size()) ? ref_cr_bank[bank][addr] : CHROMA_MID;
+            bool valid_ref_addr = bank < ref_cr_bank.size() && addr < ref_cr_bank[bank].size();
+            pixel_t ref_val = valid_ref_addr ? ref_cr_bank[bank][addr] : CHROMA_MID;
+            dut->chr_cr_ref_rd_data = ref_val;
+            uint32_t cur_wr_bank = dut->ref_wr_bank_sel & 0x7;
+            if (check_expected_ref && frame_active && !active_is_idr && (bank != cur_wr_bank) && valid_ref_addr && addr < expected_ref_cr.size()) {
+                expected_ref_chroma_reads++;
+                if (ref_val != expected_ref_cr[addr]) {
+                    if (expected_ref_mismatches < 16) {
+                        fprintf(stderr, "[TB][REFCHK] CR mismatch frame=%d bank=%u addr=%u got=%u expected=%u\n",
+                                frame_idx, bank, addr, (unsigned)ref_val, (unsigned)expected_ref_cr[addr]);
+                    }
+                    expected_ref_mismatches++;
+                }
+            }
         }
 
         dut->eval();
@@ -392,6 +476,7 @@ int main(int argc, char** argv) {
                 {
                     static std::ofstream recon_yuv;
                     if (frame_idx == 0) {
+                        std::filesystem::create_directories("output");
                         recon_yuv.open("output/recon.yuv", std::ios::binary);
                     }
                     if (recon_yuv.is_open()) {
@@ -416,6 +501,17 @@ int main(int argc, char** argv) {
     fprintf(stderr, "==========================================================\n");
     fprintf(stderr, "[TB] %d frames encoded, %llu cycles, %u bytes\n",
             frame_idx, (unsigned long long)cycle, total_bs_bytes);
+    if (check_expected_ref) {
+        fprintf(stderr, "[TB][REFCHK] luma_reads=%llu chroma_reads=%llu mismatches=%llu\n",
+                (unsigned long long)expected_ref_luma_reads,
+                (unsigned long long)expected_ref_chroma_reads,
+                (unsigned long long)expected_ref_mismatches);
+        if (expected_ref_mismatches != 0 || expected_ref_luma_reads == 0) {
+            fprintf(stderr, "[TB][REFCHK] FAIL: expected deblocked reference was not consumed cleanly\n");
+            delete dut;
+            return 1;
+        }
+    }
     fprintf(stderr, "==========================================================\n");
 
     std::ofstream out(output_file, std::ios::binary);
