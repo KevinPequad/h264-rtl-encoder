@@ -49,6 +49,10 @@ module h264_encoder_top #(
     // Reference-B flag for non-IDR B pictures. The current RTL path supports a
     // limited single-list BREF mode that can be inserted into the ref bank.
     input  wire        is_bref_in,
+    // Stream-level GOP contract used while writing the first SPS/PPS. Future B
+    // pictures are not visible on the IDR cycle, so the testbench/control lane
+    // supplies this when a run can emit B/BREF pictures later in the stream.
+    input  wire        stream_has_b_slices_in,
     // Validation override: force eligible reordered B inter MBs onto the
     // current B_BI_16x16 path.
     input  wire        force_b_bi_in,
@@ -2303,7 +2307,8 @@ pred_buf = {(256*BD){1'b0}};
         .cabac_feature_enable(cabac_feature_enable_w),
         .cabac_slice_enable(cabac_slice_enable_w),
         .cabac_skip_ctx(cabac_skip_ctx_reg),
-        .is_p_slice(is_p_frame), .is_b_slice(is_b_frame), .is_b_ref_slice(is_b_ref_frame), .frame_num(cur_frame_num),
+        .is_p_slice(is_p_frame), .is_b_slice(is_b_frame), .is_b_ref_slice(is_b_ref_frame),
+        .stream_has_b_slices(stream_has_b_slices_in), .frame_num(cur_frame_num),
         .pic_order_cnt_lsb(cur_pic_order_cnt_lsb),
         .is_inter_mb(is_inter_mb_reg), .is_skip_mb(is_skip_mb_reg),
         .is_b_direct_mb(is_b_direct_mb_reg),

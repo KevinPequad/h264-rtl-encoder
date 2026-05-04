@@ -89,6 +89,7 @@ partition/tool coverage, deblocking, and the final long-run target.
 | `scripts/calc_psnr.py` | Metric helper |
 | `scripts/rtl_runner.py` | Staged runner for clean simulator execution |
 | `scripts/regress_smoke_matrix.py` | Reproducible smoke regression matrix |
+| `scripts/trace_header_matrix.py` | Trace-header assertion matrix for SPS/PPS/slice profile, VUI/HRD, entropy, and transform-signaling gates |
 | `scripts/validate_clip.py` | Multi-frame validation, strict decode gating, optional decode-only fast path, and comparison flow |
 | `docker/Dockerfile` | Containerized smoke-run environment |
 | `docker/run_one_frame.sh` | One-frame Docker smoke flow |
@@ -151,8 +152,10 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
   `frame_num` field
 - SPS VUI timing signaling in RTL with `num_units_in_tick`,
   `time_scale`, and `fixed_frame_rate_flag`
-- SPS VUI bitstream-restriction signaling in RTL for the current no-reorder,
-  four-reference subset
+- SPS VUI bitstream-restriction signaling in RTL: current I/P-only streams
+  advertise `max_num_reorder_frames = 0`; streams whose control lane can emit
+  B/BREF pictures advertise `max_num_reorder_frames = 1` while retaining
+  `max_dec_frame_buffering = 4` for the current four-reference subset
 - PPS generation in RTL
 - IDR slice header generation in RTL
 - non-IDR slice header generation in RTL
@@ -937,8 +940,12 @@ Current verified milestone outputs:
 - SPS `level_idc` is now selected from frame size and configured frame rate
   instead of the earlier hardcoded split
 - SPS VUI timing fields are now emitted from RTL for the configured frame rate
-- SPS VUI bitstream-restriction fields now describe the current no-reorder,
-  four-reference subset
+- SPS profile/VUI signalling now consumes a stream-level B-slice GOP contract:
+  current I/P-only 8-bit 4:2:0 streams stay Constrained Baseline with
+  `max_num_reorder_frames = 0`, while B/BREF/reordered-GOP runs escalate to
+  Main profile and advertise `max_num_reorder_frames = 1` from the first SPS
+- SPS VUI bitstream-restriction fields otherwise keep HRD absent and retain the
+  current four-reference `max_dec_frame_buffering = 4` subset
 - baseline/main SPS now uses `pic_order_cnt_type = 0`, and the current RTL
   IDR / P slice headers emit `pic_order_cnt_lsb`
 - the current RTL path now advertises `log2_max_frame_num_minus4 = 4` and
@@ -988,6 +995,11 @@ Current verified milestone outputs:
   latches the input payload for execution, and restores the missing
   scaling-list factor on inverse dequant; that re-closed the current IDR-path
   `Intra_16x16` reconstruction quality on the validated `320x176` all-IDR run
+- `scripts/trace_header_matrix.py` now regenerates focused smoke rows, runs
+  strict FFmpeg decode plus `ffprobe`, stores per-row `trace_headers` text, and
+  asserts the current header-control contract: no Baseline+B/CABAC overclaim,
+  B/reordered streams advertise Main plus `max_num_reorder_frames >= 1`, HRD
+  flags stay absent, and High-profile `transform_8x8_mode_flag` stays `0`
 - deferred inter headers and FIFO discard now prevent illegal zero-residual
   CAVLC payloads from leaking after `cbp=0` or `P_SKIP`, which is what made
   the earlier zero-residual inter-header attempt invalid
