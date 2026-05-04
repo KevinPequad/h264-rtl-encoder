@@ -440,6 +440,7 @@ module h264_encoder_top #(
     reg [15:0] frame_b_direct_nonzero_ref_mb_count;
     reg [15:0] frame_b_direct_from_l1_mb_count;
     reg [15:0] frame_cabac_p16x16_mb_count;
+    reg [15:0] frame_p_l0_nonzero_ref_mb_count;
     reg [15:0] frame_p16x8_mb_count;
     reg [15:0] frame_p8x16_mb_count;
     reg [15:0] frame_p8x8_mb_count;
@@ -2196,6 +2197,7 @@ pred_buf = {(256*BD){1'b0}};
             frame_b_direct_nonzero_ref_mb_count <= 16'd0;
             frame_b_direct_from_l1_mb_count <= 16'd0;
             frame_cabac_p16x16_mb_count <= 16'd0;
+            frame_p_l0_nonzero_ref_mb_count <= 16'd0;
             frame_p16x8_mb_count <= 16'd0;
             frame_p8x16_mb_count <= 16'd0;
             frame_p8x8_mb_count <= 16'd0;
@@ -2254,6 +2256,7 @@ pred_buf = {(256*BD){1'b0}};
                     frame_b_direct_nonzero_ref_mb_count <= 16'd0;
                     frame_b_direct_from_l1_mb_count <= 16'd0;
                     frame_cabac_p16x16_mb_count <= 16'd0;
+                    frame_p_l0_nonzero_ref_mb_count <= 16'd0;
                     frame_p16x8_mb_count <= 16'd0;
                     frame_p8x16_mb_count <= 16'd0;
                     frame_p8x8_mb_count <= 16'd0;
@@ -3690,9 +3693,11 @@ pred_buf = {(256*BD){1'b0}};
                                     use_i16_ac_zigzag <= 1'b1;
                                     use_i16_dc_zigzag <= 1'b0;
                                     zz_chroma_dc_mode <= 1'b0;
-                                    zz_chroma_ac_mode <= 1'b0;
+                                    // Intra_16x16 luma AC omits the DC coefficient, so it
+                                    // must use the 15-coefficient AC zigzag/CAVLC path.
+                                    zz_chroma_ac_mode <= 1'b1;
                                     cavlc_is_chroma_dc <= 1'b0;
-                                    cavlc_is_chroma_ac <= 1'b0;
+                                    cavlc_is_chroma_ac <= 1'b1;
                                     zz_start <= 1'b1;
                                     blk_state <= BS_ZIGZAG;
                                 end
@@ -3901,6 +3906,8 @@ pred_buf = {(256*BD){1'b0}};
                         frame_b_l0_nonzero_ref_mb_count <= frame_b_l0_nonzero_ref_mb_count + 16'd1;
                     if (is_b_frame && is_inter_mb_reg && is_b_direct_mb_reg && !is_b_l1_mb_reg && (mb_ref_idx_reg != 2'd0))
                         frame_b_direct_nonzero_ref_mb_count <= frame_b_direct_nonzero_ref_mb_count + 16'd1;
+                    if (is_p_frame && is_inter_mb_reg && !is_skip_mb_reg && (mb_ref_idx_reg != 2'd0))
+                        frame_p_l0_nonzero_ref_mb_count <= frame_p_l0_nonzero_ref_mb_count + 16'd1;
                     if (is_b_frame && is_inter_mb_reg && is_b_direct_mb_reg && is_b_direct_from_l1_reg)
                         frame_b_direct_from_l1_mb_count <= frame_b_direct_from_l1_mb_count + 16'd1;
                     if (cabac_non_skip_subset_ok_w)
@@ -5027,8 +5034,8 @@ pred_buf = {(256*BD){1'b0}};
                          else if (!flush_accepted) flush_accepted <= 1'b1;
                          else if (bs_cmd_done) begin
                              done <= 1'b1;
-                            $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d p16x8_mbs=%0d p8x16_mbs=%0d p8x8_mbs=%0d p8x4_mbs=%0d p4x8_mbs=%0d p4x4_mbs=%0d",
-                                     cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count, frame_p16x8_mb_count, frame_p8x16_mb_count, frame_p8x8_mb_count, frame_p8x4_mb_count, frame_p4x8_mb_count, frame_p4x4_mb_count);
+                            $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d p_l0_refgt0_mbs=%0d p16x8_mbs=%0d p8x16_mbs=%0d p8x8_mbs=%0d p8x4_mbs=%0d p4x8_mbs=%0d p4x4_mbs=%0d",
+                                     cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count, frame_p_l0_nonzero_ref_mb_count, frame_p16x8_mb_count, frame_p8x16_mb_count, frame_p8x8_mb_count, frame_p8x4_mb_count, frame_p4x8_mb_count, frame_p4x4_mb_count);
                              refbank_poc_lsb[current_write_bank] <= cur_pic_order_cnt_lsb;
                             if (is_p_frame) begin
                                 refbank_has_l0_ref0[current_write_bank] <= (valid_ref_count != 3'd0);

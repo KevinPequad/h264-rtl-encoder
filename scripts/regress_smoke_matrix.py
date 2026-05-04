@@ -26,6 +26,7 @@ PSKIP_RE = re.compile(
     r"b_direct_refgt0_mbs=(?P<b_direct_refgt0>\d+)"
     r"(?:\s+b_direct_l1src_mbs=(?P<b_direct_l1src>\d+))?"
     r"(?:\s+cabac_p16x16_mbs=(?P<cabac_p16x16>\d+))?"
+    r"(?:\s+p_l0_refgt0_mbs=(?P<p_l0_refgt0>\d+))?"
     r"(?:\s+p16x8_mbs=(?P<p16x8>\d+))?"
     r"(?:\s+p8x16_mbs=(?P<p8x16>\d+))?"
     r"(?:\s+p8x8_mbs=(?P<p8x8>\d+))?"
@@ -99,6 +100,7 @@ class SmokeCase:
     force_p4x4: int = 0
     reorder_b_gop: int = 0
     flat_y_frames: tuple[int, ...] | None = None
+    generate_input: bool = True
     require_skip_min: int = 0
     require_bi_min: int = 0
     require_direct_min: int = 0
@@ -107,6 +109,7 @@ class SmokeCase:
     require_direct_refgt0_min: int = 0
     require_direct_l1src_min: int = 0
     require_cabac_p16x16_min: int = 0
+    require_p_l0_refgt0_min: int = 0
     require_p16x8_min: int = 0
     require_p8x16_min: int = 0
     require_p8x8_min: int = 0
@@ -236,6 +239,47 @@ CASES = [
         force_p8x8=1,
         flat_y_frames=(64, 80, 80),
         require_p8x8_min=4,
+    ),
+    SmokeCase(
+        "smoke_8b_420_p8x8_nonzero_mvd",
+        8,
+        1,
+        "scratch_p8x8_nonzero_mvd_32x16_3f.yuv",
+        "scratch_p8x8_nonzero_mvd_32x16_3f.h264",
+        frames=3,
+        enable_idr_ipcm=1,
+        force_p8x8=1,
+        generate_input=False,
+        require_p8x8_min=4,
+    ),
+    SmokeCase(
+        "smoke_8b_420_pref1_alt",
+        8,
+        1,
+        "smoke_32x16_4f_pref1_alt.yuv",
+        "smoke_32x16_4f_pref1_alt.h264",
+        frames=4,
+        enable_idr_ipcm=1,
+        enable_p_ipcm=1,
+        ipcm_sad_threshold=100_000_000,
+        inter_sad_threshold=100_000_000,
+        flat_y_frames=(255, 0, 255, 0),
+        require_p_l0_refgt0_min=1,
+    ),
+    SmokeCase(
+        "smoke_8b_420_weightedp_small",
+        8,
+        1,
+        "smoke_32x16_2f_weightedp_small.yuv",
+        "smoke_32x16_2f_weightedp_small.h264",
+        weighted_pred_enable=1,
+        enable_idr_ipcm=1,
+        luma_log2_weight_denom=2,
+        luma_weight=5,
+        chroma_log2_weight_denom=2,
+        chroma_weight_cb=5,
+        chroma_weight_cr=5,
+        flat_y_frames=(255, 0),
     ),
     SmokeCase(
         "smoke_8b_422",
@@ -683,6 +727,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     frames_with_direct_refgt0 = 0
     frames_with_direct_l1src = 0
     frames_with_cabac_p16x16 = 0
+    frames_with_p_l0_refgt0 = 0
     frames_with_p16x8 = 0
     frames_with_p8x16 = 0
     frames_with_p8x8 = 0
@@ -697,6 +742,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     max_direct_refgt0 = 0
     max_direct_l1src = 0
     max_cabac_p16x16 = 0
+    max_p_l0_refgt0 = 0
     max_p16x8 = 0
     max_p8x16 = 0
     max_p8x8 = 0
@@ -711,6 +757,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     total_direct_refgt0 = 0
     total_direct_l1src = 0
     total_cabac_p16x16 = 0
+    total_p_l0_refgt0 = 0
     total_p16x8 = 0
     total_p8x16 = 0
     total_p8x8 = 0
@@ -727,6 +774,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         direct_refgt0 = int(match.group("b_direct_refgt0"))
         direct_l1src = int(match.group("b_direct_l1src") or 0)
         cabac_p16x16 = int(match.group("cabac_p16x16") or 0)
+        p_l0_refgt0 = int(match.group("p_l0_refgt0") or 0)
         p16x8 = int(match.group("p16x8") or 0)
         p8x16 = int(match.group("p8x16") or 0)
         p8x8 = int(match.group("p8x8") or 0)
@@ -741,6 +789,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         total_direct_refgt0 += direct_refgt0
         total_direct_l1src += direct_l1src
         total_cabac_p16x16 += cabac_p16x16
+        total_p_l0_refgt0 += p_l0_refgt0
         total_p16x8 += p16x8
         total_p8x16 += p8x16
         total_p8x8 += p8x8
@@ -763,6 +812,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
             frames_with_direct_l1src += 1
         if cabac_p16x16:
             frames_with_cabac_p16x16 += 1
+        if p_l0_refgt0:
+            frames_with_p_l0_refgt0 += 1
         if p16x8:
             frames_with_p16x8 += 1
         if p8x16:
@@ -783,6 +834,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         max_direct_refgt0 = max(max_direct_refgt0, direct_refgt0)
         max_direct_l1src = max(max_direct_l1src, direct_l1src)
         max_cabac_p16x16 = max(max_cabac_p16x16, cabac_p16x16)
+        max_p_l0_refgt0 = max(max_p_l0_refgt0, p_l0_refgt0)
         max_p16x8 = max(max_p16x8, p16x8)
         max_p8x16 = max(max_p8x16, p8x16)
         max_p8x8 = max(max_p8x8, p8x8)
@@ -799,6 +851,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "frames_with_direct_refgt0": frames_with_direct_refgt0,
         "frames_with_direct_l1src": frames_with_direct_l1src,
         "frames_with_cabac_p16x16": frames_with_cabac_p16x16,
+        "frames_with_p_l0_refgt0": frames_with_p_l0_refgt0,
         "frames_with_p16x8": frames_with_p16x8,
         "frames_with_p8x16": frames_with_p8x16,
         "frames_with_p8x8": frames_with_p8x8,
@@ -813,6 +866,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "max_direct_refgt0": max_direct_refgt0,
         "max_direct_l1src": max_direct_l1src,
         "max_cabac_p16x16": max_cabac_p16x16,
+        "max_p_l0_refgt0": max_p_l0_refgt0,
         "max_p16x8": max_p16x8,
         "max_p8x16": max_p8x16,
         "max_p8x8": max_p8x8,
@@ -827,6 +881,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "total_direct_refgt0": total_direct_refgt0,
         "total_direct_l1src": total_direct_l1src,
         "total_cabac_p16x16": total_cabac_p16x16,
+        "total_p_l0_refgt0": total_p_l0_refgt0,
         "total_p16x8": total_p16x8,
         "total_p8x16": total_p8x16,
         "total_p8x8": total_p8x8,
@@ -871,15 +926,16 @@ def main() -> int:
         output_path = output_dir / case.output_file
         log_path = output_dir / f"{case.name}.sim.log"
         build_log_path = output_dir / f"{case.name}.build.log"
-        generate_smoke_input(
-            input_path,
-            case.width,
-            case.height,
-            case.frames,
-            case.bit_depth,
-            case.chroma_format_idc,
-            case.flat_y_frames,
-        )
+        if case.generate_input:
+            generate_smoke_input(
+                input_path,
+                case.width,
+                case.height,
+                case.frames,
+                case.bit_depth,
+                case.chroma_format_idc,
+                case.flat_y_frames,
+            )
 
         workspace = stage_workspace(f"h264_{case.name}_")
         config = BuildConfig(
@@ -1007,6 +1063,11 @@ def main() -> int:
             raise RuntimeError(
                 f"{case.name} expected at least {case.require_cabac_p16x16_min} CABAC P_L0_16x16 macroblocks, "
                 f"saw {b_mode_summary.get('total_cabac_p16x16', 0)}"
+            )
+        if b_mode_summary.get("total_p_l0_refgt0", 0) < case.require_p_l0_refgt0_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_p_l0_refgt0_min} nonzero P List0 refs, "
+                f"saw {b_mode_summary.get('total_p_l0_refgt0', 0)}"
             )
         if b_mode_summary.get("total_p16x8", 0) < case.require_p16x8_min:
             raise RuntimeError(

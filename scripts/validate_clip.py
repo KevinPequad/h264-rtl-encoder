@@ -15,7 +15,7 @@ from rtl_runner import BuildConfig, build_sim, repo_root, require_tool, run_cmd,
 
 
 PSNR_RE = re.compile(r"PSNR y:(?P<y>[0-9.inf-]+).*average:(?P<avg>[0-9.inf-]+)")
-SSIM_RE = re.compile(r"SSIM Y:(?P<y>[0-9.]+).*All:(?P<all>[0-9.]+)")
+SSIM_RE = re.compile(r"SSIM Y:(?P<y>[0-9.-]+).*All:(?P<all>[0-9.-]+)")
 SIM_SUMMARY_RE = re.compile(r"\[TB\]\s+(?P<frames>\d+)\s+frames encoded,\s+(?P<cycles>\d+)\s+cycles,\s+(?P<bytes>\d+)\s+bytes")
 PSKIP_RE = re.compile(
     r"\[PSKIP\]\s+Frame\s+(?P<frame>\d+)\s+skip_mbs=(?P<skip>\d+)\s+"
@@ -24,6 +24,7 @@ PSKIP_RE = re.compile(
     r"b_direct_refgt0_mbs=(?P<b_direct_refgt0>\d+)"
     r"(?:\s+b_direct_l1src_mbs=(?P<b_direct_l1src>\d+))?"
     r"(?:\s+cabac_p16x16_mbs=(?P<cabac_p16x16>\d+))?"
+    r"(?:\s+p_l0_refgt0_mbs=(?P<p_l0_refgt0>\d+))?"
     r"(?:\s+p16x8_mbs=(?P<p16x8>\d+))?"
     r"(?:\s+p8x16_mbs=(?P<p8x16>\d+))?"
     r"(?:\s+p8x8_mbs=(?P<p8x8>\d+))?"
@@ -81,6 +82,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     frames_with_direct_refgt0 = 0
     frames_with_direct_l1src = 0
     frames_with_cabac_p16x16 = 0
+    frames_with_p_l0_refgt0 = 0
     frames_with_p16x8 = 0
     frames_with_p8x16 = 0
     frames_with_p8x8 = 0
@@ -95,6 +97,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     max_direct_refgt0 = 0
     max_direct_l1src = 0
     max_cabac_p16x16 = 0
+    max_p_l0_refgt0 = 0
     max_p16x8 = 0
     max_p8x16 = 0
     max_p8x8 = 0
@@ -109,6 +112,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     total_direct_refgt0 = 0
     total_direct_l1src = 0
     total_cabac_p16x16 = 0
+    total_p_l0_refgt0 = 0
     total_p16x8 = 0
     total_p8x16 = 0
     total_p8x8 = 0
@@ -125,6 +129,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         direct_refgt0 = int(match.group("b_direct_refgt0"))
         direct_l1src = int(match.group("b_direct_l1src") or 0)
         cabac_p16x16 = int(match.group("cabac_p16x16") or 0)
+        p_l0_refgt0 = int(match.group("p_l0_refgt0") or 0)
         p16x8 = int(match.group("p16x8") or 0)
         p8x16 = int(match.group("p8x16") or 0)
         p8x8 = int(match.group("p8x8") or 0)
@@ -139,6 +144,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         total_direct_refgt0 += direct_refgt0
         total_direct_l1src += direct_l1src
         total_cabac_p16x16 += cabac_p16x16
+        total_p_l0_refgt0 += p_l0_refgt0
         total_p16x8 += p16x8
         total_p8x16 += p8x16
         total_p8x8 += p8x8
@@ -161,6 +167,8 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
             frames_with_direct_l1src += 1
         if cabac_p16x16:
             frames_with_cabac_p16x16 += 1
+        if p_l0_refgt0:
+            frames_with_p_l0_refgt0 += 1
         if p16x8:
             frames_with_p16x8 += 1
         if p8x16:
@@ -181,6 +189,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         max_direct_refgt0 = max(max_direct_refgt0, direct_refgt0)
         max_direct_l1src = max(max_direct_l1src, direct_l1src)
         max_cabac_p16x16 = max(max_cabac_p16x16, cabac_p16x16)
+        max_p_l0_refgt0 = max(max_p_l0_refgt0, p_l0_refgt0)
         max_p16x8 = max(max_p16x8, p16x8)
         max_p8x16 = max(max_p8x16, p8x16)
         max_p8x8 = max(max_p8x8, p8x8)
@@ -197,6 +206,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "frames_with_direct_refgt0": frames_with_direct_refgt0,
         "frames_with_direct_l1src": frames_with_direct_l1src,
         "frames_with_cabac_p16x16": frames_with_cabac_p16x16,
+        "frames_with_p_l0_refgt0": frames_with_p_l0_refgt0,
         "frames_with_p16x8": frames_with_p16x8,
         "frames_with_p8x16": frames_with_p8x16,
         "frames_with_p8x8": frames_with_p8x8,
@@ -211,6 +221,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "max_direct_refgt0": max_direct_refgt0,
         "max_direct_l1src": max_direct_l1src,
         "max_cabac_p16x16": max_cabac_p16x16,
+        "max_p_l0_refgt0": max_p_l0_refgt0,
         "max_p16x8": max_p16x8,
         "max_p8x16": max_p8x16,
         "max_p8x8": max_p8x8,
@@ -225,6 +236,7 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "total_direct_refgt0": total_direct_refgt0,
         "total_direct_l1src": total_direct_l1src,
         "total_cabac_p16x16": total_cabac_p16x16,
+        "total_p_l0_refgt0": total_p_l0_refgt0,
         "total_p16x8": total_p16x8,
         "total_p8x16": total_p8x16,
         "total_p8x8": total_p8x8,
