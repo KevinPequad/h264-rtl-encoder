@@ -12,7 +12,9 @@ module h264_bitstream #(
     parameter MB_ROWS = 11,
     parameter BIT_DEPTH = 8,
     parameter CHROMA_FORMAT_IDC = 1,
-    parameter FRAME_RATE = 24
+    parameter FRAME_RATE = 24,
+    parameter DEBLOCK_ENABLE = 1,
+    parameter DISABLE_DEBLOCKING_FILTER_IDC = 0
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -161,6 +163,14 @@ module h264_bitstream #(
     wire [1:0] weighted_bipred_idc = weighted_pred_enable ? 2'b01 : 2'b00;
     wire slice_multi_ref_enable = (slice_num_ref_idx_l0_active_minus1 != 2'd0);
     wire slice_has_skip_run = is_p_slice || is_b_slice;
+    // PPS always advertises deblocking_filter_control_present_flag=1.  The
+    // enabled lane emits qp_delta=SE(0), disable_deblocking_filter_idc=UE(0),
+    // alpha/beta offsets SE(0)/SE(0): bit tail 1_1_1_1.  Disabled keeps the
+    // old qp_delta=SE(0), disable_deblocking_filter_idc=UE(1): bit tail 1_010.
+    wire slice_deblock_enabled = (DEBLOCK_ENABLE != 0) && (DISABLE_DEBLOCKING_FILTER_IDC[1:0] == 2'd0);
+    wire [2:0] slice_deblock_tail3 = slice_deblock_enabled ? 3'b111 : 3'b010;
+    wire [4:0] slice_ref_qp_deblock_bits = slice_deblock_enabled ? 5'b01111 : 5'b01010;
+    wire [3:0] slice_nonref_qp_deblock_bits = slice_deblock_enabled ? 4'b1111 : 4'b1010;
     localparam integer CHR_MB_WIDTH = (CHROMA_FORMAT_IDC == 3) ? 16 : 8;
     localparam integer CHR_MB_HEIGHT = (CHROMA_FORMAT_IDC == 1) ? 8 : 16;
     localparam integer CHR_MB_PIXELS = CHR_MB_WIDTH * CHR_MB_HEIGHT;
@@ -181,19 +191,19 @@ module h264_bitstream #(
             2'd1: begin
                 slice_multi_ref_bits    = 7'b1010000;      // 1 + ue(1)=010 + reorder_l0=0
                 slice_multi_ref_bits_len = 4'd5;
-                slice_multi_ref_bits_qp = 12'b101000101000; // + adaptive_marking=0 + qp_delta=1 + deblock=010
+                slice_multi_ref_bits_qp = slice_deblock_enabled ? 12'b101000111100 : 12'b101000101000; // + adaptive_marking=0 + qp_delta + deblock tail
                 slice_multi_ref_bits_qp_len = 4'd10;
             end
             2'd2: begin
                 slice_multi_ref_bits    = 7'b1011000;      // 1 + ue(2)=011 + reorder_l0=0
                 slice_multi_ref_bits_len = 4'd5;
-                slice_multi_ref_bits_qp = 12'b101100101000;
+                slice_multi_ref_bits_qp = slice_deblock_enabled ? 12'b101100111100 : 12'b101100101000;
                 slice_multi_ref_bits_qp_len = 4'd10;
             end
             2'd3: begin
                 slice_multi_ref_bits    = 7'b1001000;      // 1 + ue(3)=00100 + reorder_l0=0
                 slice_multi_ref_bits_len = 4'd7;
-                slice_multi_ref_bits_qp = 12'b100100001010;
+                slice_multi_ref_bits_qp = slice_deblock_enabled ? 12'b100100001111 : 12'b100100001010;
                 slice_multi_ref_bits_qp_len = 4'd12;
             end
             default: begin
@@ -209,25 +219,25 @@ module h264_bitstream #(
             2'd1: begin
                 b_slice_multi_ref_bits = 9'b101010000;      // 1 + ue(1)=010 + ue(0)=1 + reorder_l0=0 + reorder_l1=0
                 b_slice_multi_ref_bits_len = 4'd7;
-                b_slice_multi_ref_bits_qp_ref = 14'b10101000101000;    // + adaptive_marking=0 + qp_delta=1 + deblock=010
+                b_slice_multi_ref_bits_qp_ref = slice_deblock_enabled ? 14'b10101000111100 : 14'b10101000101000;    // + adaptive_marking=0 + qp/deblock tail
                 b_slice_multi_ref_bits_qp_ref_len = 4'd12;
-                b_slice_multi_ref_bits_qp_nonref = 13'b1010100101000;  // + qp_delta=1 + deblock=010
+                b_slice_multi_ref_bits_qp_nonref = slice_deblock_enabled ? 13'b1010100111100 : 13'b1010100101000;  // + qp/deblock tail
                 b_slice_multi_ref_bits_qp_nonref_len = 4'd11;
             end
             2'd2: begin
                 b_slice_multi_ref_bits = 9'b101110000;      // 1 + ue(2)=011 + ue(0)=1 + reorder_l0=0 + reorder_l1=0
                 b_slice_multi_ref_bits_len = 4'd7;
-                b_slice_multi_ref_bits_qp_ref = 14'b10111000101000;
+                b_slice_multi_ref_bits_qp_ref = slice_deblock_enabled ? 14'b10111000111100 : 14'b10111000101000;
                 b_slice_multi_ref_bits_qp_ref_len = 4'd12;
-                b_slice_multi_ref_bits_qp_nonref = 13'b1011100101000;
+                b_slice_multi_ref_bits_qp_nonref = slice_deblock_enabled ? 13'b1011100111100 : 13'b1011100101000;
                 b_slice_multi_ref_bits_qp_nonref_len = 4'd11;
             end
             2'd3: begin
                 b_slice_multi_ref_bits = 9'b100100100;      // 1 + ue(3)=00100 + ue(0)=1 + reorder_l0=0 + reorder_l1=0
                 b_slice_multi_ref_bits_len = 4'd9;
-                b_slice_multi_ref_bits_qp_ref = 14'b10010010001010;
+                b_slice_multi_ref_bits_qp_ref = slice_deblock_enabled ? 14'b10010010001111 : 14'b10010010001010;
                 b_slice_multi_ref_bits_qp_ref_len = 4'd14;
-                b_slice_multi_ref_bits_qp_nonref = 13'b1001001001010;
+                b_slice_multi_ref_bits_qp_nonref = slice_deblock_enabled ? 13'b1001001001111 : 13'b1001001001010;
                 b_slice_multi_ref_bits_qp_nonref_len = 4'd13;
             end
             default: begin
@@ -1103,9 +1113,9 @@ module h264_bitstream #(
                                         // first_mb=UE(0), slice_type=P, pic_parameter_set_id=UE(1),
                                         // frame_num, pic_order_cnt_lsb, num_ref_idx_active_override_flag=0,
                                         // ref_pic_list_reordering_flag_l0=0, adaptive_ref_pic_marking_mode_flag=0,
-                                        // cabac_init_idc=UE(0), slice_qp_delta=SE(0), deblocking=UE(1).
+                                        // cabac_init_idc=UE(0), slice_qp_delta=SE(0), deblocking tail.
                                         bit_buf <= {1'b1, 1'b1, 3'b010, frame_num, pic_order_cnt_lsb,
-                                                    1'b0, 1'b0, 1'b0, 1'b1, 1'b1, 3'b010, 66'd0};
+                                                    1'b0, 1'b0, 1'b0, 1'b1, 1'b1, slice_deblock_tail3, 66'd0};
                                         bit_cnt <= 7'd30;
                                         sub <= 6'd30;
                                     end else if (weighted_pred_flag) begin
@@ -1134,12 +1144,12 @@ module h264_bitstream #(
                                             // High-profile P-slice: SPS has poc_type=0, need poc_lsb(9 bits)
                                             // first_mb=UE(0)'1', slice_type(P)=UE(0)'1', pps_id=UE(0)'1',
                                             // frame_num(8), poc_lsb(9), num_ref_override=0, ref_list_reorder=0,
-                                            // adaptive_marking=0, qp_delta=SE(0)'1', disable_deblocking=UE(1)'010'
+                                            // adaptive_marking=0, qp_delta/deblock tail
                                             if (slice_multi_ref_enable) begin
                                                 bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits_qp, 64'd0};
                                                 bit_cnt <= 7'd20 + {3'd0, slice_multi_ref_bits_qp_len};
                                             end else begin
-                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, 3'b010, 69'd0};
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, slice_deblock_tail3, 69'd0};
                                                 bit_cnt <= 7'd27;
                                             end
                                         end else begin
@@ -1148,7 +1158,7 @@ module h264_bitstream #(
                                                 bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits_qp, 64'd0};
                                                 bit_cnt <= 7'd20 + {3'd0, slice_multi_ref_bits_qp_len};
                                             end else begin
-                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, 3'b010, 69'd0};
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, slice_deblock_tail3, 69'd0};
                                                 bit_cnt <= 7'd27;
                                             end
                                         end
@@ -1188,10 +1198,10 @@ module h264_bitstream #(
                                             // ref_pic_list_reordering_flag_l1=0, optional adaptive_ref_pic_marking_mode_flag,
                                             // slice_qp_delta=SE(0), deblocking=UE(1)
                                             if (is_b_ref_slice) begin
-                                                bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 5'b00001, 3'b010, 65'd0};
+                                                bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 5'b00001, slice_deblock_tail3, 65'd0};
                                                 bit_cnt <= 7'd31;
                                             end else begin
-                                                bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 4'b0001, 3'b010, 66'd0};
+                                                bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 4'b0001, slice_deblock_tail3, 66'd0};
                                                 bit_cnt <= 7'd30;
                                             end
                                         end
@@ -1203,12 +1213,12 @@ module h264_bitstream #(
                                         // first_mb=UE(0)'1', slice_type(I)=UE(2)'011', pps_id=UE(0)'1',
                                         // frame_num(8), idr_pic_id=UE(0)'1', poc_lsb(9),
                                         // no_output_of_prior_pics=0, long_term_ref=0,
-                                        // qp_delta=SE(0)'1', disable_deblocking=UE(1)'010'
-                                        bit_buf <= {1'b1, 3'b011, 1'b1, frame_num, 1'b1, pic_order_cnt_lsb, 2'b00, 1'b1, 3'b010, 67'd0};
+                                        // qp_delta=SE(0)'1', deblocking tail
+                                        bit_buf <= {1'b1, 3'b011, 1'b1, frame_num, 1'b1, pic_order_cnt_lsb, 2'b00, 1'b1, slice_deblock_tail3, 67'd0};
                                         bit_cnt <= 7'd29;
                                     end else begin
                                         // Baseline/Main IDR: SPS now uses poc_type=0, so emit poc_lsb(9 bits)
-                                        bit_buf <= {1'b1, 3'b011, 1'b1, frame_num, 1'b1, pic_order_cnt_lsb, 2'b00, 1'b1, 3'b010, 67'd0};
+                                        bit_buf <= {1'b1, 3'b011, 1'b1, frame_num, 1'b1, pic_order_cnt_lsb, 2'b00, 1'b1, slice_deblock_tail3, 67'd0};
                                         bit_cnt <= 7'd29;
                                     end
                                     sub <= sub + 6'd1;
@@ -1325,9 +1335,8 @@ module h264_bitstream #(
                                         sub <= 6'd22;
                                     end
                                 end else begin
-                                    // adaptive_ref_pic_marking_mode_flag=0, slice_qp_delta=SE(0)='1',
-                                    // disable_deblocking_filter_idc=UE(1)='010'
-                                    bit_buf <= bit_buf | ({5'b01010, 91'd0} >> bit_cnt[6:0]);
+                                    // adaptive_ref_pic_marking_mode_flag=0, slice_qp_delta/deblock tail
+                                    bit_buf <= bit_buf | ({slice_ref_qp_deblock_bits, 91'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + 7'd5;
                                     sub <= 6'd6;
                                 end
@@ -1383,10 +1392,10 @@ module h264_bitstream #(
                             end
                             6'd28: begin
                                 if (is_b_ref_slice) begin
-                                    bit_buf <= bit_buf | ({5'b01010, 91'd0} >> bit_cnt[6:0]);
+                                    bit_buf <= bit_buf | ({slice_ref_qp_deblock_bits, 91'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + 7'd5;
                                 end else begin
-                                    bit_buf <= bit_buf | ({4'b1010, 92'd0} >> bit_cnt[6:0]);
+                                    bit_buf <= bit_buf | ({slice_nonref_qp_deblock_bits, 92'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + 7'd4;
                                 end
                                 sub <= 6'd6;
