@@ -101,6 +101,7 @@ class SmokeCase:
     reorder_b_gop: int = 0
     flat_y_frames: tuple[int, ...] | None = None
     generate_input: bool = True
+    input_kind: str = "default"
     require_skip_min: int = 0
     require_bi_min: int = 0
     require_direct_min: int = 0
@@ -240,6 +241,9 @@ CASES = [
         flat_y_frames=(64, 80, 80),
         require_p8x8_min=4,
     ),
+    # Self-generated fixture: frame 0 is the base gradient, frames 1..2 are the
+    # same image shifted right by two pixels with edge replication. This keeps the
+    # nonzero-MVD gate reproducible on a clean checkout.
     SmokeCase(
         "smoke_8b_420_p8x8_nonzero_mvd",
         8,
@@ -249,7 +253,8 @@ CASES = [
         frames=3,
         enable_idr_ipcm=1,
         force_p8x8=1,
-        generate_input=False,
+        generate_input=True,
+        input_kind="p8x8_nonzero_mvd",
         require_p8x8_min=4,
     ),
     SmokeCase(
@@ -668,6 +673,48 @@ def generate_smoke_input(
                         write_sample(out_f, plane_value(bit_depth, "v", x, y, frame_idx), bit_depth)
 
 
+def generate_p8x8_nonzero_mvd_input(
+    path: Path,
+    width: int,
+    height: int,
+    frames: int,
+    bit_depth: int,
+    chroma_format_idc: int,
+) -> None:
+    """Generate the self-contained 3-frame fixture for the P8x8 nonzero-MVD gate.
+
+    This reproduces the previously hand-crafted scratch YUV exactly: frame 0 is the
+    base luma gradient, and frames 1..N repeat the same image shifted right by two
+    pixels with edge replication so the first non-IDR P slice exercises a nonzero
+    MVD path.
+    """
+
+    if (width, height, frames, bit_depth, chroma_format_idc) != (32, 16, 3, 8, 1):
+        raise ValueError(
+            "smoke_8b_420_p8x8_nonzero_mvd expects the canonical 32x16 3-frame 8-bit 4:2:0 fixture"
+        )
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    chroma_height = height // 2
+    chroma_width = width // 2
+    c_value = 128 if bit_depth == 8 else 512
+
+    with path.open("wb") as out_f:
+        for frame_idx in range(frames):
+            for y in range(height):
+                for x in range(width):
+                    source_x = x if frame_idx == 0 else min(x + 2, width - 1)
+                    write_sample(out_f, plane_value(bit_depth, "y", source_x, y, 0), bit_depth)
+
+            for _ in range(chroma_height):
+                for _ in range(chroma_width):
+                    write_sample(out_f, c_value, bit_depth)
+
+            for _ in range(chroma_height):
+                for _ in range(chroma_width):
+                    write_sample(out_f, c_value, bit_depth)
+
+
 def ffprobe_stream(path: Path) -> dict[str, str]:
     proc = run_cmd(
         [
@@ -927,15 +974,27 @@ def main() -> int:
         log_path = output_dir / f"{case.name}.sim.log"
         build_log_path = output_dir / f"{case.name}.build.log"
         if case.generate_input:
-            generate_smoke_input(
-                input_path,
-                case.width,
-                case.height,
-                case.frames,
-                case.bit_depth,
-                case.chroma_format_idc,
-                case.flat_y_frames,
-            )
+            if case.input_kind == "default":
+                generate_smoke_input(
+                    input_path,
+                    case.width,
+                    case.height,
+                    case.frames,
+                    case.bit_depth,
+                    case.chroma_format_idc,
+                    case.flat_y_frames,
+                )
+            elif case.input_kind == "p8x8_nonzero_mvd":
+                generate_p8x8_nonzero_mvd_input(
+                    input_path,
+                    case.width,
+                    case.height,
+                    case.frames,
+                    case.bit_depth,
+                    case.chroma_format_idc,
+                )
+            else:
+                raise ValueError(f"Unknown smoke input kind: {case.input_kind}")
 
         workspace = stage_workspace(f"h264_{case.name}_")
         config = BuildConfig(
