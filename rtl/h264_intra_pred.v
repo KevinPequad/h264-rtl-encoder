@@ -120,6 +120,48 @@ module h264_intra_pred #(
         end
     endfunction
 
+    function automatic [BD-1:0] top_full_at;
+        input integer sel;
+        begin
+            case (sel)
+                0: top_full_at = top_pix[0];
+                1: top_full_at = top_pix[1];
+                2: top_full_at = top_pix[2];
+                3: top_full_at = top_pix[3];
+                4: top_full_at = top_right_pix[0];
+                5: top_full_at = top_right_pix[1];
+                6: top_full_at = top_right_pix[2];
+                default: top_full_at = top_right_pix[3];
+            endcase
+        end
+    endfunction
+
+    function automatic [BD-1:0] top_ext_at;
+        input integer sel;
+        begin
+            case (sel)
+                0: top_ext_at = top_left;
+                1: top_ext_at = top_pix[0];
+                2: top_ext_at = top_pix[1];
+                3: top_ext_at = top_pix[2];
+                default: top_ext_at = top_pix[3];
+            endcase
+        end
+    endfunction
+
+    function automatic [BD-1:0] left_ext_at;
+        input integer sel;
+        begin
+            case (sel)
+                0: left_ext_at = top_left;
+                1: left_ext_at = left_pix[0];
+                2: left_ext_at = left_pix[1];
+                3: left_ext_at = left_pix[2];
+                default: left_ext_at = left_pix[3];
+            endcase
+        end
+    endfunction
+
     genvar gi;
     generate
         for (gi = 0; gi < 4; gi = gi + 1) begin : unpack_neighbors
@@ -233,9 +275,9 @@ module h264_intra_pred #(
                 sad_d_c = sad_d_c + abs_diff_c[SAD_W-1:0];
 
                 if (row_idx == 3 && col_idx == 3)
-                    pred_pix_c = avg3_pix(top_full[6], top_full[7], top_full[7]);
+                    pred_pix_c = avg3_pix(top_full_at(6), top_full_at(7), top_full_at(7));
                 else
-                    pred_pix_c = avg3_pix(top_full[row_idx + col_idx], top_full[row_idx + col_idx + 1], top_full[row_idx + col_idx + 2]);
+                    pred_pix_c = avg3_pix(top_full_at(row_idx + col_idx), top_full_at(row_idx + col_idx + 1), top_full_at(row_idx + col_idx + 2));
                 pred_ddl_c[flat_idx*BD +: BD] = pred_pix_c;
                 resid_ddl_c[flat_idx*BD1 +: BD1] = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
                 if (orig_pix_c >= pred_pix_c)
@@ -247,10 +289,10 @@ module h264_intra_pred #(
 
                 ddr_d_c = col_idx[2:0] - row_idx[2:0];
                 if (col_idx > row_idx)
-                    pred_pix_c = avg3_pix(top_ext[ddr_d_c - 3'd1], top_ext[ddr_d_c], top_ext[ddr_d_c + 3'd1]);
+                    pred_pix_c = avg3_pix(top_ext_at(ddr_d_c - 3'd1), top_ext_at(ddr_d_c), top_ext_at(ddr_d_c + 3'd1));
                 else if (col_idx < row_idx) begin
                     ddr_d_c = row_idx[2:0] - col_idx[2:0];
-                    pred_pix_c = avg3_pix(left_ext[ddr_d_c - 3'd1], left_ext[ddr_d_c], left_ext[ddr_d_c + 3'd1]);
+                    pred_pix_c = avg3_pix(left_ext_at(ddr_d_c - 3'd1), left_ext_at(ddr_d_c), left_ext_at(ddr_d_c + 3'd1));
                 end else
                     pred_pix_c = avg3_pix(top_pix[0], top_left, left_pix[0]);
                 pred_ddr_c[flat_idx*BD +: BD] = pred_pix_c;
@@ -265,13 +307,13 @@ module h264_intra_pred #(
                 z_vr_c = {col_idx[2:0], 1'b0} - {2'b00, row_idx[1:0]};
                 vr_n_c = col_idx[2:0] - row_idx[1:0];
                 if (z_vr_c == 4'sd0 || z_vr_c == 4'sd2 || z_vr_c == 4'sd4 || z_vr_c == 4'sd6)
-                    pred_pix_c = avg2_pix(top_ext[vr_n_c], top_ext[vr_n_c + 3'd1]);
+                    pred_pix_c = avg2_pix(top_ext_at(vr_n_c), top_ext_at(vr_n_c + 3'd1));
                 else if (z_vr_c == 4'sd1 || z_vr_c == 4'sd3 || z_vr_c == 4'sd5)
-                    pred_pix_c = avg3_pix(top_ext[vr_n_c], top_ext[vr_n_c + 3'd1], top_ext[vr_n_c + 3'd2]);
+                    pred_pix_c = avg3_pix(top_ext_at(vr_n_c), top_ext_at(vr_n_c + 3'd1), top_ext_at(vr_n_c + 3'd2));
                 else if (z_vr_c == -4'sd1)
                     pred_pix_c = avg3_pix(left_pix[0], top_left, top_pix[0]);
                 else
-                    pred_pix_c = avg3_pix(left_ext[row_idx[2:0]], left_ext[row_idx[2:0] - 3'd1], left_ext[row_idx[2:0] - 3'd2]);
+                    pred_pix_c = avg3_pix(left_ext_at(row_idx[2:0]), left_ext_at({1'b0, row_idx[2:0]} - 4'd1), left_ext_at({1'b0, row_idx[2:0]} - 4'd2));
                 pred_vr_c[flat_idx*BD +: BD] = pred_pix_c;
                 resid_vr_c[flat_idx*BD1 +: BD1] = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
                 if (orig_pix_c >= pred_pix_c)
@@ -284,13 +326,13 @@ module h264_intra_pred #(
                 z_hd_c = {row_idx[2:0], 1'b0} - {2'b00, col_idx[1:0]};
                 hd_n_c = row_idx[2:0] - col_idx[1:0];
                 if (z_hd_c == 4'sd0 || z_hd_c == 4'sd2 || z_hd_c == 4'sd4 || z_hd_c == 4'sd6)
-                    pred_pix_c = avg2_pix(left_ext[hd_n_c], left_ext[hd_n_c + 3'd1]);
+                    pred_pix_c = avg2_pix(left_ext_at(hd_n_c), left_ext_at(hd_n_c + 3'd1));
                 else if (z_hd_c == 4'sd1 || z_hd_c == 4'sd3 || z_hd_c == 4'sd5)
-                    pred_pix_c = avg3_pix(left_ext[hd_n_c], left_ext[hd_n_c + 3'd1], left_ext[hd_n_c + 3'd2]);
+                    pred_pix_c = avg3_pix(left_ext_at(hd_n_c), left_ext_at(hd_n_c + 3'd1), left_ext_at(hd_n_c + 3'd2));
                 else if (z_hd_c == -4'sd1)
                     pred_pix_c = avg3_pix(left_pix[0], top_left, top_pix[0]);
                 else
-                    pred_pix_c = avg3_pix(top_ext[col_idx[2:0]], top_ext[col_idx[2:0] - 3'd1], top_ext[col_idx[2:0] - 3'd2]);
+                    pred_pix_c = avg3_pix(top_ext_at(col_idx[2:0]), top_ext_at({1'b0, col_idx[2:0]} - 4'd1), top_ext_at({1'b0, col_idx[2:0]} - 4'd2));
                 pred_hd_c[flat_idx*BD +: BD] = pred_pix_c;
                 resid_hd_c[flat_idx*BD1 +: BD1] = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
                 if (orig_pix_c >= pred_pix_c)
@@ -301,9 +343,9 @@ module h264_intra_pred #(
                     sad_hd_c = sad_hd_c + abs_diff_c[SAD_W-1:0];
 
                 if (row_idx[0] == 1'b0)
-                    pred_pix_c = avg2_pix(top_full[col_idx + row_idx[2:1]], top_full[col_idx + row_idx[2:1] + 1]);
+                    pred_pix_c = avg2_pix(top_full_at(col_idx + row_idx[2:1]), top_full_at(col_idx + row_idx[2:1] + 1));
                 else
-                    pred_pix_c = avg3_pix(top_full[col_idx + row_idx[2:1]], top_full[col_idx + row_idx[2:1] + 1], top_full[col_idx + row_idx[2:1] + 2]);
+                    pred_pix_c = avg3_pix(top_full_at(col_idx + row_idx[2:1]), top_full_at(col_idx + row_idx[2:1] + 1), top_full_at(col_idx + row_idx[2:1] + 2));
                 pred_vl_c[flat_idx*BD +: BD] = pred_pix_c;
                 resid_vl_c[flat_idx*BD1 +: BD1] = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
                 if (orig_pix_c >= pred_pix_c)

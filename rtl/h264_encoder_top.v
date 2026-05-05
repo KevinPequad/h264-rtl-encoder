@@ -3910,9 +3910,13 @@ pred_buf = {(256*BD){1'b0}};
                                     use_i16_ac_zigzag <= 1'b1;
                                     use_i16_dc_zigzag <= 1'b0;
                                     zz_chroma_dc_mode <= 1'b0;
-                                    zz_chroma_ac_mode <= 1'b0;
+                                    // Intra_16x16 luma AC residual blocks have maxNumCoeff=15
+                                    // (the DC coefficient is carried by the separate luma DC block).
+                                    // Reuse the AC scan/CAVLC path so last_nonzero_idx and total_zeros
+                                    // are coded in the decoder's 15-coefficient coordinate space.
+                                    zz_chroma_ac_mode <= 1'b1;
                                     cavlc_is_chroma_dc <= 1'b0;
-                                    cavlc_is_chroma_ac <= 1'b0;
+                                    cavlc_is_chroma_ac <= 1'b1;
                                     zz_start <= 1'b1;
                                     blk_state <= BS_ZIGZAG;
                                 end
@@ -5458,7 +5462,7 @@ pred_buf = {(256*BD){1'b0}};
     end
 
     localparam DEBUG_TRACE = 1'b1;
-    localparam [7:0] DEBUG_FRAME = 8'd0;
+    localparam [7:0] DEBUG_FRAME = 8'd1;
     localparam [11:0] DEBUG_MB_START = 12'd0;
     localparam [11:0] DEBUG_MB_END = 12'd1;
 

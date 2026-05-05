@@ -12,7 +12,9 @@ module h264_bitstream #(
     parameter MB_ROWS = 11,
     parameter BIT_DEPTH = 8,
     parameter CHROMA_FORMAT_IDC = 1,
-    parameter FRAME_RATE = 24
+    parameter FRAME_RATE = 24,
+    parameter DEBLOCK_ENABLE = 1,
+    parameter DISABLE_DEBLOCKING_FILTER_IDC = 0
 ) (
     input  wire        clk,
     input  wire        rst_n,
