@@ -183,6 +183,9 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - CAVLC for luma coefficients
 - CAVLC for chroma DC coefficients
 - CAVLC for chroma AC coefficients
+- standalone 8x8 transform / inverse-transform / quantization /
+  inverse-quantization / zigzag-scan support plus High-profile 8x8 luma
+  transform integration
 - I-frame support
 - P-frame support
 - non-reference `B`-slice support on the current intra / `I_PCM` path
@@ -389,6 +392,10 @@ Verified validation and tooling coverage around the encoder flow:
 - multi-frame validation at `1280x720`
 - PSNR / SSIM comparison scripts
 - x264 reference comparison scripts
+- standalone 8x8 transform / inverse-transform / quantization /
+  inverse-quantization gates at 8-bit and 10-bit, plus High-profile 8x8 smoke
+  coverage
+- chroma/profile/bit-depth validation on the `tpc_i_cavlc_8b420_4x4` row
 - side-by-side decoded-vs-source image generation
 - staged clean-build log capture for reproducible validation runs
 - simulator log and cycle-count capture for regressions
@@ -1040,7 +1047,8 @@ H.264 encoder yet:
 - reference-picture management beyond the current four-reference P-slice subset
 - broader full-standard sub-pel motion handling beyond the current `16x16`
   quarter-pel luma path
-- broader inter partition coverage and `8x8dct`-class transform support
+- broader inter partition coverage beyond the current High-profile 8x8
+  transform gates
 - broader `4:4:4` chroma support beyond the current `320x176` strict-decode
   non-`I_PCM` path through `24` frames for `8-bit` and `10-bit`, plus spot
   `I_PCM` coverage
@@ -1058,7 +1066,8 @@ Still missing relative to the chosen `x264` software baseline:
 - direct prediction modes beyond the current limited
   `B_DIRECT_16x16` reordered-`BREF` path
 - broader sub-pel motion estimation / compensation and richer mode decision
-- broader partition / transform coverage including `8x8dct`-class tools
+- broader partition / transform coverage beyond the current High-profile 8x8
+  transform gates
 - broader `I444` / `4:4:4` format coverage beyond the current `320x176`
   strict-decode non-`I_PCM` path through `24` frames for `8-bit` and
   `10-bit`, plus spot `I_PCM` coverage

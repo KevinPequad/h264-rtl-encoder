@@ -73,6 +73,7 @@ int main(int argc, char** argv) {
     bool force_b_l1 = false;
     bool force_b_direct = false;
     bool force_b_direct_temporal = false;
+    bool force_transform_8x8 = false;
     bool force_b_bi_on_reorder_ref_slot = false;
     bool force_b_l0_on_reorder_ref_slot = false;
     bool force_b_l1_on_reorder_ref_slot = false;
@@ -100,6 +101,7 @@ int main(int argc, char** argv) {
         else if (arg.rfind("+force_b_l1=", 0) == 0) force_b_l1 = std::atoi(arg.c_str() + 12) != 0;
         else if (arg.rfind("+force_b_direct=", 0) == 0) force_b_direct = std::atoi(arg.c_str() + 16) != 0;
         else if (arg.rfind("+force_b_direct_temporal=", 0) == 0) force_b_direct_temporal = std::atoi(arg.c_str() + 25) != 0;
+        else if (arg.rfind("+force_transform_8x8=", 0) == 0) force_transform_8x8 = std::atoi(arg.c_str() + 21) != 0;
         else if (arg.rfind("+force_b_bi_on_reorder_ref_slot=", 0) == 0) force_b_bi_on_reorder_ref_slot = std::atoi(arg.c_str() + 32) != 0;
         else if (arg.rfind("+force_b_l0_on_reorder_ref_slot=", 0) == 0) force_b_l0_on_reorder_ref_slot = std::atoi(arg.c_str() + 32) != 0;
         else if (arg.rfind("+force_b_l1_on_reorder_ref_slot=", 0) == 0) force_b_l1_on_reorder_ref_slot = std::atoi(arg.c_str() + 32) != 0;
@@ -199,8 +201,8 @@ int main(int argc, char** argv) {
 
     fprintf(stderr, "==========================================================\n");
     fprintf(stderr, "  H.264 RTL Encoder Testbench (%d-bit)\n", BD);
-    fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d  idr_interval=%d  stream_has_b_slices=%d  force_b_slice=%d  force_bref_slice=%d  force_b_bi=%d  force_b_l0=%d  force_b_l1=%d  force_b_direct=%d  force_b_direct_temporal=%d  reorder_b_gop=%d\n",
-            num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC, idr_interval, stream_has_b_slices ? 1 : 0, force_b_slice ? 1 : 0, force_bref_slice ? 1 : 0, force_b_bi ? 1 : 0, force_b_l0 ? 1 : 0, force_b_l1 ? 1 : 0, force_b_direct ? 1 : 0, force_b_direct_temporal ? 1 : 0, reorder_b_gop ? 1 : 0);
+    fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d  idr_interval=%d  stream_has_b_slices=%d  force_b_slice=%d  force_bref_slice=%d  force_b_bi=%d  force_b_l0=%d  force_b_l1=%d  force_b_direct=%d  force_b_direct_temporal=%d  force_transform_8x8=%d  reorder_b_gop=%d\n",
+            num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC, idr_interval, stream_has_b_slices ? 1 : 0, force_b_slice ? 1 : 0, force_bref_slice ? 1 : 0, force_b_bi ? 1 : 0, force_b_l0 ? 1 : 0, force_b_l1 ? 1 : 0, force_b_direct ? 1 : 0, force_b_direct_temporal ? 1 : 0, force_transform_8x8 ? 1 : 0, reorder_b_gop ? 1 : 0);
     fprintf(stderr, "  Reorder ref-slot overrides: bi=%d l0=%d l1=%d direct=%d direct_temporal=%d\n",
             force_b_bi_on_reorder_ref_slot ? 1 : 0, force_b_l0_on_reorder_ref_slot ? 1 : 0, force_b_l1_on_reorder_ref_slot ? 1 : 0,
             force_b_direct_on_reorder_ref_slot ? 1 : 0, force_b_direct_temporal_on_reorder_ref_slot ? 1 : 0);
@@ -217,6 +219,7 @@ int main(int argc, char** argv) {
     dut->force_b_l1_in = 0;
     dut->force_b_direct_in = 0;
     dut->force_b_direct_temporal_in = 0;
+    dut->force_transform_8x8_in = force_transform_8x8 ? 1 : 0;
     dut->chr_cb_ref_rd_data = CHROMA_MID; dut->chr_cr_ref_rd_data = CHROMA_MID;
 
 #if VM_TRACE

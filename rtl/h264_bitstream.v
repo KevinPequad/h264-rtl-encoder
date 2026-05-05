@@ -74,6 +74,7 @@ module h264_bitstream #(
     input  wire        hold_fifo_drain,
     input  wire        is_intra16_mb,
     input  wire        is_ipcm_mb,
+    input  wire        force_transform_8x8_in,
     input  wire [5:0]  intra_mb_type_code_num,
     input  wire [63:0] intra_pred_bits,
     input  wire [6:0]  intra_pred_count,
@@ -157,7 +158,7 @@ module h264_bitstream #(
     integer dbg_fifo_deq_idx;
 `endif
 
-    wire use_high_profile = (BIT_DEPTH > 8) || (CHROMA_FORMAT_IDC != 1);
+    wire use_high_profile = (BIT_DEPTH > 8) || (CHROMA_FORMAT_IDC != 1) || force_transform_8x8_in;
     wire use_high444_profile = (CHROMA_FORMAT_IDC == 3);
     wire use_high422_profile = (CHROMA_FORMAT_IDC == 2) || (BIT_DEPTH > 10);
     // The current CABAC P-skip subset, weighted-prediction path, and B-slice
@@ -254,7 +255,8 @@ module h264_bitstream #(
         (chroma_weight_cr != $signed(9'd1 << chroma_log2_weight_denom)) || (chroma_offset_cr != 9'sd0);
     wire [7:0] sps_profile_idc = use_high444_profile ? 8'hF4 :
                                  use_high422_profile ? 8'h7A :
-                                 use_high_profile   ? 8'h6E :
+                                 (BIT_DEPTH > 8) ? 8'h6E :
+                                 use_high_profile   ? 8'h64 :
                                  use_main_profile   ? 8'h4D : 8'h42;
     wire [7:0] sps_constraint_flags = (use_high_profile || use_main_profile) ? 8'h00 : 8'hC0;
     localparam integer FRAME_NUM_BITS = 8;
@@ -1173,7 +1175,7 @@ module h264_bitstream #(
                                 if (use_high_profile) begin
                                     bit_buf <= bit_buf |
                                                ({se_ue_bits, 75'd0} >> bit_cnt[6:0]) |
-                                               (({5'b10000, 91'd0}) >> (bit_cnt + {2'b0, se_total_bits}));
+                                               (({5'b10010, 91'd0}) >> (bit_cnt + {2'b0, se_total_bits}));
                                     bit_cnt <= bit_cnt + {2'b0, se_total_bits} + 7'd5;
                                     se_input <= 9'sd0; // second_chroma_qp_index_offset
                                     sub <= 6'd22;

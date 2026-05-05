@@ -15,7 +15,7 @@ from rtl_runner import BuildConfig, build_sim, repo_root, require_tool, run_cmd,
 
 
 PSNR_RE = re.compile(r"PSNR y:(?P<y>[0-9.inf-]+).*average:(?P<avg>[0-9.inf-]+)")
-SSIM_RE = re.compile(r"SSIM Y:(?P<y>[0-9.]+).*All:(?P<all>[0-9.]+)")
+SSIM_RE = re.compile(r"SSIM Y:(?P<y>[0-9.inf-]+).*All:(?P<all>[0-9.inf-]+)")
 SIM_SUMMARY_RE = re.compile(r"\[TB\]\s+(?P<frames>\d+)\s+frames encoded,\s+(?P<cycles>\d+)\s+cycles,\s+(?P<bytes>\d+)\s+bytes")
 PSKIP_RE = re.compile(
     r"\[PSKIP\]\s+Frame\s+(?P<frame>\d+)\s+skip_mbs=(?P<skip>\d+)\s+"

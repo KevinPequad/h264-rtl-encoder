@@ -9,6 +9,8 @@ Desktop.ini
 *~
 
 # Build artifacts
+build/
+.worktrees/
 tb/obj_dir/
 tb/Vh264_encoder_top
 tb/*.d
