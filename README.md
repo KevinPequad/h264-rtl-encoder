@@ -354,8 +354,9 @@ Implemented now relative to the chosen `x264` baseline:
 - `Intra_16x16` luma prediction and syntax support
 - `I_PCM` macroblock coding on the current IDR path and current P-slice intra
   path, with raw-sample byte emission owned by the RTL writer
-- exact `I_PCM` validation now also covers `4:4:4` on the current IDR and
-  P-slice intra path at `32x16` for both `8-bit` and `10-bit`
+- exact `I_PCM` byte-path coverage now also reaches `4:4:4` on the current IDR and
+  P-slice intra path at `32x16` for both `8-bit` and `10-bit`, but the dedicated
+  strict FFmpeg `4:4:4 I_PCM` smoke rows are still red on the current tree
 - up-to-four-reference P-slice inter flow with integer-pel search and current
   quarter-pel luma refinement
 - zero-residual inter-MB handling and `P_SKIP` skip-run ownership on the RTL
@@ -370,7 +371,18 @@ Supported and smoke-verified modes:
 - `10-bit 4:2:0`
 - `10-bit 4:2:2`
 
-Current additional validated `I_PCM`-only coverage:
+Transform / profile / color closeout from `t_267d06fd`:
+
+- `8-bit 4:2:0` I/P-only -> Constrained Baseline (`output/smoke_8b_420.trace_headers.txt`)
+- `8-bit 4:2:0` B-direct / CABAC P16x16 -> Main (`output/smoke_32x16_2f_cabac_p16x16.h264`, `output/smoke_8b_420_bdirect.trace_headers.txt`, `output/smoke_8b_420_cabac_p16x16.trace_headers.txt`)
+- `10-bit 4:2:0` -> High 10 (`output/smoke_32x16_2f_10b.h264`)
+- `8-bit 4:2:2` -> High 4:2:2 (`output/smoke_32x16_2f_422.h264`, `output/smoke_10b_422.trace_headers.txt`)
+- `8-bit 4:4:4` / `10-bit 4:4:4` -> High 4:4:4 Predictive (`output/smoke_32x16_2f_444.h264`, `output/smoke_32x16_2f_10b_444.h264`)
+- High-profile 8x8 smoke -> High with `transform_8x8_mode_flag = 1` (`output/smoke_32x16_2f_high8x8.h264`, `output/smoke_8b_420_high8x8.sim.log`)
+
+Validation artifacts are `output/header_trace_matrix_summary_filtered.json` plus the per-case trace / smoke outputs listed above.
+
+Current additional I_PCM-byte-path coverage (the dedicated strict-FFmpeg `4:4:4` smoke rows are still red):
 
 - `8-bit 4:4:4`
 - `10-bit 4:4:4`
@@ -407,8 +419,7 @@ Important non-completion gaps:
   quarter-pel luma path is not implemented
 - broader inter partition coverage beyond the current High-profile 8x8
   transform gates is not implemented
-- broader `4:4:4` chroma-format support beyond the current `320x176`
-  strict-decode non-`I_PCM` path and spot `I_PCM` coverage is not implemented
+- broader `4:4:4` chroma-format support beyond the current `320x176` strict-decode non-`I_PCM` path and the still-red `32x16` `4:4:4 I_PCM` smoke rows is not implemented
 - full-standard profile / level / tool coverage is not implemented
 - the final `240`-frame `1280x720 @ 24 fps` run is not closed yet
 
@@ -1002,9 +1013,8 @@ Recent correctness fix:
   `4:2:2`, and the checked-in `tb/Makefile` exposes `ENABLE_IDR_IPCM`,
   `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and `INTER_SAD_THRESHOLD` so the path
   can be reproduced without raw `EXTRA_VERILATOR_ARGS`
-- the current tree now also validates exact RTL-owned `4:4:4 I_PCM` output on
-  the IDR path and current P-slice intra path at `32x16` for `8-bit` and
-  `10-bit`, with SPS/profile signaling decoding as `High 4:4:4 Predictive`
+- the current tree emits `4:4:4 I_PCM` bytes on the IDR path and current P-slice intra path at `32x16` for `8-bit` and
+  `10-bit`, and ffprobe still reports `High 4:4:4 Predictive`, but the dedicated strict FFmpeg `4:4:4 I_PCM` smoke rows are still red on the current tree
 - the `4:4:4` inter path must use the ChromaArrayType `3`
   `coded_block_pattern` table rather than the `4:2:x` inter code; the current
   RTL writer now emits the correct full-residual inter code on that path, and

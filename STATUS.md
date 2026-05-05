@@ -338,8 +338,9 @@ Implemented now relative to the chosen `x264` baseline:
 - current IDR-path `Intra_16x16` macroblock coding through the RTL byte stream
 - current IDR-path and P-slice intra-path `I_PCM` macroblock coding through
   the RTL byte stream
-- exact `I_PCM` validation now also covers `4:4:4` on the current IDR and
-  P-slice intra path at `32x16` for both `8-bit` and `10-bit`
+- exact `I_PCM` byte-path coverage now also reaches `4:4:4` on the current IDR and
+  P-slice intra path at `32x16` for both `8-bit` and `10-bit`, but the dedicated
+  strict FFmpeg `4:4:4 I_PCM` smoke rows are still red on the current tree
 - up-to-four-reference P-slice inter coding with integer-pel search and
   current quarter-pel luma refinement
 - zero-residual inter-MB handling and `P_SKIP` skip-run ownership on the RTL
@@ -354,24 +355,20 @@ Implemented now relative to the chosen `x264` baseline:
 - `10-bit 4:2:0`
 - `10-bit 4:2:2`
 
-Current additional validated `I_PCM`-only coverage:
+Transform / profile / color closeout snapshot (`t_267d06fd`):
+
+- `8-bit 4:2:0` I/P-only -> Constrained Baseline; B-direct / CABAC P16x16 -> Main
+- `10-bit 4:2:0` -> High 10
+- `8-bit 4:2:2` -> High 4:2:2
+- `8-bit 4:4:4` / `10-bit 4:4:4` -> High 4:4:4 Predictive
+- High-profile 8x8 smoke -> High with `transform_8x8_mode_flag = 1`
+- Evidence: `output/header_trace_matrix_summary_filtered.json`, `output/smoke_8b_420*.trace_headers.txt`, and `output/smoke_32x16_2f_{10b,422,high8x8,444,10b_444}.h264`
+- Residual risk: the dedicated strict-FFmpeg `4:4:4 I_PCM` smoke rows are still red.
+
+Current additional I_PCM-byte-path coverage (strict FFmpeg decode on the dedicated `4:4:4` smoke rows is still red):
 
 - `8-bit 4:4:4`
 - `10-bit 4:4:4`
-
-Current additional validated tiny non-`I_PCM` coverage at `32x16`:
-
-- `10-bit 4:2:0` one-frame and two-frame IDR / P probes
-- `10-bit 4:2:2` two-frame IDR / P probes
-- `8-bit 4:4:4` two-frame IDR / P probes
-- `10-bit 4:4:4` one-frame and two-frame IDR / P probes
-
-Current additional validated non-`I_PCM` coverage at `320x176`:
-
-- `10-bit 4:2:0` ten-frame strict-decode IDR+P run
-- `10-bit 4:2:2` ten-frame strict-decode IDR+P run
-- `8-bit 4:4:4` twenty-four-frame strict-decode IDR+P run
-- `10-bit 4:4:4` twenty-four-frame strict-decode IDR+P run
 
 ## Validated Capabilities
 
@@ -999,9 +996,8 @@ Current verified milestone outputs:
   `4:2:2`, and `tb/Makefile` exposes `ENABLE_IDR_IPCM`, `ENABLE_P_IPCM`,
   `IPCM_SAD_THRESHOLD`, and `INTER_SAD_THRESHOLD` so the path can be
   reproduced without raw `EXTRA_VERILATOR_ARGS`
-- the current tree now also validates exact RTL-owned `4:4:4 I_PCM` output on
-  the IDR path and current P-slice intra path at `32x16` for `8-bit` and
-  `10-bit`, with SPS/profile signaling decoding as `High 4:4:4 Predictive`
+- the current tree emits `4:4:4 I_PCM` bytes on the IDR path and current P-slice intra path at `32x16` for `8-bit` and
+  `10-bit`, and ffprobe still reports `High 4:4:4 Predictive`, but the dedicated strict FFmpeg `4:4:4 I_PCM` smoke rows are still red on the current tree
 - the `4:4:4` inter path must use the ChromaArrayType `3`
   `coded_block_pattern` table rather than the `4:2:x` inter code; the current
   RTL writer now emits the correct full-residual inter code on that path, and
@@ -1049,9 +1045,7 @@ H.264 encoder yet:
   quarter-pel luma path
 - broader inter partition coverage beyond the current High-profile 8x8
   transform gates
-- broader `4:4:4` chroma support beyond the current `320x176` strict-decode
-  non-`I_PCM` path through `24` frames for `8-bit` and `10-bit`, plus spot
-  `I_PCM` coverage
+- broader `4:4:4` chroma support beyond the current `320x176` strict-decode non-`I_PCM` path and the still-red `32x16` `4:4:4 I_PCM` smoke rows is not implemented
 - full-standard profile / level / tool coverage
 
 Still missing relative to the chosen `x264` software baseline:
