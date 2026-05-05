@@ -56,20 +56,26 @@ Implemented and validated now:
   current inter path
 - validated multi-frame subset runs plus current-tree near-exact
   `Intra_16x16` IDR validation
+- CABAC `P_L0_16x16` residual checkpoint validated as a focused
+  coefficient-driven gate
+- deblock/reconstructed-frame ownership lane validated on canonical commit
+  `dc1d47094238f8ad973cdfb5738abd4f0d2ea951` with the standalone oracle,
+  public-decoder checks, and a two-frame reference-bank-consumption proof
 - Docker one-frame smoke run
 
 Still missing before full-standard completion, using the current `x264`
 software encoder as the implementation baseline:
 
 - full CABAC syntax integration beyond the current skip-capable plus explicit
-  zero-CBP / single-ref / zero-MVD `P_L0_16x16` P-slice subset
+  zero-CBP / single-ref / zero-MVD `P_L0_16x16` checkpoint; broader
+  coefficient-significance/last/level coding, `mb_qp_delta`, chroma residuals,
+  `ref_idx`/`MVD` coverage, and full I/P/B CABAC remain to implement
 - broader `B` / `BREF` picture support, broader direct-mode handling, and the
   associated reference management
 - broader standards-complete sub-pel motion handling across richer inter modes
 - broader inter partition and transform coverage including `8x8dct`-class tools
 - broader validated `4:4:4` support beyond the current `320x176`
   strict-decode non-`I_PCM` path and spot `I_PCM` coverage
-- full in-loop deblocking
 - broader profile and tool coverage
 - final `1280x720 @ 24 fps`, `10`-second RTL-path completion run
 
@@ -146,7 +152,7 @@ Why `x264`:
 - it is the strongest practical H.264 software encoder baseline in common use
 - its current source exposes the exact feature classes this RTL repo still
   needs, including CABAC, `B-frames`, reference-frame management, weighted
-  prediction, direct motion-vector modes, sub-pel motion refinement, deblocking,
+  prediction, direct motion-vector modes, sub-pel motion refinement,
   profiles / levels, and broader chroma / bit-depth support
 
 Key feature evidence in the local `x264` checkout:
@@ -307,11 +313,15 @@ Current implemented features:
 - reconstruction loop in RTL
 - reference-frame writeback for reconstructed luma
 - reference-frame writeback for reconstructed chroma
+- in-loop deblock/reconstructed-frame ownership validated on canonical commit
+  `dc1d47094238f8ad973cdfb5738abd4f0d2ea951`; coverage includes the standalone
+  oracle, public-decoder checks, and two-frame reference-bank consumption
 - standalone CABAC arithmetic coding core in `rtl/h264_cabac_core.v`, plus a
   current final-path CABAC subset for skip-capable P slices with dual PPS
   emission, CABAC slice-header fields, CABAC-coded `mb_skip_flag`,
-  CABAC-coded `end_of_slice_flag`, and an explicit single-ref / zero-CBP /
-  zero-MVD `P_L0_16x16` subset
+  CABAC-coded `end_of_slice_flag`, an explicit single-ref / zero-CBP /
+  zero-MVD `P_L0_16x16` subset, and the validated focused
+  `P_L0_16x16` residual checkpoint
 - parameterized resolution
 - parameterized bit depth
 - parameterized chroma format
@@ -323,7 +333,8 @@ Implemented now relative to the chosen `x264` baseline:
 - CAVLC-based coefficient coding in RTL
 - current CABAC final-path subset on skip-capable P slices, with CABAC PPS
   selection, CABAC-coded `mb_skip_flag`, CABAC-coded `end_of_slice_flag`, and
-  an explicit single-ref / zero-CBP / zero-MVD `P_L0_16x16` subset
+  an explicit single-ref / zero-CBP / zero-MVD `P_L0_16x16` subset, and the
+  validated focused `P_L0_16x16` residual checkpoint
 - I and P picture flow
 - non-reference `B`-picture syntax on the current intra / `I_PCM` path
 - limited non-reference `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` inter
@@ -398,7 +409,6 @@ Important non-completion gaps:
   implemented
 - broader `4:4:4` chroma-format support beyond the current `320x176`
   strict-decode non-`I_PCM` path and spot `I_PCM` coverage is not implemented
-- full in-loop deblocking is not implemented
 - full-standard profile / level / tool coverage is not implemented
 - the final `240`-frame `1280x720 @ 24 fps` run is not closed yet
 
