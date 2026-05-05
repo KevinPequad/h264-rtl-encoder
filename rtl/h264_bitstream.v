@@ -12,9 +12,7 @@ module h264_bitstream #(
     parameter MB_ROWS = 11,
     parameter BIT_DEPTH = 8,
     parameter CHROMA_FORMAT_IDC = 1,
-    parameter FRAME_RATE = 24,
-    parameter DEBLOCK_ENABLE = 1,
-    parameter DISABLE_DEBLOCKING_FILTER_IDC = 0
+    parameter FRAME_RATE = 24
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -69,6 +67,9 @@ module h264_bitstream #(
     input  wire [1:0]  cabac_cbp_luma_ctx0_sel,
     input  wire [1:0]  cabac_cbp_luma_ctx1_sel,
     input  wire [1:0]  cabac_cbp_luma_ctx2_sel,
+    input  wire [3:0]  cabac_cbp_luma,
+    input  wire [4095:0] cabac_luma_scan_flat,
+    input  wire [15:0] cabac_luma_nz_mask,
     input  wire [1:0]  slice_num_ref_idx_l0_active_minus1,
     input  wire        hold_fifo_drain,
     input  wire        is_intra16_mb,
@@ -168,14 +169,6 @@ module h264_bitstream #(
     wire [1:0] weighted_bipred_idc = weighted_pred_enable ? 2'b01 : 2'b00;
     wire slice_multi_ref_enable = (slice_num_ref_idx_l0_active_minus1 != 2'd0);
     wire slice_has_skip_run = is_p_slice || is_b_slice;
-    // PPS always advertises deblocking_filter_control_present_flag=1.  The
-    // enabled lane emits qp_delta=SE(0), disable_deblocking_filter_idc=UE(0),
-    // alpha/beta offsets SE(0)/SE(0): bit tail 1_1_1_1.  Disabled keeps the
-    // old qp_delta=SE(0), disable_deblocking_filter_idc=UE(1): bit tail 1_010.
-    wire slice_deblock_enabled = (DEBLOCK_ENABLE != 0) && (DISABLE_DEBLOCKING_FILTER_IDC[1:0] == 2'd0);
-    wire [2:0] slice_deblock_tail3 = slice_deblock_enabled ? 3'b111 : 3'b010;
-    wire [4:0] slice_ref_qp_deblock_bits = slice_deblock_enabled ? 5'b01111 : 5'b01010;
-    wire [3:0] slice_nonref_qp_deblock_bits = slice_deblock_enabled ? 4'b1111 : 4'b1010;
     localparam integer CHR_MB_WIDTH = (CHROMA_FORMAT_IDC == 3) ? 16 : 8;
     localparam integer CHR_MB_HEIGHT = (CHROMA_FORMAT_IDC == 1) ? 8 : 16;
     localparam integer CHR_MB_PIXELS = CHR_MB_WIDTH * CHR_MB_HEIGHT;
@@ -196,19 +189,19 @@ module h264_bitstream #(
             2'd1: begin
                 slice_multi_ref_bits    = 7'b1010000;      // 1 + ue(1)=010 + reorder_l0=0
                 slice_multi_ref_bits_len = 4'd5;
-                slice_multi_ref_bits_qp = slice_deblock_enabled ? 12'b101000111100 : 12'b101000101000; // + adaptive_marking=0 + qp_delta + deblock tail
+                slice_multi_ref_bits_qp = 12'b101000101000; // + adaptive_marking=0 + qp_delta=1 + deblock=010
                 slice_multi_ref_bits_qp_len = 4'd10;
             end
             2'd2: begin
                 slice_multi_ref_bits    = 7'b1011000;      // 1 + ue(2)=011 + reorder_l0=0
                 slice_multi_ref_bits_len = 4'd5;
-                slice_multi_ref_bits_qp = slice_deblock_enabled ? 12'b101100111100 : 12'b101100101000;
+                slice_multi_ref_bits_qp = 12'b101100101000;
                 slice_multi_ref_bits_qp_len = 4'd10;
             end
             2'd3: begin
                 slice_multi_ref_bits    = 7'b1001000;      // 1 + ue(3)=00100 + reorder_l0=0
                 slice_multi_ref_bits_len = 4'd7;
-                slice_multi_ref_bits_qp = slice_deblock_enabled ? 12'b100100001111 : 12'b100100001010;
+                slice_multi_ref_bits_qp = 12'b100100001010;
                 slice_multi_ref_bits_qp_len = 4'd12;
             end
             default: begin
@@ -224,25 +217,25 @@ module h264_bitstream #(
             2'd1: begin
                 b_slice_multi_ref_bits = 9'b101010000;      // 1 + ue(1)=010 + ue(0)=1 + reorder_l0=0 + reorder_l1=0
                 b_slice_multi_ref_bits_len = 4'd7;
-                b_slice_multi_ref_bits_qp_ref = slice_deblock_enabled ? 14'b10101000111100 : 14'b10101000101000;    // + adaptive_marking=0 + qp/deblock tail
+                b_slice_multi_ref_bits_qp_ref = 14'b10101000101000;    // + adaptive_marking=0 + qp_delta=1 + deblock=010
                 b_slice_multi_ref_bits_qp_ref_len = 4'd12;
-                b_slice_multi_ref_bits_qp_nonref = slice_deblock_enabled ? 13'b1010100111100 : 13'b1010100101000;  // + qp/deblock tail
+                b_slice_multi_ref_bits_qp_nonref = 13'b1010100101000;  // + qp_delta=1 + deblock=010
                 b_slice_multi_ref_bits_qp_nonref_len = 4'd11;
             end
             2'd2: begin
                 b_slice_multi_ref_bits = 9'b101110000;      // 1 + ue(2)=011 + ue(0)=1 + reorder_l0=0 + reorder_l1=0
                 b_slice_multi_ref_bits_len = 4'd7;
-                b_slice_multi_ref_bits_qp_ref = slice_deblock_enabled ? 14'b10111000111100 : 14'b10111000101000;
+                b_slice_multi_ref_bits_qp_ref = 14'b10111000101000;
                 b_slice_multi_ref_bits_qp_ref_len = 4'd12;
-                b_slice_multi_ref_bits_qp_nonref = slice_deblock_enabled ? 13'b1011100111100 : 13'b1011100101000;
+                b_slice_multi_ref_bits_qp_nonref = 13'b1011100101000;
                 b_slice_multi_ref_bits_qp_nonref_len = 4'd11;
             end
             2'd3: begin
                 b_slice_multi_ref_bits = 9'b100100100;      // 1 + ue(3)=00100 + ue(0)=1 + reorder_l0=0 + reorder_l1=0
                 b_slice_multi_ref_bits_len = 4'd9;
-                b_slice_multi_ref_bits_qp_ref = slice_deblock_enabled ? 14'b10010010001111 : 14'b10010010001010;
+                b_slice_multi_ref_bits_qp_ref = 14'b10010010001010;
                 b_slice_multi_ref_bits_qp_ref_len = 4'd14;
-                b_slice_multi_ref_bits_qp_nonref = slice_deblock_enabled ? 13'b1001001001111 : 13'b1001001001010;
+                b_slice_multi_ref_bits_qp_nonref = 13'b1001001001010;
                 b_slice_multi_ref_bits_qp_nonref_len = 4'd13;
             end
             default: begin
@@ -338,7 +331,21 @@ module h264_bitstream #(
     reg [6:0]  cabac_cbp_luma_ctx_state_75;
     reg [6:0]  cabac_cbp_luma_ctx_state_76;
     reg [6:0]  cabac_cbp_chroma_ctx_state_77;
-    reg [3:0]  cabac_pending_ctx_kind;
+    reg [6:0]  cabac_qp_delta_ctx_state_60;
+    reg [6:0]  cabac_luma_cbf_ctx_state_93;
+    reg [6:0]  cabac_luma_cbf_ctx_state_94;
+    reg [6:0]  cabac_luma_cbf_ctx_state_95;
+    reg [6:0]  cabac_luma_cbf_ctx_state_96;
+    reg [6:0]  cabac_luma_sig0_ctx_state_105;
+    reg [6:0]  cabac_luma_last0_ctx_state_166;
+    reg [6:0]  cabac_luma_level1_ctx_state_248;
+    reg [6:0]  cabac_luma_levelgt1_ctx_state_252;
+    reg [3:0]  cabac_res_blk_idx;
+    reg [3:0]  cabac_res_coeff_idx;
+    reg [15:0] cabac_res_coeff_abs;
+    reg [3:0]  cabac_res_level_step;
+    reg [3:0]  cabac_pending_cbf_ctx_sel;
+    reg [4:0]  cabac_pending_ctx_kind;
     reg [1:0]  cabac_pending_ctx_sel;
     reg        cabac_start;
     reg        cabac_bin_valid;
@@ -358,18 +365,24 @@ module h264_bitstream #(
 
     localparam DEBUG_CABAC_P16X16 = 1'b0;
 
-    localparam [3:0] CABAC_CTX_NONE      = 4'd0;
-    localparam [3:0] CABAC_CTX_SKIP      = 4'd1;
-    localparam [3:0] CABAC_CTX_MBTYPE14  = 4'd2;
-    localparam [3:0] CABAC_CTX_MBTYPE15  = 4'd3;
-    localparam [3:0] CABAC_CTX_MBTYPE16  = 4'd4;
-    localparam [3:0] CABAC_CTX_MVDX      = 4'd5;
-    localparam [3:0] CABAC_CTX_MVDY      = 4'd6;
-    localparam [3:0] CABAC_CTX_CBP0      = 4'd7;
-    localparam [3:0] CABAC_CTX_CBP1      = 4'd8;
-    localparam [3:0] CABAC_CTX_CBP2      = 4'd9;
-    localparam [3:0] CABAC_CTX_CBP3      = 4'd10;
-    localparam [3:0] CABAC_CTX_CBPCHROMA = 4'd11;
+    localparam [4:0] CABAC_CTX_NONE      = 5'd0;
+    localparam [4:0] CABAC_CTX_SKIP      = 5'd1;
+    localparam [4:0] CABAC_CTX_MBTYPE14  = 5'd2;
+    localparam [4:0] CABAC_CTX_MBTYPE15  = 5'd3;
+    localparam [4:0] CABAC_CTX_MBTYPE16  = 5'd4;
+    localparam [4:0] CABAC_CTX_MVDX      = 5'd5;
+    localparam [4:0] CABAC_CTX_MVDY      = 5'd6;
+    localparam [4:0] CABAC_CTX_CBP0      = 5'd7;
+    localparam [4:0] CABAC_CTX_CBP1      = 5'd8;
+    localparam [4:0] CABAC_CTX_CBP2      = 5'd9;
+    localparam [4:0] CABAC_CTX_CBP3      = 5'd10;
+    localparam [4:0] CABAC_CTX_CBPCHROMA = 5'd11;
+    localparam [4:0] CABAC_CTX_QPDELTA   = 5'd12;
+    localparam [4:0] CABAC_CTX_LUMA_CBF  = 5'd13;
+    localparam [4:0] CABAC_CTX_LUMA_SIG0 = 5'd14;
+    localparam [4:0] CABAC_CTX_LUMA_LAST0 = 5'd15;
+    localparam [4:0] CABAC_CTX_LUMA_LEVEL1 = 5'd16;
+    localparam [4:0] CABAC_CTX_LUMA_LEVELGT1 = 5'd17;
 
     function automatic [6:0] cabac_init_state;
         input integer m;
@@ -406,6 +419,94 @@ module h264_bitstream #(
                 2'd1: cabac_pskip_ctx_init = cabac_init_state(23, 2, 26);
                 default: cabac_pskip_ctx_init = cabac_init_state(21, 0, 26);
             endcase
+        end
+    endfunction
+
+    function automatic [3:0] cabac_luma_cbf_ctx_sel;
+        input [3:0] blk_idx_i;
+        input [11:0] mb_counter_i;
+        reg [1:0] row_i;
+        reg [1:0] col_i;
+        reg [3:0] left_idx_i;
+        reg [3:0] top_idx_i;
+        reg [1:0] left_col_i;
+        reg [1:0] top_row_i;
+        reg       nza_i;
+        reg       nzb_i;
+        integer   mb_col_i;
+        begin
+            row_i = {blk_idx_i[3], blk_idx_i[1]};
+            col_i = {blk_idx_i[2], blk_idx_i[0]};
+            left_col_i = col_i - 2'd1;
+            top_row_i = row_i - 2'd1;
+            left_idx_i = {row_i[1], left_col_i[1], row_i[0], left_col_i[0]};
+            top_idx_i = {top_row_i[1], col_i[1], top_row_i[0], col_i[0]};
+            mb_col_i = mb_counter_i % MB_COLS;
+            if (col_i != 2'd0)
+                nza_i = cabac_luma_nz_mask[left_idx_i];
+            else
+                nza_i = (mb_col_i != 0);
+            if (row_i != 2'd0)
+                nzb_i = cabac_luma_nz_mask[top_idx_i];
+            else
+                nzb_i = (mb_counter_i >= MB_COLS);
+            cabac_luma_cbf_ctx_sel = {2'd0, nzb_i, nza_i};
+        end
+    endfunction
+
+    function automatic [6:0] cabac_luma_cbf_ctx_state;
+        input [3:0] sel_i;
+        begin
+            case (sel_i[1:0])
+                2'd0: cabac_luma_cbf_ctx_state = cabac_luma_cbf_ctx_state_93;
+                2'd1: cabac_luma_cbf_ctx_state = cabac_luma_cbf_ctx_state_94;
+                2'd2: cabac_luma_cbf_ctx_state = cabac_luma_cbf_ctx_state_95;
+                default: cabac_luma_cbf_ctx_state = cabac_luma_cbf_ctx_state_96;
+            endcase
+        end
+    endfunction
+
+    function automatic signed [15:0] cabac_luma_coeff_at;
+        input [3:0] blk_idx_i;
+        input [3:0] coeff_idx_i;
+        integer bit_i;
+        begin
+            bit_i = (blk_idx_i * 256) + (coeff_idx_i * 16);
+            cabac_luma_coeff_at = $signed(cabac_luma_scan_flat[bit_i +: 16]);
+        end
+    endfunction
+
+    function automatic [15:0] cabac_luma_coeff_abs_at;
+        input [3:0] blk_idx_i;
+        input [3:0] coeff_idx_i;
+        reg signed [15:0] coeff_i;
+        begin
+            coeff_i = cabac_luma_coeff_at(blk_idx_i, coeff_idx_i);
+            cabac_luma_coeff_abs_at = coeff_i[15] ? ((~coeff_i) + 16'd1) : coeff_i[15:0];
+        end
+    endfunction
+
+    function automatic [3:0] cabac_luma_last_nonzero_coeff_idx;
+        input [3:0] blk_idx_i;
+        integer coeff_i;
+        reg signed [15:0] coeff_val;
+        begin
+            cabac_luma_last_nonzero_coeff_idx = 4'd0;
+            for (coeff_i = 0; coeff_i < 16; coeff_i = coeff_i + 1) begin
+                coeff_val = cabac_luma_coeff_at(blk_idx_i, coeff_i[3:0]);
+                if (coeff_val != 16'sd0)
+                    cabac_luma_last_nonzero_coeff_idx = coeff_i[3:0];
+            end
+        end
+    endfunction
+
+    function automatic cabac_luma_coeff_sign_at;
+        input [3:0] blk_idx_i;
+        input [3:0] coeff_idx_i;
+        reg signed [15:0] coeff_i;
+        begin
+            coeff_i = cabac_luma_coeff_at(blk_idx_i, coeff_idx_i);
+            cabac_luma_coeff_sign_at = coeff_i[15];
         end
     endfunction
 
@@ -627,6 +728,20 @@ module h264_bitstream #(
             cabac_cbp_luma_ctx_state_75 <= 7'd0;
             cabac_cbp_luma_ctx_state_76 <= 7'd0;
             cabac_cbp_chroma_ctx_state_77 <= 7'd0;
+            cabac_qp_delta_ctx_state_60 <= 7'd0;
+            cabac_luma_cbf_ctx_state_93 <= 7'd0;
+            cabac_luma_cbf_ctx_state_94 <= 7'd0;
+            cabac_luma_cbf_ctx_state_95 <= 7'd0;
+            cabac_luma_cbf_ctx_state_96 <= 7'd0;
+            cabac_luma_sig0_ctx_state_105 <= 7'd0;
+            cabac_luma_last0_ctx_state_166 <= 7'd0;
+            cabac_luma_level1_ctx_state_248 <= 7'd0;
+            cabac_luma_levelgt1_ctx_state_252 <= 7'd0;
+            cabac_res_blk_idx <= 4'd0;
+            cabac_res_coeff_idx <= 4'd0;
+            cabac_res_coeff_abs <= 16'd0;
+            cabac_res_level_step <= 4'd0;
+            cabac_pending_cbf_ctx_sel <= 4'd0;
             cabac_pending_ctx_kind <= CABAC_CTX_NONE;
             cabac_pending_ctx_sel <= 2'd0;
             cabac_start <= 1'b0;
@@ -682,6 +797,19 @@ module h264_bitstream #(
                     end
                     CABAC_CTX_CBP3: cabac_cbp_luma_ctx_state_76 <= cabac_ctx_state_out;
                     CABAC_CTX_CBPCHROMA: cabac_cbp_chroma_ctx_state_77 <= cabac_ctx_state_out;
+                    CABAC_CTX_QPDELTA: cabac_qp_delta_ctx_state_60 <= cabac_ctx_state_out;
+                    CABAC_CTX_LUMA_CBF: begin
+                        case (cabac_pending_cbf_ctx_sel)
+                            4'd0: cabac_luma_cbf_ctx_state_93 <= cabac_ctx_state_out;
+                            4'd1: cabac_luma_cbf_ctx_state_94 <= cabac_ctx_state_out;
+                            4'd2: cabac_luma_cbf_ctx_state_95 <= cabac_ctx_state_out;
+                            default: cabac_luma_cbf_ctx_state_96 <= cabac_ctx_state_out;
+                        endcase
+                    end
+                    CABAC_CTX_LUMA_SIG0: cabac_luma_sig0_ctx_state_105 <= cabac_ctx_state_out;
+                    CABAC_CTX_LUMA_LAST0: cabac_luma_last0_ctx_state_166 <= cabac_ctx_state_out;
+                    CABAC_CTX_LUMA_LEVEL1: cabac_luma_level1_ctx_state_248 <= cabac_ctx_state_out;
+                    CABAC_CTX_LUMA_LEVELGT1: cabac_luma_levelgt1_ctx_state_252 <= cabac_ctx_state_out;
                     default: begin end
                 endcase
             end
@@ -1119,9 +1247,9 @@ module h264_bitstream #(
                                         // first_mb=UE(0), slice_type=P, pic_parameter_set_id=UE(1),
                                         // frame_num, pic_order_cnt_lsb, num_ref_idx_active_override_flag=0,
                                         // ref_pic_list_reordering_flag_l0=0, adaptive_ref_pic_marking_mode_flag=0,
-                                        // cabac_init_idc=UE(0), slice_qp_delta=SE(0), deblocking tail.
+                                        // cabac_init_idc=UE(0), slice_qp_delta=SE(0), deblocking=UE(1).
                                         bit_buf <= {1'b1, 1'b1, 3'b010, frame_num, pic_order_cnt_lsb,
-                                                    1'b0, 1'b0, 1'b0, 1'b1, 1'b1, slice_deblock_tail3, 66'd0};
+                                                    1'b0, 1'b0, 1'b0, 1'b1, 1'b1, 3'b010, 66'd0};
                                         bit_cnt <= 7'd30;
                                         sub <= 6'd30;
                                     end else if (weighted_pred_flag) begin
@@ -1150,12 +1278,12 @@ module h264_bitstream #(
                                             // High-profile P-slice: SPS has poc_type=0, need poc_lsb(9 bits)
                                             // first_mb=UE(0)'1', slice_type(P)=UE(0)'1', pps_id=UE(0)'1',
                                             // frame_num(8), poc_lsb(9), num_ref_override=0, ref_list_reorder=0,
-                                            // adaptive_marking=0, qp_delta/deblock tail
+                                            // adaptive_marking=0, qp_delta=SE(0)'1', disable_deblocking=UE(1)'010'
                                             if (slice_multi_ref_enable) begin
                                                 bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits_qp, 64'd0};
                                                 bit_cnt <= 7'd20 + {3'd0, slice_multi_ref_bits_qp_len};
                                             end else begin
-                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, slice_deblock_tail3, 69'd0};
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, 3'b010, 69'd0};
                                                 bit_cnt <= 7'd27;
                                             end
                                         end else begin
@@ -1164,7 +1292,7 @@ module h264_bitstream #(
                                                 bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, slice_multi_ref_bits_qp, 64'd0};
                                                 bit_cnt <= 7'd20 + {3'd0, slice_multi_ref_bits_qp_len};
                                             end else begin
-                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, slice_deblock_tail3, 69'd0};
+                                                bit_buf <= {3'b111, frame_num, pic_order_cnt_lsb, 4'b0001, 3'b010, 69'd0};
                                                 bit_cnt <= 7'd27;
                                             end
                                         end
@@ -1204,10 +1332,10 @@ module h264_bitstream #(
                                             // ref_pic_list_reordering_flag_l1=0, optional adaptive_ref_pic_marking_mode_flag,
                                             // slice_qp_delta=SE(0), deblocking=UE(1)
                                             if (is_b_ref_slice) begin
-                                                bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 5'b00001, slice_deblock_tail3, 65'd0};
+                                                bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 5'b00001, 3'b010, 65'd0};
                                                 bit_cnt <= 7'd31;
                                             end else begin
-                                                bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 4'b0001, slice_deblock_tail3, 66'd0};
+                                                bit_buf <= {1'b1, 3'b010, 1'b1, frame_num, pic_order_cnt_lsb, direct_spatial_mv_pred_flag, 4'b0001, 3'b010, 66'd0};
                                                 bit_cnt <= 7'd30;
                                             end
                                         end
@@ -1219,12 +1347,12 @@ module h264_bitstream #(
                                         // first_mb=UE(0)'1', slice_type(I)=UE(2)'011', pps_id=UE(0)'1',
                                         // frame_num(8), idr_pic_id=UE(0)'1', poc_lsb(9),
                                         // no_output_of_prior_pics=0, long_term_ref=0,
-                                        // qp_delta=SE(0)'1', deblocking tail
-                                        bit_buf <= {1'b1, 3'b011, 1'b1, frame_num, 1'b1, pic_order_cnt_lsb, 2'b00, 1'b1, slice_deblock_tail3, 67'd0};
+                                        // qp_delta=SE(0)'1', disable_deblocking=UE(1)'010'
+                                        bit_buf <= {1'b1, 3'b011, 1'b1, frame_num, 1'b1, pic_order_cnt_lsb, 2'b00, 1'b1, 3'b010, 67'd0};
                                         bit_cnt <= 7'd29;
                                     end else begin
                                         // Baseline/Main IDR: SPS now uses poc_type=0, so emit poc_lsb(9 bits)
-                                        bit_buf <= {1'b1, 3'b011, 1'b1, frame_num, 1'b1, pic_order_cnt_lsb, 2'b00, 1'b1, slice_deblock_tail3, 67'd0};
+                                        bit_buf <= {1'b1, 3'b011, 1'b1, frame_num, 1'b1, pic_order_cnt_lsb, 2'b00, 1'b1, 3'b010, 67'd0};
                                         bit_cnt <= 7'd29;
                                     end
                                     sub <= sub + 6'd1;
@@ -1254,6 +1382,20 @@ module h264_bitstream #(
                                     cabac_cbp_luma_ctx_state_75 <= cabac_init_state(-25, 101, 26);
                                     cabac_cbp_luma_ctx_state_76 <= cabac_init_state(-23, 67, 26);
                                     cabac_cbp_chroma_ctx_state_77 <= cabac_init_state(-28, 82, 26);
+                                    cabac_qp_delta_ctx_state_60 <= cabac_init_state(0, 41, 26);
+                                    cabac_luma_cbf_ctx_state_93 <= cabac_init_state(-3, 74, 26);
+                                    cabac_luma_cbf_ctx_state_94 <= cabac_init_state(-9, 92, 26);
+                                    cabac_luma_cbf_ctx_state_95 <= cabac_init_state(-8, 87, 26);
+                                    cabac_luma_cbf_ctx_state_96 <= cabac_init_state(-23, 126, 26);
+                                    cabac_luma_sig0_ctx_state_105 <= cabac_init_state(-2, 85, 26);
+                                    cabac_luma_last0_ctx_state_166 <= cabac_init_state(11, 28, 26);
+                                    cabac_luma_level1_ctx_state_248 <= cabac_init_state(-3, 29, 26);
+                                    cabac_luma_levelgt1_ctx_state_252 <= cabac_init_state(-6, 55, 26);
+                                    cabac_res_blk_idx <= 4'd0;
+                                    cabac_res_coeff_idx <= 4'd0;
+                                    cabac_res_coeff_abs <= 16'd0;
+                                    cabac_res_level_step <= 4'd0;
+                                    cabac_pending_cbf_ctx_sel <= 4'd0;
                                     cabac_start <= 1'b1;
                                 end
                                 cmd_done <= 1'b1;
@@ -1341,8 +1483,9 @@ module h264_bitstream #(
                                         sub <= 6'd22;
                                     end
                                 end else begin
-                                    // adaptive_ref_pic_marking_mode_flag=0, slice_qp_delta/deblock tail
-                                    bit_buf <= bit_buf | ({slice_ref_qp_deblock_bits, 91'd0} >> bit_cnt[6:0]);
+                                    // adaptive_ref_pic_marking_mode_flag=0, slice_qp_delta=SE(0)='1',
+                                    // disable_deblocking_filter_idc=UE(1)='010'
+                                    bit_buf <= bit_buf | ({5'b01010, 91'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + 7'd5;
                                     sub <= 6'd6;
                                 end
@@ -1398,10 +1541,10 @@ module h264_bitstream #(
                             end
                             6'd28: begin
                                 if (is_b_ref_slice) begin
-                                    bit_buf <= bit_buf | ({slice_ref_qp_deblock_bits, 91'd0} >> bit_cnt[6:0]);
+                                    bit_buf <= bit_buf | ({5'b01010, 91'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + 7'd5;
                                 end else begin
-                                    bit_buf <= bit_buf | ({slice_nonref_qp_deblock_bits, 92'd0} >> bit_cnt[6:0]);
+                                    bit_buf <= bit_buf | ({4'b1010, 92'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + 7'd4;
                                 end
                                 sub <= 6'd6;
@@ -1423,7 +1566,8 @@ module h264_bitstream #(
                             6'd0: begin
                                 if (cabac_slice_active) begin
                                     if (!is_skip_mb &&
-                                        !(is_inter_mb && !is_b_slice && !mb_has_residual &&
+                                        !(is_inter_mb && !is_b_slice &&
+                                          (!mb_has_residual || (cabac_cbp_luma != 4'd0)) &&
                                           (slice_num_ref_idx_l0_active_minus1 == 2'd0) &&
                                           (mb_ref_idx_l0 == 2'd0) &&
                                           (mvd_x_l0 == 9'sd0) && (mvd_y_l0 == 9'sd0))) begin
@@ -1734,7 +1878,7 @@ module h264_bitstream #(
                                 cabac_pending_ctx_kind <= CABAC_CTX_CBP0;
                                 cabac_pending_ctx_sel <= cabac_cbp_luma_ctx0_sel;
                                 cabac_bin_valid <= 1'b1;
-                                cabac_bin_value <= 1'b0;
+                                cabac_bin_value <= cabac_cbp_luma[0];
                                 cabac_bin_bypass <= 1'b0;
                                 cabac_bin_terminate <= 1'b0;
                                 sub <= 6'd41;
@@ -1763,7 +1907,7 @@ module h264_bitstream #(
                                 cabac_pending_ctx_kind <= CABAC_CTX_CBP1;
                                 cabac_pending_ctx_sel <= cabac_cbp_luma_ctx1_sel;
                                 cabac_bin_valid <= 1'b1;
-                                cabac_bin_value <= 1'b0;
+                                cabac_bin_value <= cabac_cbp_luma[1];
                                 cabac_bin_bypass <= 1'b0;
                                 cabac_bin_terminate <= 1'b0;
                                 sub <= 6'd42;
@@ -1792,7 +1936,7 @@ module h264_bitstream #(
                                 cabac_pending_ctx_kind <= CABAC_CTX_CBP2;
                                 cabac_pending_ctx_sel <= cabac_cbp_luma_ctx2_sel;
                                 cabac_bin_valid <= 1'b1;
-                                cabac_bin_value <= 1'b0;
+                                cabac_bin_value <= cabac_cbp_luma[2];
                                 cabac_bin_bypass <= 1'b0;
                                 cabac_bin_terminate <= 1'b0;
                                 sub <= 6'd43;
@@ -1816,7 +1960,7 @@ module h264_bitstream #(
                                 cabac_pending_ctx_kind <= CABAC_CTX_CBP3;
                                 cabac_pending_ctx_sel <= 2'd0;
                                 cabac_bin_valid <= 1'b1;
-                                cabac_bin_value <= 1'b0;
+                                cabac_bin_value <= cabac_cbp_luma[3];
                                 cabac_bin_bypass <= 1'b0;
                                 cabac_bin_terminate <= 1'b0;
                                 sub <= 6'd44;
@@ -1860,13 +2004,208 @@ module h264_bitstream #(
                                     state <= S_EMIT;
                                     return_state <= S_MB_HDR;
                                 end
-                                cabac_mb_counter <= cabac_mb_counter + 12'd1;
-                                sub <= 6'd46;
+                                if (mb_has_residual && (cabac_cbp_luma != 4'd0)) begin
+                                    cabac_ctx_state_in <= cabac_qp_delta_ctx_state_60;
+                                    cabac_pending_ctx_kind <= CABAC_CTX_QPDELTA;
+                                    cabac_pending_ctx_sel <= 2'd0;
+                                    cabac_bin_valid <= 1'b1;
+                                    cabac_bin_value <= 1'b0;
+                                    cabac_bin_bypass <= 1'b0;
+                                    cabac_bin_terminate <= 1'b0;
+                                    sub <= 6'd47;
+                                end else begin
+                                    cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                    sub <= 6'd46;
+                                end
                             end
                             6'd46: begin
                                 cmd_done <= 1'b1;
                                 busy     <= 1'b0;
                                 state    <= S_IDLE;
+                            end
+                            6'd47: begin
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC mb_qp_delta bit overflow");
+                                    `endif
+                                    end
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                cabac_res_blk_idx <= 4'd0;
+                                cabac_pending_cbf_ctx_sel <= cabac_luma_cbf_ctx_sel(4'd0, cabac_mb_counter);
+                                cabac_ctx_state_in <= cabac_luma_cbf_ctx_state(cabac_luma_cbf_ctx_sel(4'd0, cabac_mb_counter));
+                                cabac_pending_ctx_kind <= CABAC_CTX_LUMA_CBF;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= cabac_luma_nz_mask[0];
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                sub <= 6'd48;
+                            end
+                            6'd48: begin
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC luma coded_block_flag overflow");
+                                    `endif
+                                    end
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                if (cabac_luma_nz_mask[cabac_res_blk_idx]) begin
+                                    cabac_ctx_state_in <= cabac_luma_sig0_ctx_state_105;
+                                    cabac_pending_ctx_kind <= CABAC_CTX_LUMA_SIG0;
+                                    cabac_bin_valid <= 1'b1;
+                                    cabac_bin_value <= 1'b1;
+                                    cabac_bin_bypass <= 1'b0;
+                                    cabac_bin_terminate <= 1'b0;
+                                    sub <= 6'd49;
+                                end else if (cabac_res_blk_idx == 4'd15) begin
+                                    cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                    sub <= 6'd46;
+                                end else begin
+                                    cabac_res_blk_idx <= cabac_res_blk_idx + 4'd1;
+                                    cabac_pending_cbf_ctx_sel <= cabac_luma_cbf_ctx_sel(cabac_res_blk_idx + 4'd1, cabac_mb_counter);
+                                    cabac_ctx_state_in <= cabac_luma_cbf_ctx_state(cabac_luma_cbf_ctx_sel(cabac_res_blk_idx + 4'd1, cabac_mb_counter));
+                                    cabac_pending_ctx_kind <= CABAC_CTX_LUMA_CBF;
+                                    cabac_bin_valid <= 1'b1;
+                                    cabac_bin_value <= cabac_luma_nz_mask[cabac_res_blk_idx + 4'd1];
+                                    cabac_bin_bypass <= 1'b0;
+                                    cabac_bin_terminate <= 1'b0;
+                                    sub <= 6'd48;
+                                end
+                            end
+                            6'd49: begin
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC luma significant_coeff_flag overflow");
+                                    `endif
+                                    end
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                cabac_ctx_state_in <= cabac_luma_last0_ctx_state_166;
+                                cabac_pending_ctx_kind <= CABAC_CTX_LUMA_LAST0;
+                                cabac_pending_ctx_sel <= 2'd0;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= 1'b1;
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                cabac_res_coeff_idx <= cabac_luma_last_nonzero_coeff_idx(cabac_res_blk_idx);
+                                cabac_res_coeff_abs <= cabac_luma_coeff_abs_at(cabac_res_blk_idx,
+                                    cabac_luma_last_nonzero_coeff_idx(cabac_res_blk_idx));
+                                cabac_res_level_step <= 4'd0;
+                                sub <= 6'd50;
+                            end
+                            6'd50: begin
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC luma coeff_abs_level1 overflow");
+                                    `endif
+                                    end
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                cabac_ctx_state_in <= cabac_luma_level1_ctx_state_248;
+                                cabac_pending_ctx_kind <= CABAC_CTX_LUMA_LEVEL1;
+                                cabac_pending_ctx_sel <= 2'd0;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= (cabac_res_coeff_abs > 16'd1);
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                if (cabac_res_coeff_abs > 16'd1) begin
+                                    cabac_res_level_step <= (cabac_res_coeff_abs < 16'd15)
+                                                            ? (cabac_res_coeff_abs[3:0] - 4'd2)
+                                                            : 4'd13;
+                                    sub <= 6'd51;
+                                end else begin
+                                    sub <= 6'd52;
+                                end
+                            end
+                            6'd51: begin
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC luma coeff_abs_levelgt1 overflow");
+                                    `endif
+                                    end
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                cabac_ctx_state_in <= cabac_luma_levelgt1_ctx_state_252;
+                                cabac_pending_ctx_kind <= CABAC_CTX_LUMA_LEVELGT1;
+                                cabac_pending_ctx_sel <= 2'd0;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= (cabac_res_level_step != 4'd0);
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                if (cabac_res_level_step != 4'd0) begin
+                                    cabac_res_level_step <= cabac_res_level_step - 4'd1;
+                                    sub <= 6'd51;
+                                end else begin
+                                    sub <= 6'd52;
+                                end
+                            end
+                            6'd52: begin
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC luma coeff_sign overflow");
+                                    `endif
+                                    end
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                cabac_pending_ctx_kind <= CABAC_CTX_NONE;
+                                cabac_pending_ctx_sel <= 2'd0;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= cabac_luma_coeff_sign_at(cabac_res_blk_idx, cabac_res_coeff_idx);
+                                cabac_bin_bypass <= 1'b1;
+                                cabac_bin_terminate <= 1'b0;
+                                sub <= 6'd53;
+                            end
+                            6'd53: begin
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC luma coeff_sign overflow");
+                                    `endif
+                                    end
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                if (cabac_res_blk_idx == 4'd15) begin
+                                    cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                    sub <= 6'd46;
+                                end else begin
+                                    cabac_res_blk_idx <= cabac_res_blk_idx + 4'd1;
+                                    cabac_pending_cbf_ctx_sel <= cabac_luma_cbf_ctx_sel(cabac_res_blk_idx + 4'd1, cabac_mb_counter);
+                                    cabac_ctx_state_in <= cabac_luma_cbf_ctx_state(cabac_luma_cbf_ctx_sel(cabac_res_blk_idx + 4'd1, cabac_mb_counter));
+                                    cabac_pending_ctx_kind <= CABAC_CTX_LUMA_CBF;
+                                    cabac_pending_ctx_sel <= 2'd0;
+                                    cabac_bin_valid <= 1'b1;
+                                    cabac_bin_value <= cabac_luma_nz_mask[cabac_res_blk_idx + 4'd1];
+                                    cabac_bin_bypass <= 1'b0;
+                                    cabac_bin_terminate <= 1'b0;
+                                    sub <= 6'd48;
+                                end
                             end
                             6'd20: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
