@@ -14,6 +14,7 @@ import argparse
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 import re
 import shlex
@@ -86,6 +87,39 @@ def relpath(path: Path, root: Path | None = None) -> str:
         return str(path.resolve().relative_to(root.resolve()))
     except ValueError:
         return str(path)
+
+
+def stage_poisoned_ownership_fixture(root: Path, neg_id: str) -> dict[str, Any]:
+    fixture_root = root / "output" / "negative_fixtures" / f"{neg_id.lower()}_{now_utc_seconds()}_{os.getpid()}"
+    if fixture_root.exists():
+        shutil.rmtree(fixture_root)
+    fixture_root.mkdir(parents=True, exist_ok=True)
+
+    staged_files: list[str] = []
+    for rel in ("rtl/h264_bitstream.v", "tb/tb_h264_encoder.cpp", "scripts/run_h264_verify_manifest.py"):
+        src = root / rel
+        if not src.exists():
+            raise HarnessError(f"missing required audit fixture source: {rel}")
+        dst = fixture_root / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src, dst)
+        staged_files.append(rel)
+
+    poison_file = fixture_root / "scripts" / "negative_repair_fixture.py"
+    poison_file.write_text(
+        "def injected_negative_repair_fixture():\n"
+        "    repair = \"rewrite final .h264 bytes\"\n"
+        "    return repair\n",
+        encoding="utf-8",
+    )
+    staged_files.append(relpath(poison_file, fixture_root))
+
+    return {
+        "fixture_root": str(fixture_root),
+        "fixture_files": staged_files,
+        "poison_file": relpath(poison_file, fixture_root),
+        "poison_line": 'repair = "rewrite final .h264 bytes"',
+    }
 
 
 def now_utc_seconds() -> int:
@@ -530,8 +564,8 @@ def line_records(path: Path, root: Path) -> list[tuple[int, str]]:
     return list(enumerate(text.splitlines(), start=1))
 
 
-def static_rtl_ownership_audit() -> dict[str, Any]:
-    root = repo_root()
+def static_rtl_ownership_audit(root: Path | None = None) -> dict[str, Any]:
+    root = root or repo_root()
     evidence: list[dict[str, Any]] = []
     allowed_findings: list[dict[str, Any]] = []
     forbidden_findings: list[dict[str, Any]] = []
@@ -647,6 +681,18 @@ def run_negative_test(neg: dict[str, Any], args: argparse.Namespace) -> dict[str
             "attempted_execution": True,
             "audit": audit,
             "reason": audit["reason"],
+        }
+    if builtin == "rtl_ownership_poisoned_fixture":
+        fixture = stage_poisoned_ownership_fixture(root, neg_id)
+        audit = static_rtl_ownership_audit(Path(fixture["fixture_root"]))
+        caught = audit["status"] == "FAIL"
+        return {
+            **base,
+            "status": "RED_EXPECTED_FAIL" if caught else "FAIL",
+            "attempted_execution": True,
+            "fixture": fixture,
+            "audit": audit,
+            "reason": "synthetic repair fixture was caught by the no-repair audit" if caught else "synthetic repair fixture unexpectedly passed the no-repair audit",
         }
     return {
         **base,
