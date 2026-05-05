@@ -2176,10 +2176,10 @@
       "tier": "T0-RED"
     },
     {
-      "builtin": "rtl_ownership_static_audit",
-      "expected": "FAIL audit; MP4 packaging is allowed only if bytes are unmodified",
+      "builtin": "rtl_ownership_poisoned_fixture",
+      "expected": "RED_EXPECTED_FAIL from a synthetic repair fixture caught by the no-repair audit",
       "id": "NEG-REPAIR-001",
-      "intent": "testbench/script writes final H.264 syntax",
+      "intent": "testbench/script writes final H.264 syntax in a synthetic poisoned fixture",
       "kind": "negative_test",
       "runtime_tier": "T0-RED",
       "status": "runnable",

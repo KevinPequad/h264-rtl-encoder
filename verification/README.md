@@ -16,9 +16,16 @@ python3 scripts/run_h264_verify_manifest.py --negative NEG-ERRORPAT-001 --negati
 python3 scripts/run_h264_verify_manifest.py --case smoke_8b_420 --case smoke_8b_420_cabac_pskip --case smoke_8b_420_bdirect
 ```
 
+Expected-fail example:
+
+```bash
+python3 scripts/run_h264_verify_manifest.py --negative NEG-REPAIR-001
+```
+
 Deliberate guardrail:
 
 - T2 (`1280x720 @ 24f`) and T3 (`1280x720 @ 240f/10s BBB`) entries can be listed, but the runner returns `BLOCKED` and will not execute them while the manifest says those tiers are blocked.
 - Pending feature lanes are not counted as PASS. They must register explicit fixture commands before they can become runnable.
 - Negative fixtures are harness tests; they must not rewrite or repair RTL-emitted bytes.
+- `NEG-REPAIR-001` stages a synthetic poisoned fixture under `output/negative_fixtures/` and should return `RED_EXPECTED_FAIL` when the no-repair audit catches the injected repair line.
 - Packaging-only MP4 wrapping is allowed only when it preserves the RTL Annex B payload; final H.264 syntax remains RTL-owned.
