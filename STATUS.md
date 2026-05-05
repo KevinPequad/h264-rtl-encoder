@@ -33,11 +33,18 @@ Current state:
 - the current tree now also supports limited reference-`B` / `BREF`
   `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` pictures on that reordered
   dual-list `16x16` B path
+- the deblock/reconstructed-frame ownership lane is validated on canonical
+  commit `dc1d47094238f8ad973cdfb5738abd4f0d2ea951` with the standalone oracle,
+  public-decoder checks, and a two-frame reference-bank-consumption proof
+- CABAC `P_L0_16x16` residual checkpoint is coefficient-driven in commit
+  `69aef76e387739ebc4b1b08d4147a6842dfc9124`; the focused residual quality gate
+  passed on validation worktree `t_e8e507e3` / validation report `t_df25a2fa`
 - the repository is still not complete as a full H.264 standard encoder
 
-Completion is still blocked by major missing features including CABAC syntax
-integration, broader `B` / `BREF` support, broader direct-mode support, broader
-partition/tool coverage, deblocking, and the final long-run target.
+Completion is still blocked by major missing features including full CABAC
+syntax integration beyond the current coefficient-driven `P_L0_16x16`
+checkpoint, broader `B` / `BREF` support, broader direct-mode support, broader
+partition/tool coverage, and the final long-run target.
 
 ## Source Inventory
 
@@ -90,6 +97,10 @@ partition/tool coverage, deblocking, and the final long-run target.
 | `scripts/rtl_runner.py` | Staged runner for clean simulator execution |
 | `scripts/regress_smoke_matrix.py` | Reproducible smoke regression matrix |
 | `scripts/validate_clip.py` | Multi-frame validation, strict decode gating, optional decode-only fast path, and comparison flow |
+| `scripts/run_deblock_oracle_check.sh` | Standalone Verilator oracle check for the deblock edge datapath |
+| `scripts/run_deblock_reference_check.sh` | Public-decoder and two-frame reconstructed-reference consumption check for in-loop deblocking |
+| `scripts/run_cabac_residual4x4_scan_check.sh` | Standalone Verilator check for the CABAC residual 4x4 scan-event helper |
+| `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for CABAC `P_L0_16x16` luma residual syntax; requires actual decoded luma reconstruction and serves as the checkpoint proof for the coefficient-driven residual path |
 | `docker/Dockerfile` | Containerized smoke-run environment |
 | `docker/run_one_frame.sh` | One-frame Docker smoke flow |
 | `tools/parse_422.c` | Small debug/parser utility |
@@ -276,11 +287,16 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - reconstruction loop in RTL
 - reference-frame writeback for reconstructed luma
 - reference-frame writeback for reconstructed chroma
+- in-loop deblock/reconstructed-frame ownership validated on canonical commit
+  `dc1d47094238f8ad973cdfb5738abd4f0d2ea951`; coverage includes the standalone
+  oracle, public-decoder checks, and two-frame reference-bank consumption
 - standalone CABAC arithmetic coder core RTL, plus a current final-path CABAC
   subset for skip-capable P slices with dual PPS emission, CABAC
   slice-header fields, CABAC-coded `mb_skip_flag`, CABAC-coded
-  `end_of_slice_flag`, and an explicit single-ref / zero-CBP / zero-MVD
-  `P_L0_16x16` subset
+  `end_of_slice_flag`, an explicit single-ref / zero-CBP / zero-MVD
+  `P_L0_16x16` subset, and the validated coefficient-driven
+  `P_L0_16x16` residual checkpoint in commit
+  `69aef76e387739ebc4b1b08d4147a6842dfc9124`
 - parameterized resolution
 - parameterized bit depth
 - parameterized chroma format
@@ -290,9 +306,12 @@ Implemented now relative to the chosen `x264` baseline:
 - Annex B bitstream generation owned by RTL
 - SPS / PPS / slice-header / macroblock-header ownership in RTL
 - CAVLC entropy path owned by RTL
+- in-loop deblocking and deblocked reconstructed-frame reference ownership for
+  the current validated path
 - current CABAC final-path subset on skip-capable P slices, with CABAC PPS
-  selection, CABAC-coded `mb_skip_flag`, CABAC-coded `end_of_slice_flag`,
-  and an explicit single-ref / zero-CBP / zero-MVD `P_L0_16x16` subset
+  selection, CABAC-coded `mb_skip_flag`, CABAC-coded `end_of_slice_flag`, an
+  explicit single-ref / zero-CBP / zero-MVD `P_L0_16x16` subset, and the
+  validated coefficient-driven `P_L0_16x16` residual checkpoint
 - I-picture and P-picture coding
 - non-reference `B`-picture syntax on the current intra / `I_PCM` path
 - limited non-reference `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` inter
@@ -426,6 +445,8 @@ Measured validation points:
   `P_L0_16x16` zero-CBP / single-ref / zero-MVD smoke, `47,268` cycles,
   `74` bytes, `Main` profile, `output/smoke_32x16_2f_cabac_p16x16.h264`, and
   `b_mode_summary.total_cabac_p16x16 = 2`
+- `32x16_2f_cabac_p16x16_residual`: strict FFmpeg-decodable 2-frame CABAC
+  `P_L0_16x16` residual checkpoint, `ffmpeg PASS`, `total_cabac_p16x16 >= 1`
 - `32x16_1f_nonipcm_10b420_main_ncfix`: strict FFmpeg-decodable one-frame
   non-`I_PCM` `10-bit 4:2:0` probe, RTL PSNR avg `7.9009`, RTL SSIM
   `0.345989`
@@ -1011,14 +1032,13 @@ H.264 encoder yet:
 - broader `4:4:4` chroma support beyond the current `320x176` strict-decode
   non-`I_PCM` path through `24` frames for `8-bit` and `10-bit`, plus spot
   `I_PCM` coverage
-- full in-loop deblocking engine
 - full-standard profile / level / tool coverage
 
 Still missing relative to the chosen `x264` software baseline:
 
 - full CABAC slice integration beyond the current standalone arithmetic core
-  and current skip-capable plus explicit zero-CBP / single-ref / zero-MVD
-  `P_L0_16x16` P-slice subset
+  and current coefficient-driven skip-capable plus explicit zero-CBP /
+  single-ref / zero-MVD `P_L0_16x16` P-slice checkpoint
 - broader inter-coded `B` / `BREF` picture handling and the associated
   reference management
 - reference-picture management beyond the current four-reference P-slice subset
@@ -1030,7 +1050,6 @@ Still missing relative to the chosen `x264` software baseline:
 - broader `I444` / `4:4:4` format coverage beyond the current `320x176`
   strict-decode non-`I_PCM` path through `24` frames for `8-bit` and
   `10-bit`, plus spot `I_PCM` coverage
-- in-loop deblocking
 - enough profile / level / tool coverage to stop calling the repo a subset
 
 Additional project-level open work:
