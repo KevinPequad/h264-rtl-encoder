@@ -202,10 +202,12 @@ module h264_cabac_core (
                 else if (carry_t)
                     overflow_t = 1'b1;
 
-                for (out_idx = 0; out_idx < 256; out_idx = out_idx + 1) begin
+                for (out_idx = 0; out_idx < 16; out_idx = out_idx + 1) begin
                     if (out_idx < outstanding_t)
                         append_byte(carry_t ? 8'h00 : 8'hFF, bits_accum_t, bit_count_t, overflow_t);
                 end
+                if (outstanding_t > 8'd16)
+                    overflow_t = 1'b1;
 
                 pending_byte_t = out_t[7:0];
                 pending_valid_t = 1'b1;
@@ -302,10 +304,12 @@ module h264_cabac_core (
                 append_byte(pending_byte_t, bits_accum_t, bit_count_t, overflow_t);
                 pending_valid_t = 1'b0;
             end
-            for (out_idx = 0; out_idx < 256; out_idx = out_idx + 1) begin
+            for (out_idx = 0; out_idx < 16; out_idx = out_idx + 1) begin
                 if (out_idx < outstanding_t)
                     append_byte(8'hFF, bits_accum_t, bit_count_t, overflow_t);
             end
+            if (outstanding_t > 8'd16)
+                overflow_t = 1'b1;
             outstanding_t = 8'd0;
         end
     endtask

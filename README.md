@@ -73,7 +73,7 @@ software encoder as the implementation baseline:
 - broader `B` / `BREF` picture support, broader direct-mode handling, and the
   associated reference management
 - broader standards-complete sub-pel motion handling across richer inter modes
-- broader inter partition and transform coverage including `8x8dct`-class tools
+- broader inter partition coverage beyond the current High-profile 8x8 transform gates
 - broader validated `4:4:4` support beyond the current `320x176`
   strict-decode non-`I_PCM` path and spot `I_PCM` coverage
 - broader profile and tool coverage
@@ -405,8 +405,8 @@ Important non-completion gaps:
   is not implemented
 - broader full-standard sub-pel motion handling beyond the current `16x16`
   quarter-pel luma path is not implemented
-- broader inter partition coverage and `8x8dct`-class transform support are not
-  implemented
+- broader inter partition coverage beyond the current High-profile 8x8
+  transform gates is not implemented
 - broader `4:4:4` chroma-format support beyond the current `320x176`
   strict-decode non-`I_PCM` path and spot `I_PCM` coverage is not implemented
 - full-standard profile / level / tool coverage is not implemented
@@ -434,6 +434,10 @@ Verified validation/features around the current encoder flow:
 - multi-frame validation at `1280x720`
 - PSNR / SSIM comparison scripts
 - x264 reference comparison scripts
+- standalone 8x8 transform / inverse-transform / quantization /
+  inverse-quantization gates at 8-bit and 10-bit, plus High-profile 8x8 smoke
+  coverage
+- chroma/profile/bit-depth validation on the `tpc_i_cavlc_8b420_4x4` row
 - side-by-side decoded-vs-source image generation
 - staged clean-build log capture for reproducible validation runs
 - simulator log and cycle-count capture for regressions

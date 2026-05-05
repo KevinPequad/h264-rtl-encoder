@@ -75,6 +75,7 @@ class SmokeCase:
     force_b_l1: int = 0
     force_b_direct: int = 0
     force_b_direct_temporal: int = 0
+    force_transform_8x8: int = 0
     force_b_bi_on_reorder_ref_slot: int = 0
     force_b_l0_on_reorder_ref_slot: int = 0
     force_b_l1_on_reorder_ref_slot: int = 0
@@ -108,6 +109,18 @@ CASES = [
         enable_p_ipcm=1,
         ipcm_sad_threshold=0,
         inter_sad_threshold=0,
+    ),
+    SmokeCase(
+        "smoke_8b_420_high8x8",
+        8,
+        1,
+        "smoke_32x16_2f_high8x8.yuv",
+        "smoke_32x16_2f_high8x8.h264",
+        enable_idr_ipcm=1,
+        enable_p_ipcm=1,
+        ipcm_sad_threshold=0,
+        inter_sad_threshold=0,
+        force_transform_8x8=1,
     ),
     SmokeCase(
         "smoke_8b_422",
@@ -716,6 +729,7 @@ def main() -> int:
             force_b_l1=case.force_b_l1,
             force_b_direct=case.force_b_direct,
             force_b_direct_temporal=case.force_b_direct_temporal,
+            force_transform_8x8=case.force_transform_8x8,
             force_b_bi_on_reorder_ref_slot=case.force_b_bi_on_reorder_ref_slot,
             force_b_l0_on_reorder_ref_slot=case.force_b_l0_on_reorder_ref_slot,
             force_b_l1_on_reorder_ref_slot=case.force_b_l1_on_reorder_ref_slot,
@@ -743,6 +757,7 @@ def main() -> int:
             force_b_l1=case.force_b_l1,
             force_b_direct=case.force_b_direct,
             force_b_direct_temporal=case.force_b_direct_temporal,
+            force_transform_8x8=case.force_transform_8x8,
             force_b_bi_on_reorder_ref_slot=case.force_b_bi_on_reorder_ref_slot,
             force_b_l0_on_reorder_ref_slot=case.force_b_l0_on_reorder_ref_slot,
             force_b_l1_on_reorder_ref_slot=case.force_b_l1_on_reorder_ref_slot,
