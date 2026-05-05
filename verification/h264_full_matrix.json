@@ -1,0 +1,2282 @@
+{
+  "default_selection_policy": {
+    "blocked_tiers_refuse_execution": [
+      "T2",
+      "T3"
+    ],
+    "must_select_case_or_tier_or_negative_or_audit": true,
+    "no_implicit_broad_run": true
+  },
+  "entries": [
+    {
+      "category": "existing_smoke",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "frames": 2
+      },
+      "id": "smoke_8b_420",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "ffprobe_profile_pixfmt",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "existing_smoke",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_422"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 2,
+        "frames": 2
+      },
+      "id": "smoke_8b_422",
+      "kind": "smoke_case",
+      "name": "smoke_8b_422",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "ffprobe_profile_pixfmt",
+        "trace_chroma_profile",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "existing_smoke",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_10b_420"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 10,
+        "chroma_format_idc": 1,
+        "frames": 2
+      },
+      "id": "smoke_10b_420",
+      "kind": "smoke_case",
+      "name": "smoke_10b_420",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "ffprobe_profile_pixfmt",
+        "trace_bit_depth",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "existing_smoke",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_10b_422"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 10,
+        "chroma_format_idc": 2,
+        "frames": 2
+      },
+      "id": "smoke_10b_422",
+      "kind": "smoke_case",
+      "name": "smoke_10b_422",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "ffprobe_profile_pixfmt",
+        "trace_bit_depth_chroma",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "existing_smoke",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_444_ipcm"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 3,
+        "frames": 2
+      },
+      "id": "smoke_8b_444_ipcm",
+      "kind": "smoke_case",
+      "name": "smoke_8b_444_ipcm",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "ffprobe_yuv444p",
+        "exact_decoded_framemd5",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "existing_smoke",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_10b_444_ipcm"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 10,
+        "chroma_format_idc": 3,
+        "frames": 2
+      },
+      "id": "smoke_10b_444_ipcm",
+      "kind": "smoke_case",
+      "name": "smoke_10b_444_ipcm",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "ffprobe_yuv444p10le",
+        "exact_decoded_framemd5",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "cabac_keep_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_cabac_pskip"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "enable_cabac_pskip": 1,
+        "frames": 4,
+        "require_skip_min": 6
+      },
+      "id": "smoke_8b_420_cabac_pskip",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420_cabac_pskip",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "ffprobe_main_profile",
+        "trace_entropy_coding_mode_flag",
+        "mode_counter_skip",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "cabac_keep_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_cabac_p16x16"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "enable_cabac_p16x16": 1,
+        "frames": 2,
+        "require_cabac_p16x16_min": 2
+      },
+      "id": "smoke_8b_420_cabac_p16x16",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420_cabac_p16x16",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "ffprobe_main_profile",
+        "mode_counter_cabac_p16x16",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "b_dpb_keep_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_bdirect"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "force_b_direct": 1,
+        "force_bref_slice": 1,
+        "frames": 3,
+        "reorder_b_gop": 1,
+        "require_direct_min": 1
+      },
+      "id": "smoke_8b_420_bdirect",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420_bdirect",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "mode_counter_direct",
+        "trace_slice_order",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "b_dpb_keep_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_bdirect_temporal"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "force_b_direct": 1,
+        "force_b_direct_temporal": 1,
+        "frames": 3,
+        "reorder_b_gop": 1
+      },
+      "id": "smoke_8b_420_bdirect_temporal",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420_bdirect_temporal",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "trace_temporal_direct",
+        "add_explicit_counter",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "b_dpb_keep_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_bdirect_temporal_bref"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "force_b_direct": 1,
+        "force_b_direct_temporal": 1,
+        "force_bref_slice": 1,
+        "frames": 3,
+        "reorder_b_gop": 1
+      },
+      "id": "smoke_8b_420_bdirect_temporal_bref",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420_bdirect_temporal_bref",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "trace_bref_direct",
+        "add_explicit_counter",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "b_dpb_keep_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_bdirect_temporal_ref1"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "frames": 7,
+        "require_direct_min": 1,
+        "require_direct_refgt0_min": 1
+      },
+      "id": "smoke_8b_420_bdirect_temporal_ref1",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420_bdirect_temporal_ref1",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "mode_counter_direct",
+        "mode_counter_direct_refgt0",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "b_dpb_keep_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_bdirect_temporal_auto_ref1"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "frames": 7,
+        "require_direct_min": 1,
+        "require_direct_refgt0_min": 1
+      },
+      "id": "smoke_8b_420_bdirect_temporal_auto_ref1",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420_bdirect_temporal_auto_ref1",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "mode_counter_direct",
+        "mode_counter_direct_refgt0",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "b_dpb_keep_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_bdirect_temporal_bref_ref1"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "frames": 7,
+        "require_direct_min": 1,
+        "require_direct_refgt0_min": 1,
+        "require_l0_refgt0_min": 1
+      },
+      "id": "smoke_8b_420_bdirect_temporal_bref_ref1",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420_bdirect_temporal_bref_ref1",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "mode_counter_direct",
+        "mode_counter_l0_refgt0",
+        "mode_counter_direct_refgt0",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "b_dpb_keep_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_bdirect_temporal_bref_auto_ref1"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "frames": 7,
+        "require_direct_min": 1,
+        "require_direct_refgt0_min": 1,
+        "require_l0_refgt0_min": 1
+      },
+      "id": "smoke_8b_420_bdirect_temporal_bref_auto_ref1",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420_bdirect_temporal_bref_auto_ref1",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "mode_counter_direct",
+        "mode_counter_l0_refgt0",
+        "mode_counter_direct_refgt0",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "b_dpb_keep_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_bref_l1_refslot"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "frames": 7,
+        "require_l1_min": 1
+      },
+      "id": "smoke_8b_420_bref_l1_refslot",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420_bref_l1_refslot",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "mode_counter_l1",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "b_dpb_keep_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_bdirect_temporal_bref_l1_ref1"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "frames": 7,
+        "require_direct_l1src_min": 1,
+        "require_direct_min": 1
+      },
+      "id": "smoke_8b_420_bdirect_temporal_bref_l1_ref1",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420_bdirect_temporal_bref_l1_ref1",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "mode_counter_direct",
+        "mode_counter_direct_l1src",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "b_dpb_keep_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_bdirect_temporal_bref_auto_l1_ref1"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "frames": 7,
+        "require_direct_l1src_min": 1,
+        "require_direct_min": 1
+      },
+      "id": "smoke_8b_420_bdirect_temporal_bref_auto_l1_ref1",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420_bdirect_temporal_bref_auto_l1_ref1",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "mode_counter_direct",
+        "mode_counter_direct_l1src",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "b_dpb_keep_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_bdirect_temporal_bref_bi_ref1"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "frames": 5,
+        "require_bi_min": 1,
+        "require_direct_l1src_min": 1,
+        "require_direct_min": 1,
+        "require_l0_refgt0_min": 1
+      },
+      "id": "smoke_8b_420_bdirect_temporal_bref_bi_ref1",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420_bdirect_temporal_bref_bi_ref1",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "mode_counter_bi",
+        "mode_counter_direct",
+        "mode_counter_l0_refgt0",
+        "mode_counter_direct_l1src",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "b_dpb_keep_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_bl0_ref1"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "frames": 7,
+        "require_l0_refgt0_min": 1
+      },
+      "id": "smoke_8b_420_bl0_ref1",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420_bl0_ref1",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "mode_counter_l0_refgt0",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "category": "b_dpb_keep_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_bmultiref_bi_l0ref1"
+      ],
+      "completion_claim": "keep_green_only_not_full_h264",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "frames": 5,
+        "require_bi_min": 1,
+        "require_l0_refgt0_min": 1
+      },
+      "id": "smoke_8b_420_bmultiref_bi_l0ref1",
+      "kind": "smoke_case",
+      "name": "smoke_8b_420_bmultiref_bi_l0ref1",
+      "pass_fail_notes": [],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "mode_counter_bi",
+        "mode_counter_l0_refgt0",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
+      "runtime_tier": "T0-GREEN",
+      "status": "ready",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_7da6cea5"
+      ],
+      "feature_lane_id": "HDR-001",
+      "id": "HDR-001:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "SPS/PPS profile_idc",
+        "constraint flags",
+        "bit_depth_luma/chroma_minus8",
+        "chroma_format_idc",
+        "entropy_coding_mode_flag",
+        "transform_8x8 flag"
+      ],
+      "name": "headers_profile_chroma_bit_depth",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "ffprobe_metadata",
+        "trace_headers",
+        "negative_profile_tool_mismatch"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_7da6cea5"
+      ],
+      "feature_lane_id": "HDR-001",
+      "id": "HDR-001:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "SPS/PPS profile_idc",
+        "constraint flags",
+        "bit_depth_luma/chroma_minus8",
+        "chroma_format_idc",
+        "entropy_coding_mode_flag",
+        "transform_8x8 flag"
+      ],
+      "name": "headers_profile_chroma_bit_depth",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "ffprobe_metadata",
+        "trace_headers",
+        "negative_profile_tool_mismatch"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "dependencies": [
+        "t_7da6cea5"
+      ],
+      "feature_lane_id": "HDR-002",
+      "id": "HDR-002:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "VUI timing",
+        "aspect/video signal",
+        "num_reorder_frames",
+        "max_dec_frame_buffering",
+        "HRD if in target"
+      ],
+      "name": "vui_hrd_timing_restriction",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "trace_headers_exact_fields",
+        "explicit_exclusion_if_HRD_not_targeted"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_7da6cea5"
+      ],
+      "feature_lane_id": "HDR-002",
+      "id": "HDR-002:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "VUI timing",
+        "aspect/video signal",
+        "num_reorder_frames",
+        "max_dec_frame_buffering",
+        "HRD if in target"
+      ],
+      "name": "vui_hrd_timing_restriction",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "trace_headers_exact_fields",
+        "explicit_exclusion_if_HRD_not_targeted"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "dependencies": [
+        "t_5b86ca2d",
+        "t_7da6cea5"
+      ],
+      "feature_lane_id": "HDR-003",
+      "id": "HDR-003:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "IDR",
+        "P",
+        "B",
+        "BREF",
+        "reordered GOP",
+        "multiref active count/list reordering",
+        "MMCO where used"
+      ],
+      "name": "slice_header_poc_ref_lists",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "trace_headers_slice_fields",
+        "ffmpeg_strict_decode",
+        "recon_hash_or_metrics"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_5b86ca2d",
+        "t_7da6cea5"
+      ],
+      "feature_lane_id": "HDR-003",
+      "id": "HDR-003:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "IDR",
+        "P",
+        "B",
+        "BREF",
+        "reordered GOP",
+        "multiref active count/list reordering",
+        "MMCO where used"
+      ],
+      "name": "slice_header_poc_ref_lists",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "trace_headers_slice_fields",
+        "ffmpeg_strict_decode",
+        "recon_hash_or_metrics"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "dependencies": [
+        "t_6c54d87f"
+      ],
+      "feature_lane_id": "ENT-CAVLC-001",
+      "id": "ENT-CAVLC-001:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "Intra16 luma DC",
+        "Intra16 luma AC maxNumCoeff=15",
+        "luma 4x4 maxNumCoeff=16",
+        "chroma DC",
+        "chroma AC maxNumCoeff=15",
+        "sparse/dense/sign cases"
+      ],
+      "name": "cavlc_residual_coordinate_coverage",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "strict_decode",
+        "residual_path_counters",
+        "framemd5_or_metrics"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_6c54d87f"
+      ],
+      "feature_lane_id": "ENT-CAVLC-001",
+      "id": "ENT-CAVLC-001:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "Intra16 luma DC",
+        "Intra16 luma AC maxNumCoeff=15",
+        "luma 4x4 maxNumCoeff=16",
+        "chroma DC",
+        "chroma AC maxNumCoeff=15",
+        "sparse/dense/sign cases"
+      ],
+      "name": "cavlc_residual_coordinate_coverage",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "strict_decode",
+        "residual_path_counters",
+        "framemd5_or_metrics"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "dependencies": [
+        "t_6c54d87f",
+        "t_cab9f5f1"
+      ],
+      "feature_lane_id": "ENT-CAVLC-002",
+      "id": "ENT-CAVLC-002:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "CBP luma masks",
+        "CBP chroma masks",
+        "QP delta negative/zero/positive",
+        "4:2:0/4:2:2/4:4:4 where target supports"
+      ],
+      "name": "cavlc_cbp_qp_chroma_sweeps",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "strict_decode",
+        "trace_or_probe_qp_cbp",
+        "no_silent_zero_cbp_fallback"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_6c54d87f",
+        "t_cab9f5f1"
+      ],
+      "feature_lane_id": "ENT-CAVLC-002",
+      "id": "ENT-CAVLC-002:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "CBP luma masks",
+        "CBP chroma masks",
+        "QP delta negative/zero/positive",
+        "4:2:0/4:2:2/4:4:4 where target supports"
+      ],
+      "name": "cavlc_cbp_qp_chroma_sweeps",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "strict_decode",
+        "trace_or_probe_qp_cbp",
+        "no_silent_zero_cbp_fallback"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "dependencies": [
+        "t_f5e1aa3e",
+        "t_6c54d87f"
+      ],
+      "feature_lane_id": "ENT-CABAC-001",
+      "id": "ENT-CABAC-001:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "P_SKIP",
+        "P_L0_16x16 zero-CBP"
+      ],
+      "name": "cabac_existing_subset_keep_green",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "strict_decode",
+        "main_profile",
+        "mode_counters"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_f5e1aa3e",
+        "t_6c54d87f"
+      ],
+      "feature_lane_id": "ENT-CABAC-002",
+      "id": "ENT-CABAC-002:T0-RED",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "CBP luma data-dependent",
+        "mb_qp_delta=0",
+        "CABAC residual bins from RTL quantized/zigzag coefficients",
+        "no CAVLC leakage in CABAC slice"
+      ],
+      "name": "cabac_p16x16_luma_residual_red_green",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "expected_red_failure_before_impl",
+        "strict_decode_after_impl",
+        "static_no_repair_audit",
+        "residual_counters"
+      ],
+      "runtime_tier": "T0-RED",
+      "status": "pending",
+      "tier": "T0-RED"
+    },
+    {
+      "dependencies": [
+        "t_f5e1aa3e",
+        "t_6c54d87f"
+      ],
+      "feature_lane_id": "ENT-CABAC-002",
+      "id": "ENT-CABAC-002:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "CBP luma data-dependent",
+        "mb_qp_delta=0",
+        "CABAC residual bins from RTL quantized/zigzag coefficients",
+        "no CAVLC leakage in CABAC slice"
+      ],
+      "name": "cabac_p16x16_luma_residual_red_green",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "expected_red_failure_before_impl",
+        "strict_decode_after_impl",
+        "static_no_repair_audit",
+        "residual_counters"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_f5e1aa3e",
+        "t_6c54d87f"
+      ],
+      "feature_lane_id": "ENT-CABAC-002",
+      "id": "ENT-CABAC-002:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "CBP luma data-dependent",
+        "mb_qp_delta=0",
+        "CABAC residual bins from RTL quantized/zigzag coefficients",
+        "no CAVLC leakage in CABAC slice"
+      ],
+      "name": "cabac_p16x16_luma_residual_red_green",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "expected_red_failure_before_impl",
+        "strict_decode_after_impl",
+        "static_no_repair_audit",
+        "residual_counters"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "dependencies": [
+        "t_6c54d87f"
+      ],
+      "feature_lane_id": "ENT-CABAC-003",
+      "id": "ENT-CABAC-003:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "coefficient maps",
+        "levels/signs",
+        "coded_block_flag contexts",
+        "chroma residual",
+        "I/P/B residual",
+        "QP delta"
+      ],
+      "name": "cabac_general_residual_cbp_qp_chroma",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "strict_decode",
+        "trace/probe counters",
+        "framemd5_or_metrics",
+        "no hardcoded scaffolding"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_6c54d87f"
+      ],
+      "feature_lane_id": "ENT-CABAC-003",
+      "id": "ENT-CABAC-003:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "coefficient maps",
+        "levels/signs",
+        "coded_block_flag contexts",
+        "chroma residual",
+        "I/P/B residual",
+        "QP delta"
+      ],
+      "name": "cabac_general_residual_cbp_qp_chroma",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "strict_decode",
+        "trace/probe counters",
+        "framemd5_or_metrics",
+        "no hardcoded scaffolding"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "dependencies": [
+        "t_957686ea"
+      ],
+      "feature_lane_id": "INTER-P-001",
+      "id": "INTER-P-001:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "ref_idx_l0 0 and >0",
+        "zero and nonzero MVD",
+        "integer and fractional MVs"
+      ],
+      "name": "p16x16_ref_idx_mvd_subpel",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "trace_or_probe_ref_mvd",
+        "strict_decode",
+        "recon_reference_consumption"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_957686ea"
+      ],
+      "feature_lane_id": "INTER-P-001",
+      "id": "INTER-P-001:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "ref_idx_l0 0 and >0",
+        "zero and nonzero MVD",
+        "integer and fractional MVs"
+      ],
+      "name": "p16x16_ref_idx_mvd_subpel",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "trace_or_probe_ref_mvd",
+        "strict_decode",
+        "recon_reference_consumption"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "dependencies": [
+        "t_957686ea"
+      ],
+      "feature_lane_id": "INTER-P-002",
+      "id": "INTER-P-002:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "P16x8",
+        "P8x16",
+        "P8x8",
+        "P8x4",
+        "P4x8",
+        "P4x4 where target includes"
+      ],
+      "name": "p_partitions_subpartitions",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "partition_counters",
+        "valid mb/sub_mb_type syntax",
+        "strict_decode",
+        "recon"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_957686ea"
+      ],
+      "feature_lane_id": "INTER-P-002",
+      "id": "INTER-P-002:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "P16x8",
+        "P8x16",
+        "P8x8",
+        "P8x4",
+        "P4x8",
+        "P4x4 where target includes"
+      ],
+      "name": "p_partitions_subpartitions",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "partition_counters",
+        "valid mb/sub_mb_type syntax",
+        "strict_decode",
+        "recon"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "dependencies": [
+        "t_957686ea"
+      ],
+      "feature_lane_id": "INTER-P-003",
+      "id": "INTER-P-003:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "qpel luma",
+        "chroma fractional interpolation",
+        "weighted_pred weights/offsets"
+      ],
+      "name": "subpel_chroma_fractional_weighted_p",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "fractional_selection_counters",
+        "strict_decode",
+        "metrics_or_recon_hash"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_957686ea"
+      ],
+      "feature_lane_id": "INTER-P-003",
+      "id": "INTER-P-003:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "qpel luma",
+        "chroma fractional interpolation",
+        "weighted_pred weights/offsets"
+      ],
+      "name": "subpel_chroma_fractional_weighted_p",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "fractional_selection_counters",
+        "strict_decode",
+        "metrics_or_recon_hash"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "dependencies": [
+        "t_5b86ca2d"
+      ],
+      "feature_lane_id": "BDPB-001",
+      "id": "BDPB-001:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "B_L0",
+        "B_L1",
+        "B_BI",
+        "B_DIRECT",
+        "B_SKIP",
+        "BREF",
+        "later smaller partitions"
+      ],
+      "name": "b_modes_by_partition",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "mode_counters",
+        "trace_slice_ref_lists",
+        "strict_decode",
+        "recon"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_5b86ca2d"
+      ],
+      "feature_lane_id": "BDPB-001",
+      "id": "BDPB-001:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "B_L0",
+        "B_L1",
+        "B_BI",
+        "B_DIRECT",
+        "B_SKIP",
+        "BREF",
+        "later smaller partitions"
+      ],
+      "name": "b_modes_by_partition",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "mode_counters",
+        "trace_slice_ref_lists",
+        "strict_decode",
+        "recon"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "dependencies": [
+        "t_5b86ca2d"
+      ],
+      "feature_lane_id": "BDPB-002",
+      "id": "BDPB-002:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "spatial direct",
+        "temporal direct",
+        "nonzero colocated refs",
+        "L1-derived colocated source"
+      ],
+      "name": "direct_colocated_metadata",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "direct_refgt0 counters",
+        "direct_l1src counters",
+        "decoded_output_sanity"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_5b86ca2d"
+      ],
+      "feature_lane_id": "BDPB-002",
+      "id": "BDPB-002:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "spatial direct",
+        "temporal direct",
+        "nonzero colocated refs",
+        "L1-derived colocated source"
+      ],
+      "name": "direct_colocated_metadata",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "direct_refgt0 counters",
+        "direct_l1src counters",
+        "decoded_output_sanity"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "dependencies": [
+        "t_5b86ca2d"
+      ],
+      "feature_lane_id": "BDPB-003",
+      "id": "BDPB-003:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "IDR reset",
+        "marking/eviction",
+        "list construction",
+        "list reordering",
+        "BREF stored and consumed later"
+      ],
+      "name": "dpb_reference_lifecycle",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "trace_headers_dpb_fields",
+        "debug_summary_state",
+        "framemd5/recon_no_stale_refs"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_5b86ca2d"
+      ],
+      "feature_lane_id": "BDPB-003",
+      "id": "BDPB-003:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "IDR reset",
+        "marking/eviction",
+        "list construction",
+        "list reordering",
+        "BREF stored and consumed later"
+      ],
+      "name": "dpb_reference_lifecycle",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "trace_headers_dpb_fields",
+        "debug_summary_state",
+        "framemd5/recon_no_stale_refs"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "dependencies": [
+        "t_5b86ca2d"
+      ],
+      "feature_lane_id": "BDPB-003",
+      "id": "BDPB-003:T2-blocked",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "IDR reset",
+        "marking/eviction",
+        "list construction",
+        "list reordering",
+        "BREF stored and consumed later"
+      ],
+      "name": "dpb_reference_lifecycle",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "trace_headers_dpb_fields",
+        "debug_summary_state",
+        "framemd5/recon_no_stale_refs"
+      ],
+      "runtime_tier": "T2-blocked",
+      "status": "pending",
+      "tier": "T2-blocked"
+    },
+    {
+      "dependencies": [
+        "t_cab9f5f1",
+        "t_6c54d87f"
+      ],
+      "feature_lane_id": "XFORM-001",
+      "id": "XFORM-001:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "8x8 transform",
+        "inverse",
+        "quant/dequant",
+        "scan",
+        "CAVLC/CABAC coefficient syntax",
+        "PPS transform_8x8_mode_flag"
+      ],
+      "name": "8x8_transform_quant_scan",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "standalone_oracle",
+        "strict_decode",
+        "trace_transform8x8_flags"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_cab9f5f1",
+        "t_6c54d87f"
+      ],
+      "feature_lane_id": "XFORM-001",
+      "id": "XFORM-001:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "8x8 transform",
+        "inverse",
+        "quant/dequant",
+        "scan",
+        "CAVLC/CABAC coefficient syntax",
+        "PPS transform_8x8_mode_flag"
+      ],
+      "name": "8x8_transform_quant_scan",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "standalone_oracle",
+        "strict_decode",
+        "trace_transform8x8_flags"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "dependencies": [
+        "t_cab9f5f1",
+        "t_6c54d87f"
+      ],
+      "feature_lane_id": "PROF-COLOR-001",
+      "id": "PROF-COLOR-001:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "4:2:0",
+        "4:2:2",
+        "4:4:4",
+        "8-bit",
+        "10-bit",
+        "non-I_PCM intra/inter/B",
+        "chroma residual syntax"
+      ],
+      "name": "chroma_bitdepth_profile_non_ipcm",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "ffprobe_pix_fmt_profile",
+        "chroma_residual_counters",
+        "strict_decode",
+        "framemd5_or_metrics"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_cab9f5f1",
+        "t_6c54d87f"
+      ],
+      "feature_lane_id": "PROF-COLOR-001",
+      "id": "PROF-COLOR-001:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "4:2:0",
+        "4:2:2",
+        "4:4:4",
+        "8-bit",
+        "10-bit",
+        "non-I_PCM intra/inter/B",
+        "chroma residual syntax"
+      ],
+      "name": "chroma_bitdepth_profile_non_ipcm",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "ffprobe_pix_fmt_profile",
+        "chroma_residual_counters",
+        "strict_decode",
+        "framemd5_or_metrics"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "dependencies": [
+        "t_22f80755"
+      ],
+      "feature_lane_id": "DEBLOCK-001",
+      "id": "DEBLOCK-001:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "boundary strength",
+        "luma/chroma edge filters",
+        "QP alpha/beta/tc",
+        "slice-edge behavior"
+      ],
+      "name": "deblocking_standalone_oracle",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "rtl_matches_oracle"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_22f80755"
+      ],
+      "feature_lane_id": "DEBLOCK-002",
+      "id": "DEBLOCK-002:T0-GREEN",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "future P/B frames consume deblocked refs",
+        "header disable/enable consistency"
+      ],
+      "name": "deblocked_reference_writeback",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "strict_decode",
+        "recon_hash_proves_filtered_ref",
+        "negative_deblock_header_mismatch"
+      ],
+      "runtime_tier": "T0-GREEN",
+      "status": "pending",
+      "tier": "T0-GREEN"
+    },
+    {
+      "dependencies": [
+        "t_22f80755"
+      ],
+      "feature_lane_id": "DEBLOCK-002",
+      "id": "DEBLOCK-002:T1",
+      "kind": "feature_lane_placeholder",
+      "must_cover": [
+        "future P/B frames consume deblocked refs",
+        "header disable/enable consistency"
+      ],
+      "name": "deblocked_reference_writeback",
+      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
+      "required_gates": [
+        "strict_decode",
+        "recon_hash_proves_filtered_ref",
+        "negative_deblock_header_mismatch"
+      ],
+      "runtime_tier": "T1",
+      "status": "pending",
+      "tier": "T1"
+    },
+    {
+      "id": "LONG-T2-BLOCKED-GUARD",
+      "kind": "blocked_long_tier_guard",
+      "name": "1280x720 @ 24f broad pre-final gate",
+      "reason": "T2 is intentionally blocked until all feature lanes green/reviewed and target settled; the harness may list this guard but must not execute it.",
+      "required_gates": [
+        "feature_lane_closeout",
+        "OWN-001",
+        "review_release"
+      ],
+      "runtime_tier": "T2",
+      "status": "blocked",
+      "tier": "T2"
+    },
+    {
+      "id": "LONG-T3-BLOCKED-GUARD",
+      "kind": "blocked_long_tier_guard",
+      "name": "1280x720 @ 240f / 10s Big Buck Bunny final validation gate",
+      "reason": "T3 is intentionally blocked until T2 green plus feature closeout/final gate release; the harness may list this guard but must not execute it.",
+      "required_gates": [
+        "feature_lane_closeout",
+        "OWN-001",
+        "review_release"
+      ],
+      "runtime_tier": "T3",
+      "status": "blocked",
+      "tier": "T3"
+    }
+  ],
+  "feature_lanes": [
+    {
+      "dependencies": [
+        "t_7da6cea5"
+      ],
+      "id": "HDR-001",
+      "lane": "headers_profile_chroma_bit_depth",
+      "must_cover": [
+        "SPS/PPS profile_idc",
+        "constraint flags",
+        "bit_depth_luma/chroma_minus8",
+        "chroma_format_idc",
+        "entropy_coding_mode_flag",
+        "transform_8x8 flag"
+      ],
+      "pass_gates": [
+        "ffprobe_metadata",
+        "trace_headers",
+        "negative_profile_tool_mismatch"
+      ],
+      "status": "pending",
+      "tiers": [
+        "T0-GREEN",
+        "T1"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_7da6cea5"
+      ],
+      "id": "HDR-002",
+      "lane": "vui_hrd_timing_restriction",
+      "must_cover": [
+        "VUI timing",
+        "aspect/video signal",
+        "num_reorder_frames",
+        "max_dec_frame_buffering",
+        "HRD if in target"
+      ],
+      "pass_gates": [
+        "trace_headers_exact_fields",
+        "explicit_exclusion_if_HRD_not_targeted"
+      ],
+      "status": "pending_target",
+      "tiers": [
+        "T0-GREEN",
+        "T1"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_5b86ca2d",
+        "t_7da6cea5"
+      ],
+      "id": "HDR-003",
+      "lane": "slice_header_poc_ref_lists",
+      "must_cover": [
+        "IDR",
+        "P",
+        "B",
+        "BREF",
+        "reordered GOP",
+        "multiref active count/list reordering",
+        "MMCO where used"
+      ],
+      "pass_gates": [
+        "trace_headers_slice_fields",
+        "ffmpeg_strict_decode",
+        "recon_hash_or_metrics"
+      ],
+      "status": "pending",
+      "tiers": [
+        "T0-GREEN",
+        "T1"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_6c54d87f"
+      ],
+      "id": "ENT-CAVLC-001",
+      "lane": "cavlc_residual_coordinate_coverage",
+      "must_cover": [
+        "Intra16 luma DC",
+        "Intra16 luma AC maxNumCoeff=15",
+        "luma 4x4 maxNumCoeff=16",
+        "chroma DC",
+        "chroma AC maxNumCoeff=15",
+        "sparse/dense/sign cases"
+      ],
+      "pass_gates": [
+        "strict_decode",
+        "residual_path_counters",
+        "framemd5_or_metrics"
+      ],
+      "status": "pending",
+      "tiers": [
+        "T0-GREEN",
+        "T1"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_6c54d87f",
+        "t_cab9f5f1"
+      ],
+      "id": "ENT-CAVLC-002",
+      "lane": "cavlc_cbp_qp_chroma_sweeps",
+      "must_cover": [
+        "CBP luma masks",
+        "CBP chroma masks",
+        "QP delta negative/zero/positive",
+        "4:2:0/4:2:2/4:4:4 where target supports"
+      ],
+      "pass_gates": [
+        "strict_decode",
+        "trace_or_probe_qp_cbp",
+        "no_silent_zero_cbp_fallback"
+      ],
+      "status": "pending",
+      "tiers": [
+        "T0-GREEN",
+        "T1"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_f5e1aa3e",
+        "t_6c54d87f"
+      ],
+      "id": "ENT-CABAC-001",
+      "lane": "cabac_existing_subset_keep_green",
+      "must_cover": [
+        "P_SKIP",
+        "P_L0_16x16 zero-CBP"
+      ],
+      "pass_gates": [
+        "strict_decode",
+        "main_profile",
+        "mode_counters"
+      ],
+      "status": "keep_green_not_complete",
+      "tiers": [
+        "T0-GREEN"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_f5e1aa3e",
+        "t_6c54d87f"
+      ],
+      "id": "ENT-CABAC-002",
+      "lane": "cabac_p16x16_luma_residual_red_green",
+      "must_cover": [
+        "CBP luma data-dependent",
+        "mb_qp_delta=0",
+        "CABAC residual bins from RTL quantized/zigzag coefficients",
+        "no CAVLC leakage in CABAC slice"
+      ],
+      "pass_gates": [
+        "expected_red_failure_before_impl",
+        "strict_decode_after_impl",
+        "static_no_repair_audit",
+        "residual_counters"
+      ],
+      "status": "pending_required_first",
+      "tiers": [
+        "T0-RED",
+        "T0-GREEN",
+        "T1"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_6c54d87f"
+      ],
+      "id": "ENT-CABAC-003",
+      "lane": "cabac_general_residual_cbp_qp_chroma",
+      "must_cover": [
+        "coefficient maps",
+        "levels/signs",
+        "coded_block_flag contexts",
+        "chroma residual",
+        "I/P/B residual",
+        "QP delta"
+      ],
+      "pass_gates": [
+        "strict_decode",
+        "trace/probe counters",
+        "framemd5_or_metrics",
+        "no hardcoded scaffolding"
+      ],
+      "status": "pending_highest_risk",
+      "tiers": [
+        "T0-GREEN",
+        "T1"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_957686ea"
+      ],
+      "id": "INTER-P-001",
+      "lane": "p16x16_ref_idx_mvd_subpel",
+      "must_cover": [
+        "ref_idx_l0 0 and >0",
+        "zero and nonzero MVD",
+        "integer and fractional MVs"
+      ],
+      "pass_gates": [
+        "trace_or_probe_ref_mvd",
+        "strict_decode",
+        "recon_reference_consumption"
+      ],
+      "status": "pending",
+      "tiers": [
+        "T0-GREEN",
+        "T1"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_957686ea"
+      ],
+      "id": "INTER-P-002",
+      "lane": "p_partitions_subpartitions",
+      "must_cover": [
+        "P16x8",
+        "P8x16",
+        "P8x8",
+        "P8x4",
+        "P4x8",
+        "P4x4 where target includes"
+      ],
+      "pass_gates": [
+        "partition_counters",
+        "valid mb/sub_mb_type syntax",
+        "strict_decode",
+        "recon"
+      ],
+      "status": "pending",
+      "tiers": [
+        "T0-GREEN",
+        "T1"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_957686ea"
+      ],
+      "id": "INTER-P-003",
+      "lane": "subpel_chroma_fractional_weighted_p",
+      "must_cover": [
+        "qpel luma",
+        "chroma fractional interpolation",
+        "weighted_pred weights/offsets"
+      ],
+      "pass_gates": [
+        "fractional_selection_counters",
+        "strict_decode",
+        "metrics_or_recon_hash"
+      ],
+      "status": "pending",
+      "tiers": [
+        "T0-GREEN",
+        "T1"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_5b86ca2d"
+      ],
+      "id": "BDPB-001",
+      "lane": "b_modes_by_partition",
+      "must_cover": [
+        "B_L0",
+        "B_L1",
+        "B_BI",
+        "B_DIRECT",
+        "B_SKIP",
+        "BREF",
+        "later smaller partitions"
+      ],
+      "pass_gates": [
+        "mode_counters",
+        "trace_slice_ref_lists",
+        "strict_decode",
+        "recon"
+      ],
+      "status": "pending",
+      "tiers": [
+        "T0-GREEN",
+        "T1"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_5b86ca2d"
+      ],
+      "id": "BDPB-002",
+      "lane": "direct_colocated_metadata",
+      "must_cover": [
+        "spatial direct",
+        "temporal direct",
+        "nonzero colocated refs",
+        "L1-derived colocated source"
+      ],
+      "pass_gates": [
+        "direct_refgt0 counters",
+        "direct_l1src counters",
+        "decoded_output_sanity"
+      ],
+      "status": "pending",
+      "tiers": [
+        "T0-GREEN",
+        "T1"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_5b86ca2d"
+      ],
+      "id": "BDPB-003",
+      "lane": "dpb_reference_lifecycle",
+      "must_cover": [
+        "IDR reset",
+        "marking/eviction",
+        "list construction",
+        "list reordering",
+        "BREF stored and consumed later"
+      ],
+      "pass_gates": [
+        "trace_headers_dpb_fields",
+        "debug_summary_state",
+        "framemd5/recon_no_stale_refs"
+      ],
+      "status": "pending",
+      "tiers": [
+        "T0-GREEN",
+        "T1",
+        "T2-blocked"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_cab9f5f1",
+        "t_6c54d87f"
+      ],
+      "id": "XFORM-001",
+      "lane": "8x8_transform_quant_scan",
+      "must_cover": [
+        "8x8 transform",
+        "inverse",
+        "quant/dequant",
+        "scan",
+        "CAVLC/CABAC coefficient syntax",
+        "PPS transform_8x8_mode_flag"
+      ],
+      "pass_gates": [
+        "standalone_oracle",
+        "strict_decode",
+        "trace_transform8x8_flags"
+      ],
+      "status": "pending_target_or_exclusion",
+      "tiers": [
+        "T0-GREEN",
+        "T1"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_cab9f5f1",
+        "t_6c54d87f"
+      ],
+      "id": "PROF-COLOR-001",
+      "lane": "chroma_bitdepth_profile_non_ipcm",
+      "must_cover": [
+        "4:2:0",
+        "4:2:2",
+        "4:4:4",
+        "8-bit",
+        "10-bit",
+        "non-I_PCM intra/inter/B",
+        "chroma residual syntax"
+      ],
+      "pass_gates": [
+        "ffprobe_pix_fmt_profile",
+        "chroma_residual_counters",
+        "strict_decode",
+        "framemd5_or_metrics"
+      ],
+      "status": "pending",
+      "tiers": [
+        "T0-GREEN",
+        "T1"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_22f80755"
+      ],
+      "id": "DEBLOCK-001",
+      "lane": "deblocking_standalone_oracle",
+      "must_cover": [
+        "boundary strength",
+        "luma/chroma edge filters",
+        "QP alpha/beta/tc",
+        "slice-edge behavior"
+      ],
+      "pass_gates": [
+        "rtl_matches_oracle"
+      ],
+      "status": "pending_final_blocker",
+      "tiers": [
+        "T0-GREEN"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_22f80755"
+      ],
+      "id": "DEBLOCK-002",
+      "lane": "deblocked_reference_writeback",
+      "must_cover": [
+        "future P/B frames consume deblocked refs",
+        "header disable/enable consistency"
+      ],
+      "pass_gates": [
+        "strict_decode",
+        "recon_hash_proves_filtered_ref",
+        "negative_deblock_header_mismatch"
+      ],
+      "status": "pending_final_blocker",
+      "tiers": [
+        "T0-GREEN",
+        "T1"
+      ]
+    },
+    {
+      "dependencies": [
+        "t_a51ca15b",
+        "t_8345b667"
+      ],
+      "id": "OWN-001",
+      "lane": "rtl_byte_ownership_no_repair",
+      "must_cover": [
+        "tb static audit",
+        "scripts static audit",
+        "allowed capture/package/decode only",
+        "no final syntax authoring outside RTL"
+      ],
+      "pass_gates": [
+        "static_audit_pass",
+        "reviewer_approval"
+      ],
+      "status": "required_for_every_review",
+      "tiers": [
+        "all"
+      ]
+    }
+  ],
+  "generated_by_task": "t_a51ca15b",
+  "global_contract": {
+    "allowed_testbench_actions": [
+      "generate_input_yuv",
+      "build/run Verilator",
+      "capture RTL bytes",
+      "package existing bytes as MP4",
+      "decode/probe/hash/metric/visualize"
+    ],
+    "fail_on": [
+      "decoder_error_pattern",
+      "missing_artifact",
+      "counter_below_minimum",
+      "header_trace_mismatch",
+      "software_testbench_byte_repair",
+      "current_21_smokes_claimed_as_full_completion"
+    ],
+    "forbidden_testbench_actions": [
+      "author SPS/PPS/slice/macroblock/residual syntax",
+      "rewrite/pad/patch RTL bytes to satisfy decoder",
+      "silently fall back from requested feature to smaller subset"
+    ],
+    "pass_requires": [
+      "rtl_sim_exit_zero",
+      "sim_summary",
+      "rtl_emitted_bytes_only",
+      "ffmpeg_strict_decode_no_known_errors",
+      "ffprobe_metadata_match",
+      "trace_headers_when_header_sensitive",
+      "framemd5_or_metrics_when_applicable",
+      "feature_counters_minimums",
+      "negative_tests_fail_for_intended_reason",
+      "pending_items_not_counted_as_pass"
+    ]
+  },
+  "long_tier_release_conditions": [
+    "existing 21 smoke cases green under updated runner",
+    "CABAC residual/generalized entropy lanes green or explicitly user-approved exclusions (not acceptable for full-standard completion)",
+    "CAVLC/P/B-DPB/headers/profile-color/deblock lanes have T0/T1 evidence",
+    "OWN-001 no-repair audit passes independently",
+    "all pending target/exclusions resolved"
+  ],
+  "negative_tests": [
+    {
+      "builtin": null,
+      "expected": "FAIL trace mismatch or decoder rejection; never PASS",
+      "id": "NEG-PROFILE-001",
+      "intent": "CABAC/header entropy mismatch",
+      "kind": "negative_test",
+      "runtime_tier": "T0-RED",
+      "status": "pending_fixture",
+      "tier": "T0-RED"
+    },
+    {
+      "builtin": null,
+      "expected": "FAIL or explicit pending/excluded target",
+      "id": "NEG-PROFILE-002",
+      "intent": "8x8 transform/profile/PPS mismatch",
+      "kind": "negative_test",
+      "runtime_tier": "T0-RED",
+      "status": "pending_fixture",
+      "tier": "T0-RED"
+    },
+    {
+      "builtin": null,
+      "expected": "FAIL ffprobe/trace mismatch",
+      "id": "NEG-CHROMA-001",
+      "intent": "profile/bit-depth/chroma_format_idc mismatch",
+      "kind": "negative_test",
+      "runtime_tier": "T0-RED",
+      "status": "pending_fixture",
+      "tier": "T0-RED"
+    },
+    {
+      "builtin": null,
+      "expected": "FAIL static no-repair audit even if FFmpeg decodes",
+      "id": "NEG-CABAC-001",
+      "intent": "CAVLC residual fragments or byte repair inside CABAC slice",
+      "kind": "negative_test",
+      "runtime_tier": "T0-RED",
+      "status": "pending_fixture",
+      "tier": "T0-RED"
+    },
+    {
+      "builtin": null,
+      "expected": "UNSUPPORTED/PENDING without success artifact; no silent fallback",
+      "id": "NEG-UNSUPPORTED-001",
+      "intent": "unsupported partition/toggle requested",
+      "kind": "negative_test",
+      "runtime_tier": "T0-RED",
+      "status": "pending_fixture",
+      "tier": "T0-RED"
+    },
+    {
+      "builtin": "malformed_bitstream_decode",
+      "expected": "FAIL decode-error parser",
+      "id": "NEG-MALFORMED-001",
+      "intent": "truncated/bit-flipped output",
+      "kind": "negative_test",
+      "runtime_tier": "T0-RED",
+      "status": "runnable",
+      "tier": "T0-RED"
+    },
+    {
+      "builtin": "decode_error_parser_samples",
+      "expected": "Each known pattern is fatal",
+      "id": "NEG-ERRORPAT-001",
+      "intent": "unit-test decoder stderr patterns",
+      "kind": "negative_test",
+      "runtime_tier": "T0-RED",
+      "status": "runnable",
+      "tier": "T0-RED"
+    },
+    {
+      "builtin": "rtl_ownership_poisoned_fixture",
+      "expected": "RED_EXPECTED_FAIL from a synthetic repair fixture caught by the no-repair audit",
+      "id": "NEG-REPAIR-001",
+      "intent": "testbench/script writes final H.264 syntax in a synthetic poisoned fixture",
+      "kind": "negative_test",
+      "runtime_tier": "T0-RED",
+      "status": "runnable",
+      "tier": "T0-RED"
+    },
+    {
+      "builtin": null,
+      "expected": "FAIL trace mismatch or PENDING target ambiguity",
+      "id": "NEG-HRD-001",
+      "intent": "HRD/VUI target mismatch",
+      "kind": "negative_test",
+      "runtime_tier": "T0-RED",
+      "status": "pending_fixture",
+      "tier": "T0-RED"
+    },
+    {
+      "builtin": null,
+      "expected": "FAIL final matrix unless explicit disabled-deblock target is traced",
+      "id": "NEG-DEBLOCK-001",
+      "intent": "deblocking headers inconsistent with implementation/reference writeback proof",
+      "kind": "negative_test",
+      "runtime_tier": "T0-RED",
+      "status": "pending_fixture",
+      "tier": "T0-RED"
+    }
+  ],
+  "public_decoder_gates": {
+    "ffmpeg_strict_decode": "ffmpeg -hide_banner -nostdin -v error -xerror -err_detect explode -i <rtl.h264> -f null -",
+    "ffprobe_metadata": "ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,profile,level,width,height,pix_fmt,refs,has_b_frames -of json <rtl.h264>",
+    "framemd5": "ffmpeg -hide_banner -v error -i <rtl.h264> -f framemd5 <decoded.framemd5>",
+    "trace_headers": "ffmpeg -hide_banner -v trace -i <rtl.h264> -c:v copy -bsf:v trace_headers -f null - 2> <trace_headers.log>"
+  },
+  "rtl_ownership_audit": {
+    "allowed_packaging_only_files": [
+      "scripts/package_mp4.py"
+    ],
+    "allowed_reference_only_patterns": [
+      "libx264 reference output in scripts/validate_clip.py"
+    ],
+    "forbidden_patterns": [
+      "software-authored SPS/PPS/slice/macroblock/residual syntax for the final RTL output",
+      "rewrite/pad/patch/backpatch/truncate of RTL-emitted .h264 bytes",
+      "silent fallback from requested feature lane to a smaller supported subset"
+    ],
+    "required_evidence": [
+      "rtl exposes bs_mem_addr/bs_mem_data/bs_mem_wr/bs_bytes_written",
+      "testbench copies only dut->bs_mem_data at dut->bs_mem_addr while dut->bs_mem_wr is asserted",
+      "final .h264 write uses bitstream_mem[0:bs_bytes_written] captured from RTL"
+    ],
+    "scan_paths": [
+      "tb",
+      "scripts"
+    ]
+  },
+  "runtime_tiers": {
+    "T0-GREEN": {
+      "allowed_now": true,
+      "purpose": "fast feature regression/keep-green gate",
+      "size": "32x16 focused 1-7f"
+    },
+    "T0-RED": {
+      "allowed_now": true,
+      "purpose": "expected failing feature gate before implementation",
+      "size": "smallest legal fixture, normally 32x16 1-7f"
+    },
+    "T1": {
+      "allowed_now": "only after relevant T0 green",
+      "purpose": "integration scale gate",
+      "size": "320x176 24f"
+    },
+    "T2": {
+      "allowed_now": false,
+      "blocked_until": "all feature lanes green/reviewed and target settled",
+      "size": "1280x720 24f"
+    },
+    "T3": {
+      "allowed_now": false,
+      "blocked_until": "T2 green plus feature closeout/final gate release",
+      "size": "1280x720 240f 10s Big Buck Bunny"
+    }
+  },
+  "schema_version": "h264-verification-manifest/v1",
+  "source_contract": {
+    "observed_branch": "asic-readiness-main",
+    "observed_commit": "ee66cdd",
+    "observed_repo": "/home/chudpc/code/h264-rtl-encoder",
+    "path": "/home/chudpc/.hermes/kanban/workspaces/t_f29fe210/h264_verification_matrix_manifest_t_f29fe210.json",
+    "sha256": "2d9fd99415b35813836c4518be6caa881e69d0b67c461d2eb534529a9dd90cea",
+    "task_id": "t_f29fe210"
+  },
+  "status_values": [
+    "PASS",
+    "FAIL",
+    "RED_EXPECTED_FAIL",
+    "PENDING",
+    "BLOCKED",
+    "UNSUPPORTED",
+    "DRY_RUN"
+  ]
+}
