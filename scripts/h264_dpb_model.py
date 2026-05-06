@@ -140,29 +140,76 @@ def _frame_num_wrap(frame_num: int, max_frame_num: int) -> int:
     return frame_num % max_frame_num
 
 
-def _sort_short_term_for_p(active_refs: Sequence[DpbPicture]) -> tuple[DpbPicture, ...]:
-    return tuple(sorted(active_refs, key=lambda pic: (-pic.pic_num, -pic.frame_num_wrap, -pic.bank_id)))
+def _short_term_pic_num(pic: DpbPicture, current_frame_num: int, max_frame_num: int) -> int:
+    """Return the H.264 short-term PicNum relative to the current picture."""
+
+    current_frame_num_wrap = _frame_num_wrap(current_frame_num, max_frame_num)
+    ref_frame_num_wrap = _frame_num_wrap(pic.frame_num, max_frame_num)
+    if ref_frame_num_wrap > current_frame_num_wrap:
+        return ref_frame_num_wrap - max_frame_num
+    return ref_frame_num_wrap
 
 
-def _sort_past_refs(active_refs: Sequence[DpbPicture], current_poc: int) -> tuple[DpbPicture, ...]:
+def _sort_short_term_for_p(
+    active_refs: Sequence[DpbPicture], current_frame_num: int, max_frame_num: int
+) -> tuple[DpbPicture, ...]:
+    return tuple(
+        sorted(
+            active_refs,
+            key=lambda pic: (
+                -_short_term_pic_num(pic, current_frame_num, max_frame_num),
+                -pic.poc,
+                -pic.bank_id,
+            ),
+        )
+    )
+
+
+def _sort_past_refs(
+    active_refs: Sequence[DpbPicture], current_poc: int, current_frame_num: int, max_frame_num: int
+) -> tuple[DpbPicture, ...]:
     past_refs = [pic for pic in active_refs if pic.poc < current_poc]
-    return tuple(sorted(past_refs, key=lambda pic: (-pic.poc, -pic.frame_num_wrap, -pic.bank_id)))
+    return tuple(
+        sorted(
+            past_refs,
+            key=lambda pic: (
+                -pic.poc,
+                -_short_term_pic_num(pic, current_frame_num, max_frame_num),
+                -pic.bank_id,
+            ),
+        )
+    )
 
 
-def _sort_future_refs(active_refs: Sequence[DpbPicture], current_poc: int) -> tuple[DpbPicture, ...]:
+def _sort_future_refs(
+    active_refs: Sequence[DpbPicture], current_poc: int, current_frame_num: int, max_frame_num: int
+) -> tuple[DpbPicture, ...]:
     future_refs = [pic for pic in active_refs if pic.poc > current_poc]
-    return tuple(sorted(future_refs, key=lambda pic: (pic.poc, pic.frame_num_wrap, pic.bank_id)))
+    return tuple(
+        sorted(
+            future_refs,
+            key=lambda pic: (
+                pic.poc,
+                -_short_term_pic_num(pic, current_frame_num, max_frame_num),
+                pic.bank_id,
+            ),
+        )
+    )
 
 
 def _bank_ids(pictures: Sequence[DpbPicture]) -> tuple[int, ...]:
     return tuple(pic.bank_id for pic in pictures)
 
 
-def _truncate_list(ref_list: tuple[int, ...], active_count: int | None) -> tuple[int, ...]:
+def _truncate_list(ref_list: tuple[int, ...], active_count: int | None, list_name: str) -> tuple[int, ...]:
     if active_count is None:
         return ref_list
-    if active_count < 0:
-        raise ValueError("active ref count must be >= 0")
+    if active_count < 1:
+        raise ValueError(f"{list_name} active ref count must be >= 1")
+    if active_count > len(ref_list):
+        raise ValueError(
+            f"{list_name} active ref count {active_count} exceeds available references {len(ref_list)}"
+        )
     return ref_list[:active_count]
 
 
@@ -189,7 +236,10 @@ def _build_selected_list(
         _validate_requested_list(requested, default_list, list_name)
         selected = requested
         reordering_required = requested != default_list
-    return _truncate_list(selected, active_count), reordering_required
+    selected = _truncate_list(selected, active_count, list_name)
+    if not selected:
+        raise ValueError(f"{list_name} selects zero reference pictures")
+    return selected, reordering_required
 
 
 def build_default_lists(
@@ -198,26 +248,32 @@ def build_default_lists(
     current_pic_num: int,
     *,
     is_b_picture: bool,
+    max_frame_num: int = 1 << 8,
 ) -> tuple[tuple[int, ...], tuple[int, ...]]:
     """Return the standard default List0/List1 bank order for a picture."""
 
     if is_b_picture:
-        past_refs = _sort_past_refs(active_refs, current_poc)
-        future_refs = _sort_future_refs(active_refs, current_poc)
+        past_refs = _sort_past_refs(active_refs, current_poc, current_pic_num, max_frame_num)
+        future_refs = _sort_future_refs(active_refs, current_poc, current_pic_num, max_frame_num)
         list0 = _bank_ids(past_refs + future_refs)
         list1 = _bank_ids(future_refs + past_refs)
         if len(list1) > 1 and list1 == list0:
             list1 = (list1[1], list1[0], *list1[2:])
         return list0, list1
 
-    short_term_refs = _sort_short_term_for_p(active_refs)
+    short_term_refs = _sort_short_term_for_p(active_refs, current_pic_num, max_frame_num)
     return _bank_ids(short_term_refs), ()
 
 
-def _evict_oldest_short_term(active_refs: list[DpbPicture]) -> tuple[DpbPicture | None, list[DpbPicture]]:
+def _evict_oldest_short_term(
+    active_refs: list[DpbPicture], current_frame_num: int, max_frame_num: int
+) -> tuple[DpbPicture | None, list[DpbPicture]]:
     if not active_refs:
         return None, active_refs
-    oldest = min(active_refs, key=lambda pic: (pic.frame_num_wrap, pic.poc, pic.bank_id))
+    oldest = min(
+        active_refs,
+        key=lambda pic: (_short_term_pic_num(pic, current_frame_num, max_frame_num), pic.poc, pic.bank_id),
+    )
     active_refs.remove(oldest)
     return oldest, active_refs
 
@@ -263,8 +319,9 @@ def simulate_dpb_timeline(
             default_list0, default_list1 = build_default_lists(
                 active_refs,
                 poc,
-                frame_num_wrap,
+                frame.frame_num,
                 is_b_picture=frame.is_b_picture,
+                max_frame_num=max_frame_num,
             )
             selected_list0, reordering_required_l0 = _build_selected_list(
                 default_list=default_list0,
@@ -289,7 +346,7 @@ def simulate_dpb_timeline(
 
         if frame.is_reference_picture and not frame.is_idr:
             while len(active_refs) >= max_short_term_refs:
-                evicted, active_refs = _evict_oldest_short_term(active_refs)
+                evicted, active_refs = _evict_oldest_short_term(active_refs, frame.frame_num, max_frame_num)
                 if evicted is None:
                     break
                 allocator = allocator.release_many((evicted.bank_id,))
