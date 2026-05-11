@@ -141,13 +141,17 @@ def _frame_num_wrap(frame_num: int, max_frame_num: int) -> int:
 
 
 def _short_term_pic_num(pic: DpbPicture, current_frame_num: int, max_frame_num: int) -> int:
-    """Return the H.264 short-term PicNum relative to the current picture."""
+    """Return stateful short-term PicNum/order value for this model.
 
-    current_frame_num_wrap = _frame_num_wrap(current_frame_num, max_frame_num)
-    ref_frame_num_wrap = _frame_num_wrap(pic.frame_num, max_frame_num)
-    if ref_frame_num_wrap > current_frame_num_wrap:
-        return ref_frame_num_wrap - max_frame_num
-    return ref_frame_num_wrap
+    Frame numbers in slice syntax wrap modulo MaxFrameNum, but this timeline
+    model keeps a stateful unwrapped frame number in DpbPicture.frame_num.
+    Ordering by the unwrapped value preserves reference age across repeated
+    modulo cycles; reducing both sides with % max_frame_num collapses refs
+    from different cycles and can make stale pictures look newest.
+    """
+
+    _ = (current_frame_num, max_frame_num)
+    return pic.frame_num
 
 
 def _sort_short_term_for_p(
@@ -298,10 +302,19 @@ def simulate_dpb_timeline(
     active_refs: list[DpbPicture] = []
     allocator = _BankAllocator()
     timeline: list[TimelineEntry] = []
+    frame_num_offset = 0
+    previous_frame_num_wrap: int | None = None
 
     for encode_idx, frame in enumerate(frames):
         poc = _resolve_poc(frame)
         frame_num_wrap = _frame_num_wrap(frame.frame_num, max_frame_num)
+        if frame.is_idr:
+            frame_num_offset = 0
+            previous_frame_num_wrap = None
+        if previous_frame_num_wrap is not None and frame_num_wrap < previous_frame_num_wrap:
+            frame_num_offset += max_frame_num
+        previous_frame_num_wrap = frame_num_wrap
+        current_frame_num = frame_num_offset + frame_num_wrap
         dpb_before = tuple(active_refs)
 
         if frame.is_idr:
@@ -319,7 +332,7 @@ def simulate_dpb_timeline(
             default_list0, default_list1 = build_default_lists(
                 active_refs,
                 poc,
-                frame.frame_num,
+                current_frame_num,
                 is_b_picture=frame.is_b_picture,
                 max_frame_num=max_frame_num,
             )
@@ -346,7 +359,7 @@ def simulate_dpb_timeline(
 
         if frame.is_reference_picture and not frame.is_idr:
             while len(active_refs) >= max_short_term_refs:
-                evicted, active_refs = _evict_oldest_short_term(active_refs, frame.frame_num, max_frame_num)
+                evicted, active_refs = _evict_oldest_short_term(active_refs, current_frame_num, max_frame_num)
                 if evicted is None:
                     break
                 allocator = allocator.release_many((evicted.bank_id,))
@@ -361,9 +374,9 @@ def simulate_dpb_timeline(
                 display_idx=frame.display_idx,
                 poc=poc,
                 poc_lsb=frame.poc_lsb,
-                frame_num=frame.frame_num,
+                frame_num=current_frame_num,
                 frame_num_wrap=frame_num_wrap,
-                pic_num=frame_num_wrap,
+                pic_num=current_frame_num,
                 is_reference=True,
                 is_short_term=True,
                 is_long_term=False,
@@ -373,7 +386,7 @@ def simulate_dpb_timeline(
                 long_term_frame_idx=None,
             )
             active_refs.append(new_picture)
-            active_refs.sort(key=lambda pic: (pic.frame_num_wrap, pic.poc, pic.bank_id))
+            active_refs.sort(key=lambda pic: (pic.frame_num, pic.poc, pic.bank_id))
             marking_actions.append(f"insert bank={bank_id} frame_num={frame.frame_num} poc={poc}")
         elif frame.is_idr:
             bank_id, allocator = allocator.acquire()
@@ -383,9 +396,9 @@ def simulate_dpb_timeline(
                 display_idx=frame.display_idx,
                 poc=poc,
                 poc_lsb=frame.poc_lsb,
-                frame_num=frame.frame_num,
+                frame_num=current_frame_num,
                 frame_num_wrap=frame_num_wrap,
-                pic_num=frame_num_wrap,
+                pic_num=current_frame_num,
                 is_reference=True,
                 is_short_term=True,
                 is_long_term=False,
@@ -395,7 +408,7 @@ def simulate_dpb_timeline(
                 long_term_frame_idx=None,
             )
             active_refs.append(new_picture)
-            active_refs.sort(key=lambda pic: (pic.frame_num_wrap, pic.poc, pic.bank_id))
+            active_refs.sort(key=lambda pic: (pic.frame_num, pic.poc, pic.bank_id))
             marking_actions.append(f"idr_reset bank={bank_id} frame_num={frame.frame_num} poc={poc}")
 
         dpb_after = tuple(active_refs)

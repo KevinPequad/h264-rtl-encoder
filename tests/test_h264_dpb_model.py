@@ -128,6 +128,25 @@ def test_wrap_around_uses_current_frame_num_for_list_order_and_sliding_window() 
     assert wrapped_ref.marking_actions[0] == f"evict bank={ref2_bank} frame_num=2 poc=4"
 
 
+def test_second_wrap_keeps_newest_references_ahead_of_stale_same_modulo_refs() -> None:
+    timeline = simulate_dpb_timeline(
+        [
+            FrameSpec(display_idx=i * 2, poc_lsb=i * 2, frame_num=i, is_idr=(i == 0), is_reference=True)
+            for i in range(9)
+        ],
+        max_short_term_refs=4,
+        max_frame_num=4,
+    )
+
+    ref5_bank = timeline[5].bank_id
+    ref6_bank = timeline[6].bank_id
+    ref7_bank = timeline[7].bank_id
+    wrapped_ref = timeline[8]
+
+    assert wrapped_ref.current_list0 == (ref7_bank, ref6_bank, ref5_bank, timeline[4].bank_id)
+    assert wrapped_ref.marking_actions[0] == f"evict bank={timeline[4].bank_id} frame_num=4 poc=8"
+
+
 def test_zero_length_active_list0_from_truncation_is_rejected() -> None:
     _assert_raises_value_error(
         "List0 active ref count must be >= 1",
