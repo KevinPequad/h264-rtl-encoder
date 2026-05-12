@@ -610,6 +610,12 @@ def static_rtl_ownership_audit(root: Path | None = None) -> dict[str, Any]:
                 if "negative_malformed" in stripped or "malformed_bitstream_decode" in stripped:
                     allowed_findings.append({"kind": "allowed_negative_fixture", "file": rel, "line": line_no, "text": stripped[:240]})
                 continue
+            if rel.startswith("tb/tb_tpc_8x8_unit.cpp"):
+                # Transform/quant unit tests load residual vectors into DUT RAM;
+                # they do not build, patch, or write final H.264 syntax bytes.
+                if any(token in stripped for token in ("write_residual", "d.write_residual")):
+                    allowed_findings.append({"kind": "allowed_transform_unit_test", "file": rel, "line": line_no, "text": stripped[:240]})
+                    continue
             for pattern, reason in high_confidence_patterns:
                 if pattern.search(stripped):
                     if stripped.startswith("//") or stripped.startswith("#"):
