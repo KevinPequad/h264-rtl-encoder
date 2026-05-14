@@ -136,6 +136,16 @@ positions/levels, then `mb_qp_delta`, chroma, and the remaining I/P/B bins.
 
 **Exit criteria:** All standard P inter partition shapes have RTL-owned syntax and reconstruction, with focused decode tests.
 
+**Lane closeout:** The P/inter milestone is complete. The implementation chain ran
+through `766c2ef` (P16x8/P8x16), `39af946` (nonzero-MVD/ref_idx/weighted-P/
+qpel-subpel), `df547f9` (P8x8/subMB), and `f49cdd8` (clean-checkout repair).
+Review `t_48fbe723` rejected the `39af946` candidate because the smoke matrix
+was not self-contained; `t_dffbac81` approved `f49cdd8`. The canonical merge
+state stayed on `asic-readiness-main` @ `8d57dd5` with the validated edits in
+the dirty working tree, and post-merge validation `t_f05e396c` passed 17/17
+smoke cases under `THREADS=1 BUILD_JOBS=1`. See
+`output/h264_p_inter_lane_closeout_t_8258e748.md` for the evidence bundle.
+
 ---
 
 ## Milestone 3: Full B/BREF and Direct Coverage

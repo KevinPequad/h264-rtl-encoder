@@ -28,8 +28,14 @@ module h264_encoder_top #(
     parameter integer CHROMA_OFFSET_CB = 0,
     parameter integer CHROMA_WEIGHT_CR = 1,
     parameter integer CHROMA_OFFSET_CR = 0,
+    parameter ENABLE_CAVLC_LUMA_8X8 = 0,
+    parameter integer BASE_QP = 26,
+    parameter integer MB_QP_DELTA = 0,
+    parameter integer CHROMA_QP_INDEX_OFFSET = 0,
+    parameter integer SECOND_CHROMA_QP_INDEX_OFFSET = 0,
     parameter DEBLOCK_ENABLE = 1,
     parameter DISABLE_DEBLOCKING_FILTER_IDC = 0
+
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -49,10 +55,6 @@ module h264_encoder_top #(
     // Reference-B flag for non-IDR B pictures. The current RTL path supports a
     // limited single-list BREF mode that can be inserted into the ref bank.
     input  wire        is_bref_in,
-    // Stream-level GOP contract used while writing the first SPS/PPS. Future B
-    // pictures are not visible on the IDR cycle, so the testbench/control lane
-    // supplies this when a run can emit B/BREF pictures later in the stream.
-    input  wire        stream_has_b_slices_in,
     // Validation override: force eligible reordered B inter MBs onto the
     // current B_BI_16x16 path.
     input  wire        force_b_bi_in,
@@ -71,6 +73,14 @@ module h264_encoder_top #(
     // Validation override: force the encoder to signal and use High-profile
     // 8x8 transform mode on supported 4:2:0 8-bit validation runs.
     input  wire        force_transform_8x8_in,
+    // Validation override: force CAVLC P-slice inter MBs onto partitioned
+    // P_L0_L0_16x8 / P_L0_L0_8x16 and P_8x8/subMB syntax for RED/GREEN gates.
+    input  wire        force_p16x8_in,
+    input  wire        force_p8x16_in,
+    input  wire        force_p8x8_in,
+    input  wire        force_p8x4_in,
+    input  wire        force_p4x8_in,
+    input  wire        force_p4x4_in,
 
     // Raw frame memory read port (YUV420 planar)
     output wire [20:0] raw_mem_addr,
@@ -168,7 +178,6 @@ module h264_encoder_top #(
     localparam TS_SKIP_MB_HDR   = 5'd23; // Emit skip-run syntax after early probe
     localparam TS_SKIP_CLR_FIFO = 5'd24; // Drop deferred residual syntax before emitting P_SKIP
     localparam TS_DEFER_DRAIN   = 5'd25; // Drain deferred residual FIFO after buffered MB header
-    localparam TS_DEBLOCK_MB    = 5'd26; // Read current-picture neighbour samples for deblock boundary filtering
     localparam TS_LUMA8         = 5'd27; // High-profile 8x8 luma transform path
 
     reg [4:0]  top_state;
@@ -202,6 +211,8 @@ module h264_encoder_top #(
     reg        is_b_bi_mb_reg;     // 1 if current B inter MB uses bidirectional prediction
     reg        is_b_direct_mb_reg; // 1 if current B inter MB uses B_DIRECT_16x16 syntax
     reg        is_b_direct_from_l1_reg;
+    reg [1:0]  p_partition_mode_reg; // 0=P16x16, 1=P16x8, 2=P8x16, 3=P8x8/subMB
+    reg [1:0]  p_sub_mb_type_reg;      // P sub_mb_type: 0=8x8, 1=8x4, 2=4x8, 3=4x4
     reg        use_intra16_mb_reg; // 1 if current intra MB uses Intra_16x16
     reg        use_ipcm_mb_reg;    // 1 if current intra MB uses I_PCM
     reg [7:0]  cur_frame_num;      // Latched frame number
@@ -258,27 +269,6 @@ module h264_encoder_top #(
 
     // Reference write-back counter
     reg [8:0]  ref_wr_idx;
-    localparam [2:0] DBF_IDLE        = 3'd0;
-    localparam [2:0] DBF_LEFT_LUMA   = 3'd1;
-    localparam [2:0] DBF_TOP_LUMA    = 3'd2;
-    localparam [2:0] DBF_LEFT_CHROMA = 3'd3;
-    localparam [2:0] DBF_TOP_CHROMA  = 3'd4;
-    localparam [2:0] DBW_LEFT_LUMA   = 3'd0;
-    localparam [2:0] DBW_TOP_LUMA    = 3'd1;
-    localparam [2:0] DBW_LEFT_CHROMA = 3'd2;
-    localparam [2:0] DBW_TOP_CHROMA  = 3'd3;
-    localparam [2:0] DBW_CUR_LUMA    = 3'd4;
-    localparam [2:0] DBW_CUR_CHROMA  = 3'd5;
-    reg [2:0]  deblock_fetch_phase;
-    reg [2:0]  deblock_wr_phase;
-    reg [6:0]  deblock_fetch_idx;
-    reg        deblock_fetch_started;
-    reg [64*BD-1:0] deblock_left_luma_p_buf;
-    reg [64*BD-1:0] deblock_top_luma_p_buf;
-    reg [4*CHR_MB_HEIGHT*BD-1:0] deblock_left_cb_p_buf;
-    reg [4*CHR_MB_HEIGHT*BD-1:0] deblock_left_cr_p_buf;
-    reg [4*CHR_MB_WIDTH*BD-1:0] deblock_top_cb_p_buf;
-    reg [4*CHR_MB_WIDTH*BD-1:0] deblock_top_cr_p_buf;
 
     // MV storage for prediction (per-MB row above + left MB)
     reg signed [7:0] top_mvx [0:MB_COLS-1];  // Top row MV x (one per MB column)
@@ -462,6 +452,16 @@ module h264_encoder_top #(
     reg [15:0] frame_b_direct_nonzero_ref_mb_count;
     reg [15:0] frame_b_direct_from_l1_mb_count;
     reg [15:0] frame_cabac_p16x16_mb_count;
+    reg [15:0] frame_p_l0_nonzero_ref_mb_count;
+    reg [15:0] frame_p16x8_mb_count;
+    reg [15:0] frame_p8x16_mb_count;
+    reg [15:0] frame_p8x8_mb_count;
+    reg [15:0] frame_p8x4_mb_count;
+    reg [15:0] frame_p4x8_mb_count;
+    reg [15:0] frame_p4x4_mb_count;
+    reg [15:0] frame_cabac_chroma_mb_count;
+    reg [31:0] frame_cabac_cavlc_suppressed_bits;
+
 
     // Reference-bank MB metadata for colocated/direct derivation.
     reg        refmeta_is_intra [0:4][0:TOTAL_MBS-1];
@@ -585,89 +585,6 @@ module h264_encoder_top #(
         end
     endfunction
 
-    function automatic [19:0] cur_luma_addr_fn;
-        input integer mbx_i;
-        input integer mby_i;
-        input integer row_i;
-        input integer col_i;
-        integer addr_i;
-        begin
-            addr_i = ((mby_i * 16) + row_i) * FRAME_WIDTH + ((mbx_i * 16) + col_i);
-            cur_luma_addr_fn = addr_i[19:0];
-        end
-    endfunction
-
-    function automatic [17:0] cur_chroma_addr_fn;
-        input integer mbx_i;
-        input integer mby_i;
-        input integer row_i;
-        input integer col_i;
-        integer addr_i;
-        begin
-            addr_i = ((mby_i * CHR_MB_HEIGHT) + row_i) * CHR_WIDTH + ((mbx_i * CHR_MB_WIDTH) + col_i);
-            cur_chroma_addr_fn = addr_i[17:0];
-        end
-    endfunction
-
-    function automatic [2:0] deblock_first_fetch_phase_fn;
-        input left_avail_i;
-        input top_avail_i;
-        begin
-            if (left_avail_i)
-                deblock_first_fetch_phase_fn = DBF_LEFT_LUMA;
-            else if (top_avail_i)
-                deblock_first_fetch_phase_fn = DBF_TOP_LUMA;
-            else
-                deblock_first_fetch_phase_fn = DBF_IDLE;
-        end
-    endfunction
-
-    function automatic [2:0] deblock_next_fetch_phase_fn;
-        input [2:0] phase_i;
-        input left_avail_i;
-        input top_avail_i;
-        begin
-            case (phase_i)
-                DBF_LEFT_LUMA:   deblock_next_fetch_phase_fn = top_avail_i ? DBF_TOP_LUMA : DBF_LEFT_CHROMA;
-                DBF_TOP_LUMA:    deblock_next_fetch_phase_fn = left_avail_i ? DBF_LEFT_CHROMA : DBF_TOP_CHROMA;
-                DBF_LEFT_CHROMA: deblock_next_fetch_phase_fn = top_avail_i ? DBF_TOP_CHROMA : DBF_IDLE;
-                default:         deblock_next_fetch_phase_fn = DBF_IDLE;
-            endcase
-        end
-    endfunction
-
-    function automatic [2:0] deblock_first_write_phase_fn;
-        input left_avail_i;
-        input top_avail_i;
-        input deblock_active_i;
-        begin
-            if (!deblock_active_i)
-                deblock_first_write_phase_fn = DBW_CUR_LUMA;
-            else if (left_avail_i)
-                deblock_first_write_phase_fn = DBW_LEFT_LUMA;
-            else if (top_avail_i)
-                deblock_first_write_phase_fn = DBW_TOP_LUMA;
-            else
-                deblock_first_write_phase_fn = DBW_CUR_LUMA;
-        end
-    endfunction
-
-    function automatic [2:0] deblock_next_write_phase_fn;
-        input [2:0] phase_i;
-        input left_avail_i;
-        input top_avail_i;
-        begin
-            case (phase_i)
-                DBW_LEFT_LUMA:   deblock_next_write_phase_fn = top_avail_i ? DBW_TOP_LUMA : DBW_LEFT_CHROMA;
-                DBW_TOP_LUMA:    deblock_next_write_phase_fn = left_avail_i ? DBW_LEFT_CHROMA : DBW_TOP_CHROMA;
-                DBW_LEFT_CHROMA: deblock_next_write_phase_fn = top_avail_i ? DBW_TOP_CHROMA : DBW_CUR_LUMA;
-                DBW_TOP_CHROMA:  deblock_next_write_phase_fn = DBW_CUR_LUMA;
-                DBW_CUR_LUMA:    deblock_next_write_phase_fn = DBW_CUR_CHROMA;
-                default:         deblock_next_write_phase_fn = DBW_CUR_CHROMA;
-            endcase
-        end
-    endfunction
-
     wire is_luma = (sub_blk < 16);
     wire is_cb   = (sub_blk >= 16 && sub_blk < (16 + CHR_BLOCKS_PER_PLANE));
     wire is_cr   = (sub_blk >= (16 + CHR_BLOCKS_PER_PLANE));
@@ -686,7 +603,7 @@ module h264_encoder_top #(
                                    (top_state == TS_CHROMA) &&
                                    !inter_chr_mode &&
                                    (is_cb || is_cr);
-    wire [3:0] forced_intra_pred_mode_w = intra_mode_cur[chr_blk[3:0]];
+    wire [3:0] forced_intra_pred_mode_w = intra_mode_cur[chr_blk];
 
     localparam BD = BIT_DEPTH;
     localparam BD1 = BIT_DEPTH + 1;
@@ -710,6 +627,14 @@ module h264_encoder_top #(
     reg        direct_temporal_slice_mode_reg;
     wire direct_spatial_mv_pred_flag_w = ~direct_temporal_slice_mode_reg;
     wire weighted_pred_enable_cfg_w = (WEIGHTED_PRED_ENABLE != 0);
+    localparam integer BASE_QP_CFG_I = (BASE_QP < 0) ? 0 : ((BASE_QP > 51) ? 51 : BASE_QP);
+    localparam integer CURRENT_MB_QP_I = BASE_QP_CFG_I + MB_QP_DELTA;
+    wire [5:0] current_mb_qp_w = (CURRENT_MB_QP_I < 0) ? 6'd0 : ((CURRENT_MB_QP_I > 51) ? 6'd51 : CURRENT_MB_QP_I[5:0]);
+    wire signed [8:0] active_mb_qp_delta_w = MB_QP_DELTA;
+    wire [8:0] pic_init_qp_minus26_cfg_w = $signed({1'b0, BASE_QP_CFG_I[5:0]}) - 9'sd26;
+    wire [8:0] chroma_qp_index_offset_cfg_w = CHROMA_QP_INDEX_OFFSET;
+    wire [8:0] second_chroma_qp_index_offset_cfg_w = SECOND_CHROMA_QP_INDEX_OFFSET;
+    wire use_cavlc_luma_8x8_cfg_w = (ENABLE_CAVLC_LUMA_8X8 != 0);
     wire [3:0] luma_log2_weight_denom_cfg_w = LUMA_LOG2_WEIGHT_DENOM[3:0];
     wire signed [8:0] luma_weight_cfg_w = LUMA_WEIGHT[8:0];
     wire signed [8:0] luma_offset_cfg_w = LUMA_OFFSET[8:0];
@@ -805,14 +730,16 @@ module h264_encoder_top #(
         is_p_frame &&
         is_inter_mb_reg &&
         !use_weighted_pred_w &&
+        (p_partition_mode_reg == 2'd0) &&
         (slice_num_ref_idx_l0_active_minus1 == 2'd0) &&
         (mb_ref_idx_reg == 2'd0) &&
         (mvd_x_l0_w == 9'sd0) &&
         (mvd_y_l0_w == 9'sd0);
     wire        cabac_non_skip_subset_ok_w =
         cabac_zero_cbp_p16x16_eligible_w &&
-        !mb_has_residual &&
         !is_skip_mb_reg;
+    wire        cabac_suppress_cavlc_payload_w =
+        cabac_slice_enable_w && cabac_non_skip_subset_ok_w;
 
     function [BD-1:0] apply_luma_bi_weight;
         input [BD-1:0] sample0_in;
@@ -897,10 +824,16 @@ module h264_encoder_top #(
                 is_b_slice_in &&
                 (force_b_direct_temporal_in ||
                  ((valid_ref_count >= 3'd2) &&
-                  refbank_has_l0_ref0[newest_ref_bank] &&
-                  ((refbank_l0_ref0_bank[newest_ref_bank] == older_ref_bank) ||
-                   ((valid_ref_count >= 3'd3) && (refbank_l0_ref0_bank[newest_ref_bank] == oldest_ref_bank)) ||
-                   ((valid_ref_count >= 3'd4) && (refbank_l0_ref0_bank[newest_ref_bank] == ancient_ref_bank))) &&
+                  (
+                      (refbank_has_l0_ref0[newest_ref_bank] &&
+                       ((refbank_l0_ref0_bank[newest_ref_bank] == older_ref_bank) ||
+                        ((valid_ref_count >= 3'd3) && (refbank_l0_ref0_bank[newest_ref_bank] == oldest_ref_bank)) ||
+                        ((valid_ref_count >= 3'd4) && (refbank_l0_ref0_bank[newest_ref_bank] == ancient_ref_bank)))) ||
+                      (refbank_has_l1_ref0[newest_ref_bank] &&
+                       ((refbank_l1_ref0_bank[newest_ref_bank] == older_ref_bank) ||
+                        ((valid_ref_count >= 3'd3) && (refbank_l1_ref0_bank[newest_ref_bank] == oldest_ref_bank)) ||
+                        ((valid_ref_count >= 3'd4) && (refbank_l1_ref0_bank[newest_ref_bank] == ancient_ref_bank))))
+                  ) &&
                   (refbank_poc_lsb[newest_ref_bank] != pic_order_cnt_lsb_in_f)));
         end
     endfunction
@@ -1312,13 +1245,16 @@ module h264_encoder_top #(
         reg [2:0] col_ref_bank_l1;
         reg [1:0] cur_ref_idx_l0_from_l0;
         reg [1:0] cur_ref_idx_l0_from_l1;
+        reg       fb_ref_valid;
+        reg [1:0] fb_ref_idx;
         reg signed [7:0] col_mvx_l0, col_mvy_l0, col_mvx_l1, col_mvy_l1;
-        reg cand_l0_valid, cand_l1_valid;
-        reg [1:0] cand_l0_ref_idx_l0, cand_l1_ref_idx_l0;
-        reg [1:0] cand_l0_ref_idx_l1, cand_l1_ref_idx_l1;
+        reg cand_l0_valid, cand_l1_valid, cand_fb_valid;
+        reg [1:0] cand_l0_ref_idx_l0, cand_l1_ref_idx_l0, cand_fb_ref_idx_l0;
+        reg [1:0] cand_l0_ref_idx_l1, cand_l1_ref_idx_l1, cand_fb_ref_idx_l1;
         reg signed [7:0] cand_l0_mvx_l0, cand_l0_mvy_l0, cand_l0_mvx_l1, cand_l0_mvy_l1;
         reg signed [7:0] cand_l1_mvx_l0, cand_l1_mvy_l0, cand_l1_mvx_l1, cand_l1_mvy_l1;
-        integer cand_l0_metric_i, cand_l1_metric_i;
+        reg signed [7:0] cand_fb_mvx_l0, cand_fb_mvy_l0, cand_fb_mvx_l1, cand_fb_mvy_l1;
+        integer cand_l0_metric_i, cand_l1_metric_i, cand_fb_metric_i;
         begin
             direct_valid = 1'b0;
             direct_use_l1 = 1'b0;
@@ -1392,14 +1328,44 @@ module h264_encoder_top #(
                     cand_l1_mvy_l1,
                     cand_l1_metric_i
                 );
-
+                cand_fb_valid = 1'b0;
+                cand_fb_ref_idx_l0 = 2'd0;
+                cand_fb_ref_idx_l1 = 2'd0;
+                cand_fb_mvx_l0 = 8'sd0;
+                cand_fb_mvy_l0 = 8'sd0;
+                cand_fb_mvx_l1 = 8'sd0;
+                cand_fb_mvy_l1 = 8'sd0;
+                cand_fb_metric_i = 32'h7fffffff;
+                if (col_has_l0 && !cand_l0_valid && refbank_has_l1_ref0[newest_ref_bank]) begin
+                    map_b_l0_bank_to_ref_idx(refbank_l1_ref0_bank[newest_ref_bank], fb_ref_valid, fb_ref_idx);
+                    if (fb_ref_valid) begin
+                        calc_temporal_direct_candidate_from_colocated(
+                            col_has_l0,
+                            refbank_has_l1_ref0[newest_ref_bank],
+                            refbank_l1_ref0_bank[newest_ref_bank],
+                            fb_ref_valid,
+                            fb_ref_idx,
+                            col_mvx_l0,
+                            col_mvy_l0,
+                            cand_fb_valid,
+                            cand_fb_ref_idx_l0,
+                            cand_fb_ref_idx_l1,
+                            cand_fb_mvx_l0,
+                            cand_fb_mvy_l0,
+                            cand_fb_mvx_l1,
+                            cand_fb_mvy_l1,
+                            cand_fb_metric_i
+                        );
+                    end
+                end
                 if (col_is_intra) begin
                     direct_valid = 1'b1;
                     direct_use_bi = 1'b1;
-                end else if (cand_l0_valid || cand_l1_valid) begin
+                end else if (cand_l0_valid || cand_l1_valid || cand_fb_valid) begin
                     direct_valid = 1'b1;
                     direct_use_bi = 1'b1;
-                    if (cand_l1_valid && (!cand_l0_valid || (cand_l1_metric_i < cand_l0_metric_i))) begin
+                    if (cand_l1_valid && (!cand_l0_valid || (cand_l1_metric_i < cand_l0_metric_i)) &&
+                        (!cand_fb_valid || (cand_l1_metric_i <= cand_fb_metric_i))) begin
                         direct_from_col_l1 = 1'b1;
                         direct_ref_idx_l0 = cand_l1_ref_idx_l0;
                         direct_ref_idx_l1 = cand_l1_ref_idx_l1;
@@ -1407,6 +1373,14 @@ module h264_encoder_top #(
                         direct_mvy_l0 = cand_l1_mvy_l0;
                         direct_mvx_l1 = cand_l1_mvx_l1;
                         direct_mvy_l1 = cand_l1_mvy_l1;
+                    end else if (cand_fb_valid && (!cand_l0_valid || (cand_fb_metric_i < cand_l0_metric_i))) begin
+                        direct_from_col_l1 = 1'b1;
+                        direct_ref_idx_l0 = cand_fb_ref_idx_l0;
+                        direct_ref_idx_l1 = cand_fb_ref_idx_l1;
+                        direct_mvx_l0 = cand_fb_mvx_l0;
+                        direct_mvy_l0 = cand_fb_mvy_l0;
+                        direct_mvx_l1 = cand_fb_mvx_l1;
+                        direct_mvy_l1 = cand_fb_mvy_l1;
                     end else begin
                         direct_ref_idx_l0 = cand_l0_ref_idx_l0;
                         direct_ref_idx_l1 = cand_l0_ref_idx_l1;
@@ -1857,25 +1831,6 @@ pred_buf = {(256*BD){1'b0}};
         end
     end
 
-    always @(*) begin : luma8_resid_and_recon_pack
-        integer li;
-        reg [7:0] mb_idx;
-        reg [BD-1:0] orig_pix;
-        reg [BD-1:0] pred_pix;
-        luma8_resid_flat = {(64*BD1){1'b0}};
-        luma8_recon_resid_flat = {256{1'b0}};
-        for (li = 0; li < 64; li = li + 1) begin
-            mb_idx = {luma8_group[1], li[5:3], luma8_group[0], li[2:0]};
-            orig_pix = fetched_luma[mb_idx*BD +: BD];
-            pred_pix = pred_buf[mb_idx*BD +: BD];
-            luma8_resid_flat[li*BD1 +: BD1] = {1'b0, orig_pix} - {1'b0, pred_pix};
-        end
-        for (li = 0; li < 16; li = li + 1) begin
-            mb_idx = {luma8_group[1], luma8_sub[1], li[3:2], luma8_group[0], luma8_sub[0], li[1:0]};
-            luma8_recon_resid_flat[li*16 +: 16] = luma8_it_out_flat[mb_idx*16 +: 16];
-        end
-    end
-
     // ====================================================================
     // Quarter-pel luma refinement fetch window and chroma MV derivation
     // ====================================================================
@@ -1922,14 +1877,9 @@ pred_buf = {(256*BD){1'b0}};
     assign me_ref_rd_data_w = ref_mem_rd_data;
 
     always @(*) begin
-        // Default: ME drives the read port.
-        // Luma interpolation and deblock neighbour fetches temporarily borrow it.
+        // Default: ME drives the read port
         if (top_state == TS_LUMA_FETCH)
             ref_mem_rd_addr = luma_f_addr_cur;
-        else if ((top_state == TS_DEBLOCK_MB) && (deblock_fetch_phase == DBF_LEFT_LUMA))
-            ref_mem_rd_addr = cur_luma_addr_fn(mb_x - 7'd1, mb_y, deblock_fetch_idx[5:2], 12 + deblock_fetch_idx[1:0]);
-        else if ((top_state == TS_DEBLOCK_MB) && (deblock_fetch_phase == DBF_TOP_LUMA))
-            ref_mem_rd_addr = cur_luma_addr_fn(mb_x, mb_y - 6'd1, 12 + deblock_fetch_idx[5:4], deblock_fetch_idx[3:0]);
         else
             ref_mem_rd_addr = me_ref_rd_addr;
     end
@@ -1975,7 +1925,7 @@ pred_buf = {(256*BD){1'b0}};
     );
 
     h264_transform #(.BIT_DEPTH(BIT_DEPTH)) u_xform (.clk(clk), .rst_n(rst_n), .start(xform_start), .done(xform_done), .in_flat(resid_mux), .out_flat(xform_out_flat));
-    h264_quantize #(.BIT_DEPTH(BIT_DEPTH)) u_quant (.clk(clk), .rst_n(rst_n), .start(quant_start), .done(quant_done), .in_flat(xform_out_flat), .quant_flat(quant_out_flat));
+    h264_quantize #(.BIT_DEPTH(BIT_DEPTH)) u_quant (.clk(clk), .rst_n(rst_n), .start(quant_start), .done(quant_done), .qp(current_mb_qp_w), .in_flat(xform_out_flat), .quant_flat(quant_out_flat));
     // 8x8 High-profile luma path
     reg [64*BD1-1:0] luma8_resid_flat;
     reg [255:0]      luma8_recon_resid_flat;
@@ -1995,10 +1945,11 @@ pred_buf = {(256*BD){1'b0}};
     reg               luma8_iq_start, luma8_it_start;
     wire              luma8_iq_done, luma8_it_done;
     h264_transform8x8 #(.BIT_DEPTH(BIT_DEPTH)) u_xform8 (.clk(clk), .rst_n(rst_n), .start(luma8_xform_start), .done(luma8_xform_done), .in_flat(luma8_resid_flat), .out_flat(luma8_xform_out_flat));
-    h264_quantize8x8 #(.BIT_DEPTH(BIT_DEPTH)) u_quant8 (.clk(clk), .rst_n(rst_n), .start(luma8_quant_start), .done(luma8_quant_done), .qp(6'd26), .in_flat(luma8_xform_out_flat), .quant_flat(luma8_quant_out_flat));
+    h264_quantize8x8 #(.BIT_DEPTH(BIT_DEPTH)) u_quant8 (.clk(clk), .rst_n(rst_n), .start(luma8_quant_start), .done(luma8_quant_done), .qp(current_mb_qp_w), .in_flat(luma8_xform_out_flat), .quant_flat(luma8_quant_out_flat));
     h264_zigzag8x8_cavlc #(.BIT_DEPTH(BIT_DEPTH), .QW(32)) u_zigzag8 (.clk(clk), .rst_n(rst_n), .start(luma8_zz_start), .done(luma8_zz_done), .in_flat(luma8_quant_out_flat), .sub_block_idx(luma8_sub), .scan_flat(luma8_scan_flat), .total_coeffs(luma8_total_coeffs), .trailing_ones(luma8_trailing_ones), .last_nonzero_idx(luma8_last_nonzero_idx));
-    h264_inverse_quant8x8 #(.BIT_DEPTH(BIT_DEPTH)) u_iq8 (.clk(clk), .rst_n(rst_n), .start(luma8_iq_start), .done(luma8_iq_done), .qp(6'd26), .quant_flat(luma8_quant_out_flat), .dequant_flat(luma8_iq_out_flat));
+    h264_inverse_quant8x8 #(.BIT_DEPTH(BIT_DEPTH)) u_iq8 (.clk(clk), .rst_n(rst_n), .start(luma8_iq_start), .done(luma8_iq_done), .qp(current_mb_qp_w), .quant_flat(luma8_quant_out_flat), .dequant_flat(luma8_iq_out_flat));
     h264_inverse_transform8x8 #(.BIT_DEPTH(BIT_DEPTH)) u_it8 (.clk(clk), .rst_n(rst_n), .start(luma8_it_start), .done(luma8_it_done), .in_flat(luma8_iq_out_flat), .out_flat(luma8_it_out_flat));
+
     // Chroma processing signals
     reg         chr_dc_start, chr_dc_inverse;
     wire        chr_dc_done;
@@ -2010,10 +1961,6 @@ pred_buf = {(256*BD){1'b0}};
     reg [CHR_BLK_W-1:0] chr_blk;      // Which chroma 4x4 block within the plane
     reg         chr_is_cr;    // 0=Cb, 1=Cr
     reg [2:0]   luma16_phase; // Phase within I_16x16 luma DC/AC coding
-    reg [2:0]   luma8_phase;  // Phase within High-profile 8x8 luma coding
-    reg [1:0]   luma8_group;  // 0..3 8x8 luma group inside the MB
-    reg [1:0]   luma8_sub;    // 0..3 4x4 syntax block within the 8x8 group
-    reg         luma8_started;
     reg [255:0] cb_quant_buf [0:CHR_BLOCKS_PER_PLANE-1];
     reg [255:0] cr_quant_buf [0:CHR_BLOCKS_PER_PLANE-1];
     reg signed [CW-1:0] chr_dc_buf [0:CHR_BLOCKS_PER_PLANE-1];
@@ -2096,6 +2043,21 @@ pred_buf = {(256*BD){1'b0}};
     localparam [3:0] INTRA_MODE_DC   = 4'd2;
 
     reg [4:0] nz_coeff [0:TOTAL_SUB_BLOCKS-1];
+    wire [3:0] mb_cbp_luma_w = {
+        ((nz_coeff[15] != 5'd0) || (nz_coeff[14] != 5'd0) || (nz_coeff[13] != 5'd0) || (nz_coeff[12] != 5'd0)),
+        ((nz_coeff[11] != 5'd0) || (nz_coeff[10] != 5'd0) || (nz_coeff[9] != 5'd0) || (nz_coeff[8]  != 5'd0)),
+        ((nz_coeff[7]  != 5'd0) || (nz_coeff[6]  != 5'd0) || (nz_coeff[5] != 5'd0)  || (nz_coeff[4]  != 5'd0)),
+        ((nz_coeff[3]  != 5'd0) || (nz_coeff[2]  != 5'd0) || (nz_coeff[1] != 5'd0)  || (nz_coeff[0]  != 5'd0))
+    };
+    wire [1:0] mb_cbp_chroma_w = i16_cbp_chroma;
+    wire mb_transform_size_8x8_w = use_cavlc_luma_8x8_cfg_w && is_inter_mb_reg && (mb_cbp_luma_w != 4'd0);
+    wire [15:0] cabac_luma_nz_mask_w = {
+        (nz_coeff[15] != 5'd0), (nz_coeff[14] != 5'd0), (nz_coeff[13] != 5'd0), (nz_coeff[12] != 5'd0),
+        (nz_coeff[11] != 5'd0), (nz_coeff[10] != 5'd0), (nz_coeff[9] != 5'd0),  (nz_coeff[8]  != 5'd0),
+        (nz_coeff[7]  != 5'd0), (nz_coeff[6]  != 5'd0), (nz_coeff[5] != 5'd0),  (nz_coeff[4]  != 5'd0),
+        (nz_coeff[3]  != 5'd0), (nz_coeff[2]  != 5'd0), (nz_coeff[1] != 5'd0),  (nz_coeff[0]  != 5'd0)
+    };
+    wire [4095:0] cabac_luma_scan_flat_w = {16{scan_flat}};
     reg [4:0] left_mb_nz [0:3];
     reg [4:0] top_mb_nz [0:MB_COLS*4-1];
     reg [3:0] intra_mode_cur [0:15];
@@ -2108,42 +2070,6 @@ pred_buf = {(256*BD){1'b0}};
     reg [4:0] left_mb_nz_cr [0:CHR_BLOCK_ROWS-1];
     reg [4:0] top_mb_nz_cb [0:CHR_TOP_NZ_COUNT-1];
     reg [4:0] top_mb_nz_cr [0:CHR_TOP_NZ_COUNT-1];
-
-    // Deblocking metadata packed for the post-reconstruction in-loop filter.
-    wire deblock_active_w = (DEBLOCK_ENABLE != 0) && (DISABLE_DEBLOCKING_FILTER_IDC[1:0] != 2'd1);
-    wire [1:0] deblock_disable_idc_w = deblock_active_w ? DISABLE_DEBLOCKING_FILTER_IDC[1:0] : 2'd1;
-    wire signed [3:0] deblock_alpha_off_w = 4'sd0;
-    wire signed [3:0] deblock_beta_off_w  = 4'sd0;
-    reg [15:0] deblock_nz_luma_flat;
-    reg [2*CHR_BLOCKS_PER_PLANE-1:0] deblock_nz_chroma_flat;
-    reg [3:0] deblock_left_nz_luma_flat;
-    reg [3:0] deblock_top_nz_luma_flat;
-    reg [CHR_BLOCK_ROWS-1:0] deblock_left_nz_chroma_cb_flat;
-    reg [CHR_BLOCK_ROWS-1:0] deblock_left_nz_chroma_cr_flat;
-    reg [CHR_BLOCK_COLS-1:0] deblock_top_nz_chroma_cb_flat;
-    reg [CHR_BLOCK_COLS-1:0] deblock_top_nz_chroma_cr_flat;
-
-    always @(*) begin : deblock_nz_pack
-        integer dbi;
-        for (dbi = 0; dbi < 16; dbi = dbi + 1)
-            deblock_nz_luma_flat[dbi] = (use_ipcm_mb_reg || (nz_coeff[dbi] != 5'd0));
-        for (dbi = 0; dbi < CHR_BLOCKS_PER_PLANE; dbi = dbi + 1) begin
-            deblock_nz_chroma_flat[dbi] = use_ipcm_mb_reg || (nz_coeff[chroma_sub_blk_from_rc(1'b0, chroma_blk_row_from_idx(dbi[CHR_BLK_W-1:0]), chroma_blk_col_from_idx(dbi[CHR_BLK_W-1:0]))] != 5'd0);
-            deblock_nz_chroma_flat[CHR_BLOCKS_PER_PLANE + dbi] = use_ipcm_mb_reg || (nz_coeff[chroma_sub_blk_from_rc(1'b1, chroma_blk_row_from_idx(dbi[CHR_BLK_W-1:0]), chroma_blk_col_from_idx(dbi[CHR_BLK_W-1:0]))] != 5'd0);
-        end
-        for (dbi = 0; dbi < 4; dbi = dbi + 1) begin
-            deblock_left_nz_luma_flat[dbi] = (left_mb_nz[dbi] != 5'd0);
-            deblock_top_nz_luma_flat[dbi] = (top_mb_nz[mb_x * 4 + dbi] != 5'd0);
-        end
-        for (dbi = 0; dbi < CHR_BLOCK_ROWS; dbi = dbi + 1) begin
-            deblock_left_nz_chroma_cb_flat[dbi] = (left_mb_nz_cb[dbi] != 5'd0);
-            deblock_left_nz_chroma_cr_flat[dbi] = (left_mb_nz_cr[dbi] != 5'd0);
-        end
-        for (dbi = 0; dbi < CHR_BLOCK_COLS; dbi = dbi + 1) begin
-            deblock_top_nz_chroma_cb_flat[dbi] = (top_mb_nz_cb[mb_x * CHR_BLOCK_COLS + dbi] != 5'd0);
-            deblock_top_nz_chroma_cr_flat[dbi] = (top_mb_nz_cr[mb_x * CHR_BLOCK_COLS + dbi] != 5'd0);
-        end
-    end
 
     reg [SUB_BLK_W-1:0] left_blk_idx, top_blk_idx;
     always @(*) begin
@@ -2220,6 +2146,8 @@ pred_buf = {(256*BD){1'b0}};
     wire [1:0]  cavlc_trailing_ones_mux = use_luma8_cavlc ? luma8_trailing_ones : trailing_ones;
     wire [3:0]  cavlc_last_nonzero_idx_mux = use_luma8_cavlc ? luma8_last_nonzero_idx : last_nonzero_idx;
     h264_cavlc u_cavlc (.clk(clk), .rst_n(rst_n), .start(cavlc_start), .done(cavlc_done), .scan_flat(cavlc_scan_flat_mux), .total_coeffs(cavlc_total_coeffs_mux), .trailing_ones(cavlc_trailing_ones_mux), .last_nonzero_idx(cavlc_last_nonzero_idx_mux), .nC(nC_val), .is_chroma_dc(cavlc_is_chroma_dc), .chroma_dc_422(chroma_dc_422_flag), .is_chroma_ac(cavlc_is_chroma_ac), .bits_out(cavlc_bits), .bits_count(cavlc_count), .bits_valid(cavlc_bits_valid));
+    wire cavlc_bits_valid_to_bs = cavlc_bits_valid && !cabac_suppress_cavlc_payload_w;
+
     // IQ input mux: normally quant_out_flat, during chroma recon uses chr_iq_input
     reg         use_chr_iq_input;
     reg         use_i16_iq_input;
@@ -2227,7 +2155,7 @@ pred_buf = {(256*BD){1'b0}};
     reg [255:0] i16_iq_input;
     wire [255:0] iq_in_mux = use_chr_iq_input ? chr_iq_input :
                              use_i16_iq_input ? i16_iq_input : quant_out_flat;
-    h264_inverse_quant #(.BIT_DEPTH(BIT_DEPTH)) u_iq (.clk(clk), .rst_n(rst_n), .start(iq_start), .done(iq_done), .quant_flat(iq_in_mux), .dequant_flat(iq_out_flat));
+    h264_inverse_quant #(.BIT_DEPTH(BIT_DEPTH)) u_iq (.clk(clk), .rst_n(rst_n), .start(iq_start), .done(iq_done), .qp(current_mb_qp_w), .quant_flat(iq_in_mux), .dequant_flat(iq_out_flat));
     // IT input mux: normally iq_out_flat, during chroma recon patches DC with inverse Hadamard value
     reg         use_chr_it_input;
     reg         use_i16_it_input;
@@ -2237,117 +2165,10 @@ pred_buf = {(256*BD){1'b0}};
                                  use_i16_it_input ? {iq_out_flat[16*CW-1:CW], i16_it_dc_patch} : iq_out_flat;
     h264_inverse_transform #(.BIT_DEPTH(BIT_DEPTH)) u_it (.clk(clk), .rst_n(rst_n), .start(it_start), .done(it_done), .in_flat(it_in_mux), .out_flat(it_out_flat));
 
-    wire use_luma8_recon = (top_state == TS_LUMA8) && (luma8_phase == 3'd6);
-    wire [255:0] recon_resid_mux = use_luma8_recon ? luma8_recon_resid_flat :
-                                   use_chr_it_input ? {iq_out_flat[16*CW-1:CW], chr_it_dc_patch} :
-                                   use_i16_it_input ? {iq_out_flat[16*CW-1:CW], i16_it_dc_patch} :
-                                   it_out_flat;
     h264_reconstruct #(.BIT_DEPTH(BIT_DEPTH)) u_recon (
-        .clk(clk), .rst_n(rst_n), .start(recon_start), .done(recon_done), .sub_block_idx(sub_blk[3:0]),
-        .pred_flat(pred_buf), .recon_resid_flat(recon_resid_mux), .recon_in(recon_buf), .recon_out(recon_out_w),
-        .recon_top_row(recon_top_row_w), .recon_right_col(recon_right_col_w));
-
-    wire [256*BIT_DEPTH-1:0] deblock_luma_post_w;
-    wire [CHR_MB_PIXELS*BIT_DEPTH-1:0] deblock_cb_post_w;
-    wire [CHR_MB_PIXELS*BIT_DEPTH-1:0] deblock_cr_post_w;
-    wire [48*BIT_DEPTH-1:0] deblock_left_luma_patch_w;
-    wire [48*BIT_DEPTH-1:0] deblock_top_luma_patch_w;
-    wire [CHR_MB_HEIGHT*BIT_DEPTH-1:0] deblock_left_cb_patch_w;
-    wire [CHR_MB_HEIGHT*BIT_DEPTH-1:0] deblock_left_cr_patch_w;
-    wire [CHR_MB_WIDTH*BIT_DEPTH-1:0] deblock_top_cb_patch_w;
-    wire [CHR_MB_WIDTH*BIT_DEPTH-1:0] deblock_top_cr_patch_w;
-    wire [15:0] deblock_changed_count_w;
-    wire [15:0] deblock_filtered_edge_count_w;
-    wire        deblock_cur_has_l0_w = is_inter_mb_reg && (!is_b_frame || !is_b_l1_mb_reg || is_b_bi_mb_reg);
-    wire        deblock_cur_has_l1_w = is_inter_mb_reg && is_b_frame && (is_b_l1_mb_reg || is_b_bi_mb_reg);
-    wire        deblock_left_has_l0_w = left_is_inter;
-    wire        deblock_left_has_l1_w = left_is_inter_l1;
-    wire        deblock_top_has_l0_w = top_is_inter[mb_x];
-    wire        deblock_top_has_l1_w = top_is_inter_l1[mb_x];
-    wire        deblock_left_is_intra_w = !(left_is_inter || left_is_inter_l1);
-    wire        deblock_top_is_intra_w = !(top_is_inter[mb_x] || top_is_inter_l1[mb_x]);
-    wire signed [7:0] deblock_cur_mvx_l0_w = (is_b_frame && is_b_bi_mb_reg) ? me_best_mvx_l0 : me_best_mvx;
-    wire signed [7:0] deblock_cur_mvy_l0_w = (is_b_frame && is_b_bi_mb_reg) ? me_best_mvy_l0 : me_best_mvy;
-    wire signed [7:0] deblock_cur_mvx_l1_w = (is_b_frame && is_b_bi_mb_reg) ? me_best_mvx_l1 :
-                                             ((is_b_frame && is_b_l1_mb_reg) ? me_best_mvx : 8'sd0);
-    wire signed [7:0] deblock_cur_mvy_l1_w = (is_b_frame && is_b_bi_mb_reg) ? me_best_mvy_l1 :
-                                             ((is_b_frame && is_b_l1_mb_reg) ? me_best_mvy : 8'sd0);
-    wire [1:0]  deblock_cur_ref_idx_l0_w = mb_ref_idx_reg;
-    wire [1:0]  deblock_cur_ref_idx_l1_w = is_b_l1_mb_reg ? mb_ref_idx_reg : mb_ref_idx_l1_reg;
-    wire [15:0] deblock_patch_write_count_w =
-        deblock_active_w ?
-            ((mb_left_avail ? (16'd48 + (CHR_MB_HEIGHT << 1)) : 16'd0) +
-             (mb_top_avail ? (16'd48 + (CHR_MB_WIDTH << 1)) : 16'd0)) :
-            16'd0;
-    wire [256*BIT_DEPTH-1:0] ref_luma_write_buf_w = deblock_active_w ? deblock_luma_post_w : luma_recon_buf;
-    wire [CHR_MB_PIXELS*BIT_DEPTH-1:0] ref_cb_write_buf_w = deblock_active_w ? deblock_cb_post_w : chr_recon_cb;
-    wire [CHR_MB_PIXELS*BIT_DEPTH-1:0] ref_cr_write_buf_w = deblock_active_w ? deblock_cr_post_w : chr_recon_cr;
-
-    h264_deblock_mb #(
-        .BIT_DEPTH(BIT_DEPTH),
-        .CHROMA_FORMAT_IDC(CHROMA_FORMAT_IDC)
-    ) u_deblock_mb (
-        .deblock_enable(deblock_active_w),
-        .disable_deblocking_filter_idc(deblock_disable_idc_w),
-        .slice_alpha_c0_offset_div2(deblock_alpha_off_w),
-        .slice_beta_offset_div2(deblock_beta_off_w),
-        .mb_left_avail(mb_left_avail),
-        .mb_top_avail(mb_top_avail),
-        .cur_is_intra(!is_inter_mb_reg),
-        .left_is_intra(deblock_left_is_intra_w),
-        .top_is_intra(deblock_top_is_intra_w),
-        .cur_has_l0(deblock_cur_has_l0_w),
-        .cur_has_l1(deblock_cur_has_l1_w),
-        .cur_ref_idx_l0(deblock_cur_ref_idx_l0_w),
-        .cur_ref_idx_l1(deblock_cur_ref_idx_l1_w),
-        .cur_mvx_l0(deblock_cur_mvx_l0_w),
-        .cur_mvy_l0(deblock_cur_mvy_l0_w),
-        .cur_mvx_l1(deblock_cur_mvx_l1_w),
-        .cur_mvy_l1(deblock_cur_mvy_l1_w),
-        .left_has_l0(deblock_left_has_l0_w),
-        .left_has_l1(deblock_left_has_l1_w),
-        .left_ref_idx_l0(left_ref_idx),
-        .left_ref_idx_l1(left_ref_idx_l1),
-        .left_mvx_l0(left_mvx),
-        .left_mvy_l0(left_mvy),
-        .left_mvx_l1(left_mvx_l1),
-        .left_mvy_l1(left_mvy_l1),
-        .top_has_l0(deblock_top_has_l0_w),
-        .top_has_l1(deblock_top_has_l1_w),
-        .top_ref_idx_l0(top_ref_idx[mb_x]),
-        .top_ref_idx_l1(top_ref_idx_l1[mb_x]),
-        .top_mvx_l0(top_mvx[mb_x]),
-        .top_mvy_l0(top_mvy[mb_x]),
-        .top_mvx_l1(top_mvx_l1[mb_x]),
-        .top_mvy_l1(top_mvy_l1[mb_x]),
-        .nz_luma_4x4(deblock_nz_luma_flat),
-        .left_nz_luma_4x4(deblock_left_nz_luma_flat),
-        .top_nz_luma_4x4(deblock_top_nz_luma_flat),
-        .nz_chroma_4x4(deblock_nz_chroma_flat),
-        .left_nz_chroma_cb(deblock_left_nz_chroma_cb_flat),
-        .left_nz_chroma_cr(deblock_left_nz_chroma_cr_flat),
-        .top_nz_chroma_cb(deblock_top_nz_chroma_cb_flat),
-        .top_nz_chroma_cr(deblock_top_nz_chroma_cr_flat),
-        .luma_pre(luma_recon_buf),
-        .cb_pre(chr_recon_cb),
-        .cr_pre(chr_recon_cr),
-        .left_luma_p(deblock_left_luma_p_buf),
-        .top_luma_p(deblock_top_luma_p_buf),
-        .left_cb_p(deblock_left_cb_p_buf),
-        .left_cr_p(deblock_left_cr_p_buf),
-        .top_cb_p(deblock_top_cb_p_buf),
-        .top_cr_p(deblock_top_cr_p_buf),
-        .luma_post(deblock_luma_post_w),
-        .cb_post(deblock_cb_post_w),
-        .cr_post(deblock_cr_post_w),
-        .left_luma_patch(deblock_left_luma_patch_w),
-        .top_luma_patch(deblock_top_luma_patch_w),
-        .left_cb_patch(deblock_left_cb_patch_w),
-        .left_cr_patch(deblock_left_cr_patch_w),
-        .top_cb_patch(deblock_top_cb_patch_w),
-        .top_cr_patch(deblock_top_cr_patch_w),
-        .changed_count(deblock_changed_count_w),
-        .filtered_edge_count(deblock_filtered_edge_count_w)
+        .clk(clk), .rst_n(rst_n), .start(recon_start), .done(recon_done), .sub_block_idx({sb_r[1], sb_c[1], sb_r[0], sb_c[0]}),
+        .pred_flat(pred_buf), .recon_resid_flat(it_out_flat), .recon_in(recon_buf), .recon_out(recon_out_w),
+        .recon_top_row(recon_top_row_w), .recon_right_col(recon_right_col_w)
     );
 
     h264_bitstream #(
@@ -2360,26 +2181,36 @@ pred_buf = {(256*BD){1'b0}};
         .clk(clk), .rst_n(rst_n), .cmd_write_sps(bs_cmd_sps), .cmd_write_pps(bs_cmd_pps), .cmd_write_slice_hdr(bs_cmd_slice),
         .cmd_write_mb_header(bs_cmd_mb_hdr), .cmd_write_trailing(bs_cmd_trailing), .cmd_flush(bs_cmd_flush),
         .cmd_clear_fifo(bs_cmd_clear_fifo),
-        .cavlc_valid(cavlc_bits_valid), .cavlc_bits(cavlc_bits), .cavlc_count(cavlc_count),
-        .mb_qp_delta(8'd0), .mb_has_residual(mb_has_residual),
+        .cavlc_valid(cavlc_bits_valid_to_bs), .cavlc_bits(cavlc_bits), .cavlc_count(cavlc_count),
+        .cavlc_cbp_luma(mb_cbp_luma_w), .cavlc_cbp_chroma(mb_cbp_chroma_w),
+        .transform_8x8_mode_enable(use_cavlc_luma_8x8_cfg_w), .transform_size_8x8_flag(mb_transform_size_8x8_w),
+        .pic_init_qp_minus26(pic_init_qp_minus26_cfg_w), .chroma_qp_index_offset(chroma_qp_index_offset_cfg_w),
+        .second_chroma_qp_index_offset(second_chroma_qp_index_offset_cfg_w),
+        .mb_qp_delta(active_mb_qp_delta_w), .mb_has_residual(mb_has_residual),
         .force_transform_8x8_in(force_transform_8x8_in),
+
         .cabac_feature_enable(cabac_feature_enable_w),
         .cabac_slice_enable(cabac_slice_enable_w),
         .cabac_skip_ctx(cabac_skip_ctx_reg),
-        .is_p_slice(is_p_frame), .is_b_slice(is_b_frame), .is_b_ref_slice(is_b_ref_frame),
-        .stream_has_b_slices(stream_has_b_slices_in), .frame_num(cur_frame_num),
+        .is_p_slice(is_p_frame), .is_b_slice(is_b_frame), .is_b_ref_slice(is_b_ref_frame), .frame_num(cur_frame_num),
         .pic_order_cnt_lsb(cur_pic_order_cnt_lsb),
         .is_inter_mb(is_inter_mb_reg), .is_skip_mb(is_skip_mb_reg),
         .is_b_direct_mb(is_b_direct_mb_reg),
         .is_b_l1_mb(is_b_l1_mb_reg), .is_b_bi_mb(is_b_bi_mb_reg),
         .direct_spatial_mv_pred_flag(direct_spatial_mv_pred_flag_w),
-        .mb_ref_idx_l0(mb_ref_idx_reg), .mb_ref_idx_l1(mb_ref_idx_l1_reg),
+        .mb_ref_idx_l0(mb_ref_idx_reg), .mb_ref_idx_l0_part1(mb_ref_idx_reg),
+        .mb_ref_idx_l1(mb_ref_idx_l1_reg), .p_partition_mode(p_partition_mode_reg), .p_sub_mb_type(p_sub_mb_type_reg),
         .mvd_x_l0(mvd_x_l0_w), .mvd_y_l0(mvd_y_l0_w),
+        .mvd_x_l0_part1(mvd_x_l0_w), .mvd_y_l0_part1(mvd_y_l0_w),
         .mvd_x_l1(mvd_x_l1_w), .mvd_y_l1(mvd_y_l1_w),
         .cabac_mvd_ctx_x(cabac_mvd_ctx_x_w), .cabac_mvd_ctx_y(cabac_mvd_ctx_y_w),
         .cabac_cbp_luma_ctx0_sel(cabac_cbp_luma_ctx0_sel_w),
         .cabac_cbp_luma_ctx1_sel(cabac_cbp_luma_ctx1_sel_w),
         .cabac_cbp_luma_ctx2_sel(cabac_cbp_luma_ctx2_sel_w),
+        .cabac_cbp_luma(mb_cbp_luma_w),
+        .cabac_cbp_chroma(i16_cbp_chroma != 2'd0),
+        .cabac_luma_scan_flat(cabac_luma_scan_flat_w),
+        .cabac_luma_nz_mask(cabac_luma_nz_mask_w),
         .slice_num_ref_idx_l0_active_minus1(slice_num_ref_idx_l0_active_minus1),
         .hold_fifo_drain(bs_hold_fifo_drain), .is_intra16_mb(is_intra16_mb_hdr), .is_ipcm_mb(is_ipcm_mb_hdr), .intra_mb_type_code_num(intra_mb_type_code_num),
         .intra_pred_bits(intra_pred_bits_mb), .intra_pred_count(intra_pred_count_mb),
@@ -2403,21 +2234,17 @@ pred_buf = {(256*BD){1'b0}};
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             top_state <= TS_IDLE; done <= 1'b0; mb_x <= 7'd0; mb_y <= 6'd0; sub_blk <= 5'd0; mb_count <= 12'd0;
-            fetch_start <= 1'b0; pred_start <= 1'b0; intra16_start <= 1'b0; xform_start <= 1'b0; quant_start <= 1'b0; zz_start <= 1'b0; luma8_xform_start <= 1'b0; luma8_quant_start <= 1'b0; luma8_zz_start <= 1'b0; luma8_iq_start <= 1'b0; luma8_it_start <= 1'b0;
+            fetch_start <= 1'b0; pred_start <= 1'b0; intra16_start <= 1'b0; xform_start <= 1'b0; quant_start <= 1'b0; zz_start <= 1'b0;
             cavlc_start <= 1'b0; iq_start <= 1'b0; it_start <= 1'b0; recon_start <= 1'b0; me_start <= 1'b0;
             bs_cmd_sps <= 1'b0; bs_cmd_pps <= 1'b0; bs_cmd_slice <= 1'b0; bs_cmd_mb_hdr <= 1'b0; bs_cmd_trailing <= 1'b0; bs_cmd_flush <= 1'b0; bs_cmd_clear_fifo <= 1'b0;
             mb_top_avail <= 1'b0; mb_left_avail <= 1'b0; mb_has_residual <= 1'b0; bs_hold_fifo_drain <= 1'b0;
             blk_state <= BS_PRED; blk_started <= 1'b0; iq_done_latched <= 1'b0;
             recon_buf <= {(256*BD){1'b0}}; luma_recon_buf <= {(256*BD){1'b0}}; top_ref_flat <= {(MB_COLS*16*BD){1'b0}}; left_ref_flat <= {(16*BD){1'b0}};
             top_pixels_flat <= {(16*BD){1'b0}}; left_pixels_flat <= {(16*BD){1'b0}}; flush_pending <= 1'b0; flush_accepted <= 1'b0;
-            is_p_frame <= 1'b0; is_b_frame <= 1'b0; is_b_ref_frame <= 1'b0; is_inter_mb_reg <= 1'b0; is_skip_mb_reg <= 1'b0; is_b_l1_mb_reg <= 1'b0; is_b_bi_mb_reg <= 1'b0; is_b_direct_mb_reg <= 1'b0; is_b_direct_from_l1_reg <= 1'b0; use_intra16_mb_reg <= 1'b0; use_ipcm_mb_reg <= 1'b0; cur_frame_num <= 8'd0; cur_pic_order_cnt_lsb <= 9'd0; direct_temporal_slice_mode_reg <= 1'b0;
+            is_p_frame <= 1'b0; is_b_frame <= 1'b0; is_b_ref_frame <= 1'b0; is_inter_mb_reg <= 1'b0; is_skip_mb_reg <= 1'b0; is_b_l1_mb_reg <= 1'b0; is_b_bi_mb_reg <= 1'b0; is_b_direct_mb_reg <= 1'b0; is_b_direct_from_l1_reg <= 1'b0; p_partition_mode_reg <= 2'd0; p_sub_mb_type_reg <= 2'd0; use_intra16_mb_reg <= 1'b0; use_ipcm_mb_reg <= 1'b0; cur_frame_num <= 8'd0; cur_pic_order_cnt_lsb <= 9'd0; direct_temporal_slice_mode_reg <= 1'b0;
             cabac_skip_ctx_reg <= 2'd0;
             me_best_mvx <= 8'sd0; me_best_mvy <= 8'sd0; me_best_mvx_l0 <= 8'sd0; me_best_mvy_l0 <= 8'sd0; me_best_mvx_l1 <= 8'sd0; me_best_mvy_l1 <= 8'sd0; me_best_sad <= 18'd0; me_fullpel_best_sad <= 18'd0;
             inter_pred_buf <= {(256*BD){1'b0}}; ref_wr_idx <= 9'd0;
-            deblock_fetch_phase <= DBF_IDLE; deblock_wr_phase <= DBW_CUR_LUMA; deblock_fetch_idx <= 7'd0; deblock_fetch_started <= 1'b0;
-            deblock_left_luma_p_buf <= {(64*BD){1'b0}}; deblock_top_luma_p_buf <= {(64*BD){1'b0}};
-            deblock_left_cb_p_buf <= {(4*CHR_MB_HEIGHT*BD){1'b0}}; deblock_left_cr_p_buf <= {(4*CHR_MB_HEIGHT*BD){1'b0}};
-            deblock_top_cb_p_buf <= {(4*CHR_MB_WIDTH*BD){1'b0}}; deblock_top_cr_p_buf <= {(4*CHR_MB_WIDTH*BD){1'b0}};
             intra16_pred_buf <= {(256*BD){1'b0}}; intra16_mode_mb <= 2'd2;
             ref_rd_bank_sel <= 3'd0; ref_wr_bank_sel <= 3'd0;
             ref_mem_wr_en <= 1'b0; ref_mem_wr_addr <= 20'd0; ref_mem_wr_data <= {BD{1'b0}};
@@ -2445,7 +2272,7 @@ pred_buf = {(256*BD){1'b0}};
             end
             chr_dc_start <= 1'b0; chr_dc_inverse <= 1'b0;
             i16_dc_start <= 1'b0; i16_dc_inverse <= 1'b0;
-            chr_phase <= 3'd0; chr_blk <= {CHR_BLK_W{1'b0}}; chr_is_cr <= 1'b0; luma16_phase <= 3'd0; luma16_blk <= 4'd0; luma8_phase <= 3'd0; luma8_group <= 2'd0; luma8_sub <= 2'd0; luma8_started <= 1'b0;
+            chr_phase <= 3'd0; chr_blk <= {CHR_BLK_W{1'b0}}; chr_is_cr <= 1'b0; luma16_phase <= 3'd0; luma16_blk <= 4'd0;
             use_chr_dc_zigzag <= 1'b0; use_chr_ac_zigzag <= 1'b0; use_i16_dc_zigzag <= 1'b0; use_i16_ac_zigzag <= 1'b0;
             cavlc_is_chroma_dc <= 1'b0; cavlc_is_chroma_ac <= 1'b0;
             zz_chroma_ac_mode <= 1'b0;
@@ -2498,6 +2325,16 @@ pred_buf = {(256*BD){1'b0}};
             frame_b_direct_nonzero_ref_mb_count <= 16'd0;
             frame_b_direct_from_l1_mb_count <= 16'd0;
             frame_cabac_p16x16_mb_count <= 16'd0;
+            frame_p_l0_nonzero_ref_mb_count <= 16'd0;
+            frame_p16x8_mb_count <= 16'd0;
+            frame_p8x16_mb_count <= 16'd0;
+            frame_p8x8_mb_count <= 16'd0;
+            frame_p8x4_mb_count <= 16'd0;
+            frame_p4x8_mb_count <= 16'd0;
+            frame_p4x4_mb_count <= 16'd0;
+            frame_cabac_chroma_mb_count <= 16'd0;
+            frame_cabac_cavlc_suppressed_bits <= 32'd0;
+
             for (meta_bank_i = 0; meta_bank_i < 5; meta_bank_i = meta_bank_i + 1) begin
                 for (meta_mb_i = 0; meta_mb_i < TOTAL_MBS; meta_mb_i = meta_mb_i + 1) begin
                     refmeta_is_intra[meta_bank_i][meta_mb_i] = 1'b1;
@@ -2521,7 +2358,7 @@ pred_buf = {(256*BD){1'b0}};
                 refbank_l1_ref0_bank[meta_bank_i] = 3'd0;
             end
         end else begin
-            fetch_start <= 1'b0; pred_start <= 1'b0; intra16_start <= 1'b0; xform_start <= 1'b0; quant_start <= 1'b0; zz_start <= 1'b0; luma8_xform_start <= 1'b0; luma8_quant_start <= 1'b0; luma8_zz_start <= 1'b0; luma8_iq_start <= 1'b0; luma8_it_start <= 1'b0;
+            fetch_start <= 1'b0; pred_start <= 1'b0; intra16_start <= 1'b0; xform_start <= 1'b0; quant_start <= 1'b0; zz_start <= 1'b0;
             cavlc_start <= 1'b0; iq_start <= 1'b0; it_start <= 1'b0; recon_start <= 1'b0; me_start <= 1'b0;
             bs_cmd_sps <= 1'b0; bs_cmd_pps <= 1'b0; bs_cmd_slice <= 1'b0; bs_cmd_mb_hdr <= 1'b0; bs_cmd_trailing <= 1'b0; bs_cmd_flush <= 1'b0; bs_cmd_clear_fifo <= 1'b0;
             done <= 1'b0;
@@ -2529,6 +2366,8 @@ pred_buf = {(256*BD){1'b0}};
             chr_cb_ref_wr_en <= 1'b0; chr_cr_ref_wr_en <= 1'b0;
             chr_dc_start <= 1'b0;
             i16_dc_start <= 1'b0;
+            if (cavlc_bits_valid && cabac_suppress_cavlc_payload_w)
+                frame_cabac_cavlc_suppressed_bits <= frame_cabac_cavlc_suppressed_bits + {26'd0, cavlc_count};
 
             case (top_state)
                 TS_IDLE: if (start) begin
@@ -2550,6 +2389,13 @@ pred_buf = {(256*BD){1'b0}};
                     frame_b_direct_nonzero_ref_mb_count <= 16'd0;
                     frame_b_direct_from_l1_mb_count <= 16'd0;
                     frame_cabac_p16x16_mb_count <= 16'd0;
+                    frame_p_l0_nonzero_ref_mb_count <= 16'd0;
+                    frame_p16x8_mb_count <= 16'd0;
+                    frame_p8x16_mb_count <= 16'd0;
+                    frame_p8x8_mb_count <= 16'd0;
+                    frame_p8x4_mb_count <= 16'd0;
+                    frame_p4x8_mb_count <= 16'd0;
+                    frame_p4x4_mb_count <= 16'd0;
                     left_is_skip <= 1'b0;
                     cabac_skip_ctx_reg <= 2'd0;
                     for (idx_rb = 0; idx_rb < MB_COLS; idx_rb = idx_rb + 1)
@@ -2596,6 +2442,12 @@ pred_buf = {(256*BD){1'b0}};
                     is_b_bi_mb_reg <= 1'b0;
                     is_b_direct_mb_reg <= 1'b0;
                     is_b_direct_from_l1_reg <= 1'b0;
+                    p_partition_mode_reg <= (is_p_frame && force_p16x8_in) ? 2'd1 :
+                                            (is_p_frame && force_p8x16_in) ? 2'd2 :
+                                            (is_p_frame && (force_p8x8_in || force_p8x4_in || force_p4x8_in || force_p4x4_in)) ? 2'd3 : 2'd0;
+                    p_sub_mb_type_reg <= (is_p_frame && force_p8x4_in) ? 2'd1 :
+                                         (is_p_frame && force_p4x8_in) ? 2'd2 :
+                                         (is_p_frame && force_p4x4_in) ? 2'd3 : 2'd0;
                     b_direct_pending_valid <= 1'b0;
                     b_direct_pending_use_l1 <= 1'b0;
                     b_direct_pending_use_bi <= 1'b0;
@@ -3317,7 +3169,6 @@ pred_buf = {(256*BD){1'b0}};
                                         direct_final_sad_i = b_direct_luma_sad_l0;
                                     end
                                     if (direct_temporal_slice_mode_reg &&
-                                        b_direct_pending_use_bi &&
                                         (b_direct_pending_ref_idx_l0 != 2'd0))
                                         direct_auto_bias_i = 32;
                                 end
@@ -3439,7 +3290,9 @@ pred_buf = {(256*BD){1'b0}};
                                         use_ipcm_mb_reg <= (ENABLE_P_IPCM != 0);
                                         top_state <= TS_MB_HDR;
                                     end
-                                end else if (!force_b_l0_in && (force_b_l1_in || (best_sad_i < b_bi_luma_sad_l0))) begin
+                                end else if (!force_b_l0_in && (force_b_l1_in || (best_sad_i < b_bi_luma_sad_l0)) &&
+                                               !(direct_temporal_slice_mode_reg && b_direct_pending_valid &&
+                                                 (b_direct_pending_ref_idx_l0 != 2'd0))) begin
                                     mb_ref_idx_reg <= 2'd0;
                                     mb_ref_idx_l1_reg <= 2'd0;
                                     me_best_mvx <= (me_fullpel_mvx <<< 2) + best_dx_i;
@@ -3643,7 +3496,7 @@ pred_buf = {(256*BD){1'b0}};
                                     pskip_y = pskip_med_y;
                                 end
                             end
-                            pskip_syntax_eligible_reg <= is_p_frame && !use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
+                            pskip_syntax_eligible_reg <= is_p_frame && (p_partition_mode_reg == 2'd0) && !use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
                                                          ($signed((me_fullpel_mvx <<< 2) + best_dx_i) == pskip_x) &&
                                                          ($signed((me_fullpel_mvy <<< 2) + best_dy_i) == pskip_y);
                             /* verilator lint_off WIDTH */
@@ -3668,7 +3521,7 @@ pred_buf = {(256*BD){1'b0}};
                             if (best_sad_i < INTER_SAD_THRESHOLD) begin
                                 use_intra16_mb_reg <= 1'b0;
                                 use_ipcm_mb_reg <= 1'b0;
-                                if (is_p_frame && !use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
+                                if (is_p_frame && (p_partition_mode_reg == 2'd0) && !use_weighted_pred_w && (mb_ref_idx_reg == 2'd0) &&
                                     pskip_luma_exact &&
                                     ($signed((me_fullpel_mvx <<< 2) + best_dx_i) == pskip_x) &&
                                     ($signed((me_fullpel_mvy <<< 2) + best_dy_i) == pskip_y)) begin
@@ -3739,71 +3592,25 @@ pred_buf = {(256*BD){1'b0}};
                         bs_hold_fifo_drain <= 1'b0;
                         top_state <= TS_DEFER_MB_HDR;
                     end else begin
-                        if (force_transform_8x8_in && is_inter_mb_reg) begin
-                            mb_has_residual <= 1'b0;
-                            sub_blk <= 5'd0;
-                            blk_started <= 1'b0;
-                            recon_buf <= {(256*BD){1'b0}};
-                            luma_recon_buf <= {(256*BD){1'b0}};
-                            chr_pred_mode <= 1'b0;
-                            intra_pred_bits_mb <= 64'd0;
-                            intra_pred_count_mb <= 7'd0;
-                            is_intra16_mb_hdr <= 1'b0;
-                            is_ipcm_mb_hdr <= 1'b0;
-                            intra_mb_type_code_num <= intra_i4_type_code;
-                            i16_dc_total_coeff <= 5'd0;
-                            i16_luma_ac_nonzero <= 1'b0;
-                            i16_chroma_dc_nonzero <= 1'b0;
-                            i16_chroma_ac_nonzero <= 1'b0;
-                            i16_cbp_chroma <= 2'd0;
-                            bs_hold_fifo_drain <= 1'b1;
-                            luma8_group <= 2'd0;
-                            luma8_sub <= 2'd0;
-                            luma8_phase <= 3'd0;
-                            luma8_started <= 1'b0;
-                            top_state <= TS_LUMA8;
-                        end else if (force_transform_8x8_in && use_intra16_mb_reg) begin
-                            mb_has_residual <= 1'b1;
-                            sub_blk <= 5'd0;
-                            blk_started <= 1'b0;
-                            recon_buf <= {(256*BD){1'b0}};
-                            luma_recon_buf <= {(256*BD){1'b0}};
-                            chr_pred_mode <= 1'b0;
-                            intra_pred_bits_mb <= 64'd0;
-                            intra_pred_count_mb <= 7'd0;
-                            is_intra16_mb_hdr <= use_intra16_mb_reg;
-                            is_ipcm_mb_hdr <= 1'b0;
-                            intra_mb_type_code_num <= intra_i4_type_code;
-                            i16_dc_total_coeff <= 5'd0;
-                            i16_luma_ac_nonzero <= 1'b0;
-                            i16_chroma_dc_nonzero <= 1'b0;
-                            i16_chroma_ac_nonzero <= 1'b0;
-                            i16_cbp_chroma <= 2'd0;
-                            bs_hold_fifo_drain <= 1'b1;
-                            top_state <= TS_LUMA16;
-                            luma16_phase <= 3'd0;
-                            luma16_blk <= 4'd0;
-                        end else begin
-                            mb_has_residual <= is_inter_mb_reg ? 1'b0 : 1'b1;
-                            sub_blk <= 5'd0;
-                            blk_state <= is_inter_mb_reg ? BS_XFORM : (use_intra16_mb_reg ? BS_XFORM : BS_PRED);
-                            blk_started <= 1'b0;
-                            recon_buf <= {(256*BD){1'b0}};
-                            luma_recon_buf <= {(256*BD){1'b0}};
-                            chr_pred_mode <= 1'b0;
-                            intra_pred_bits_mb <= 64'd0;
-                            intra_pred_count_mb <= 7'd0;
-                            is_intra16_mb_hdr <= use_intra16_mb_reg;
-                            is_ipcm_mb_hdr <= 1'b0;
-                            intra_mb_type_code_num <= intra_i4_type_code;
-                            i16_dc_total_coeff <= 5'd0;
-                            i16_luma_ac_nonzero <= 1'b0;
-                            i16_chroma_dc_nonzero <= 1'b0;
-                            i16_chroma_ac_nonzero <= 1'b0;
-                            i16_cbp_chroma <= 2'd0;
-                            bs_hold_fifo_drain <= 1'b1;
-                            top_state <= TS_ENCODE_SBLK;
-                        end
+                        mb_has_residual <= is_inter_mb_reg ? 1'b0 : 1'b1;
+                        sub_blk <= 5'd0;
+                        blk_state <= is_inter_mb_reg ? BS_XFORM : (use_intra16_mb_reg ? BS_XFORM : BS_PRED);
+                        blk_started <= 1'b0;
+                        recon_buf <= {(256*BD){1'b0}};
+                        luma_recon_buf <= {(256*BD){1'b0}};
+                        chr_pred_mode <= 1'b0;
+                        intra_pred_bits_mb <= 64'd0;
+                        intra_pred_count_mb <= 7'd0;
+                        is_intra16_mb_hdr <= use_intra16_mb_reg;
+                        is_ipcm_mb_hdr <= 1'b0;
+                        intra_mb_type_code_num <= intra_i4_type_code;
+                        i16_dc_total_coeff <= 5'd0;
+                        i16_luma_ac_nonzero <= 1'b0;
+                        i16_chroma_dc_nonzero <= 1'b0;
+                        i16_chroma_ac_nonzero <= 1'b0;
+                        i16_cbp_chroma <= 2'd0;
+                        bs_hold_fifo_drain <= 1'b1;
+                        top_state <= TS_ENCODE_SBLK;
                     end
                 end
 
@@ -3962,18 +3769,10 @@ pred_buf = {(256*BD){1'b0}};
                                         i16_inv_dc[di] <= $signed(i16_dc_out_flat[di*16 +: 16]);
                                 end
                                 i16_dc_inverse <= 1'b0;
-                                if (force_transform_8x8_in) begin
-                                    top_state <= TS_LUMA8;
-                                    luma8_phase <= 3'd0;
-                                    luma8_group <= 2'd0;
-                                    luma8_sub <= 2'd0;
-                                    luma8_started <= 1'b0;
-                                end else begin
-                                    luma16_phase <= 3'd2;
-                                    sub_blk <= 5'd0;
-                                    blk_state <= BS_PRED;
-                                    blk_started <= 1'b0;
-                                end
+                                luma16_phase <= 3'd2;
+                                sub_blk <= 5'd0;
+                                blk_state <= BS_PRED;
+                                blk_started <= 1'b0;
                             end
                         end
 
@@ -4028,10 +3827,8 @@ pred_buf = {(256*BD){1'b0}};
                                     use_i16_ac_zigzag <= 1'b1;
                                     use_i16_dc_zigzag <= 1'b0;
                                     zz_chroma_dc_mode <= 1'b0;
-                                    // Intra_16x16 luma AC residual blocks have maxNumCoeff=15
-                                    // (the DC coefficient is carried by the separate luma DC block).
-                                    // Reuse the AC scan/CAVLC path so last_nonzero_idx and total_zeros
-                                    // are coded in the decoder's 15-coefficient coordinate space.
+                                    // Intra_16x16 luma AC omits the DC coefficient, so it
+                                    // must use the 15-coefficient AC zigzag/CAVLC path.
                                     zz_chroma_ac_mode <= 1'b1;
                                     cavlc_is_chroma_dc <= 1'b0;
                                     cavlc_is_chroma_ac <= 1'b1;
@@ -4144,166 +3941,6 @@ pred_buf = {(256*BD){1'b0}};
                     endcase
                 end
 
-                TS_LUMA8: begin
-                    case (luma8_phase)
-                        3'd0: begin
-                            if (!luma8_started) begin
-                                luma8_xform_start <= 1'b1;
-                                luma8_started <= 1'b1;
-                            end else if (luma8_xform_done) begin
-                                luma8_started <= 1'b0;
-                                luma8_phase <= 3'd1;
-                            end
-                        end
-
-                        3'd1: begin
-                            if (!luma8_started) begin
-                                luma8_quant_start <= 1'b1;
-                                luma8_started <= 1'b1;
-                            end else if (luma8_quant_done) begin
-                                luma8_started <= 1'b0;
-                                luma8_sub <= 2'd0;
-                                luma8_phase <= 3'd2;
-                            end
-                        end
-
-                        3'd2: begin
-                            sub_blk <= {luma8_group, luma8_sub};
-                            if (!luma8_started) begin
-                                luma8_zz_start <= 1'b1;
-                                luma8_started <= 1'b1;
-                            end else if (luma8_zz_done) begin
-                                nz_coeff[{luma8_group, luma8_sub}] <= luma8_total_coeffs;
-                                if (luma8_total_coeffs != 5'd0)
-                                    i16_luma_ac_nonzero <= 1'b1;
-                                luma8_started <= 1'b0;
-                                luma8_phase <= 3'd3;
-                            end
-                        end
-
-                        3'd3: begin
-                            sub_blk <= {luma8_group, luma8_sub};
-                            if (!luma8_started && !bs_busy) begin
-                                cavlc_start <= 1'b1;
-                                luma8_started <= 1'b1;
-                            end else if (cavlc_done) begin
-                                luma8_started <= 1'b0;
-                                if (luma8_sub == 2'd3) begin
-                                    luma8_sub <= 2'd0;
-                                    luma8_phase <= 3'd4;
-                                end else begin
-                                    luma8_sub <= luma8_sub + 2'd1;
-                                    luma8_phase <= 3'd2;
-                                end
-                            end
-                        end
-
-                        3'd4: begin
-                            if (!luma8_started) begin
-                                luma8_iq_start <= 1'b1;
-                                luma8_started <= 1'b1;
-                            end else if (luma8_iq_done) begin
-                                luma8_started <= 1'b0;
-                                luma8_phase <= 3'd5;
-                            end
-                        end
-
-                        3'd5: begin
-                            if (!luma8_started) begin
-                                luma8_it_start <= 1'b1;
-                                luma8_started <= 1'b1;
-                            end else if (luma8_it_done) begin
-                                luma8_started <= 1'b0;
-                                luma8_sub <= 2'd0;
-                                luma8_phase <= 3'd6;
-                            end
-                        end
-
-                        3'd6: begin
-                            sub_blk <= {luma8_group, luma8_sub};
-                            if (!luma8_started) begin
-                                recon_start <= 1'b1;
-                                luma8_started <= 1'b1;
-                            end else if (recon_done) begin
-                                recon_buf <= recon_out_w;
-                                luma8_started <= 1'b0;
-                                if (luma8_group == 2'd3 && luma8_sub == 2'd3) begin
-                                    luma_recon_buf <= recon_out_w;
-                                    if (is_inter_mb_reg) begin
-                                        blk_started <= 1'b0;
-                                        chr_recon_cb <= {(CHR_MB_PIXELS*BD){1'b0}};
-                                        chr_recon_cr <= {(CHR_MB_PIXELS*BD){1'b0}};
-                                        if (inter_chr_prefetched_valid) begin
-                                            top_state <= TS_CHROMA;
-                                            chr_phase <= 3'd0;
-                                            chr_blk <= {CHR_BLK_W{1'b0}};
-                                            chr_is_cr <= 1'b0;
-                                            recon_buf <= {(256*BD){1'b0}};
-                                            blk_state <= BS_PRED;
-                                            inter_chr_mode <= 1'b1;
-                                            use_chr_dc_zigzag <= 1'b0;
-                                            use_chr_ac_zigzag <= 1'b0;
-                                            cavlc_is_chroma_dc <= 1'b0;
-                                            cavlc_is_chroma_ac <= 1'b0;
-                                            zz_chroma_ac_mode <= 1'b0;
-                                            zz_chroma_dc_mode <= 1'b0;
-                                        end else begin
-                                            top_state <= TS_CHR_FETCH;
-                                            chr_fetch_cnt <= {CHR_FETCH_W{1'b0}};
-                                            chr_fetch_started <= 1'b0;
-                                            chr_raw_cb <= {(CHR_RAW_SAMPLES*BD){1'b0}};
-                                            chr_raw_cr <= {(CHR_RAW_SAMPLES*BD){1'b0}};
-                                            chr_f_row <= 5'd0;
-                                            chr_f_col <= {CHR_FETCH_COL_W{1'b0}};
-                                            b_bi_chr_fetch_l1_phase <= 1'b0;
-                                            chr_frac_x <= chr_frac_x_w;
-                                            chr_frac_y <= chr_frac_y_w;
-                                            chr_fetch_cols <= (chr_frac_x_w != 3'd0) ? (CHR_MB_WIDTH[CHR_FETCH_COL_W-1:0] + {{(CHR_FETCH_COL_W-1){1'b0}}, 1'b1}) : CHR_MB_WIDTH[CHR_FETCH_COL_W-1:0];
-                                            chr_fetch_rows <= (chr_frac_y_w != 3'd0) ? (CHR_MB_HEIGHT[4:0] + 5'd1) : CHR_MB_HEIGHT[4:0];
-                                            chr_recon_cb <= {(CHR_MB_PIXELS*BD){1'b0}};
-                                            chr_recon_cr <= {(CHR_MB_PIXELS*BD){1'b0}};
-                                            blk_state <= BS_PRED;
-                                            inter_chr_mode <= 1'b1;
-                                            use_chr_dc_zigzag <= 1'b0;
-                                            use_chr_ac_zigzag <= 1'b0;
-                                            cavlc_is_chroma_dc <= 1'b0;
-                                            cavlc_is_chroma_ac <= 1'b0;
-                                            zz_chroma_ac_mode <= 1'b0;
-                                            zz_chroma_dc_mode <= 1'b0;
-                                        end
-                                    end else begin
-                                        top_state <= TS_CHROMA;
-                                        chr_phase <= 3'd0;
-                                        chr_blk <= {CHR_BLK_W{1'b0}};
-                                        chr_is_cr <= 1'b0;
-                                        recon_buf <= {(256*BD){1'b0}};
-                                        blk_started <= 1'b0;
-                                        blk_state <= BS_PRED;
-                                        chr_recon_cb <= {(CHR_MB_PIXELS*BD){1'b0}};
-                                        chr_recon_cr <= {(CHR_MB_PIXELS*BD){1'b0}};
-                                        inter_chr_mode <= 1'b0;
-                                        use_chr_dc_zigzag <= 1'b0;
-                                        use_chr_ac_zigzag <= 1'b0;
-                                        cavlc_is_chroma_dc <= 1'b0;
-                                        cavlc_is_chroma_ac <= 1'b0;
-                                        zz_chroma_ac_mode <= 1'b0;
-                                        zz_chroma_dc_mode <= 1'b0;
-                                    end
-                                end else if (luma8_sub == 2'd3) begin
-                                    luma8_group <= luma8_group + 2'd1;
-                                    luma8_sub <= 2'd0;
-                                    luma8_phase <= 3'd0;
-                                end else begin
-                                    luma8_sub <= luma8_sub + 2'd1;
-                                    luma8_phase <= 3'd2;
-                                end
-                            end
-                        end
-
-                        default: luma8_phase <= 3'd0;
-                    endcase
-                end
-
                 TS_DEFER_MB_HDR: if (!bs_busy) begin
                     cabac_skip_ctx_reg <= {1'b0, left_is_skip} + {1'b0, top_is_skip[mb_x]};
                     if (cabac_slice_enable_w && !is_skip_mb_reg && !cabac_non_skip_subset_ok_w) begin
@@ -4403,10 +4040,27 @@ pred_buf = {(256*BD){1'b0}};
                         frame_b_l0_nonzero_ref_mb_count <= frame_b_l0_nonzero_ref_mb_count + 16'd1;
                     if (is_b_frame && is_inter_mb_reg && is_b_direct_mb_reg && !is_b_l1_mb_reg && (mb_ref_idx_reg != 2'd0))
                         frame_b_direct_nonzero_ref_mb_count <= frame_b_direct_nonzero_ref_mb_count + 16'd1;
+                    if (is_p_frame && is_inter_mb_reg && !is_skip_mb_reg && (mb_ref_idx_reg != 2'd0))
+                        frame_p_l0_nonzero_ref_mb_count <= frame_p_l0_nonzero_ref_mb_count + 16'd1;
                     if (is_b_frame && is_inter_mb_reg && is_b_direct_mb_reg && is_b_direct_from_l1_reg)
                         frame_b_direct_from_l1_mb_count <= frame_b_direct_from_l1_mb_count + 16'd1;
                     if (cabac_non_skip_subset_ok_w)
                         frame_cabac_p16x16_mb_count <= frame_cabac_p16x16_mb_count + 16'd1;
+                    if (is_p_frame && is_inter_mb_reg && !is_skip_mb_reg && (p_partition_mode_reg == 2'd1))
+                        frame_p16x8_mb_count <= frame_p16x8_mb_count + 16'd1;
+                    if (is_p_frame && is_inter_mb_reg && !is_skip_mb_reg && (p_partition_mode_reg == 2'd2))
+                        frame_p8x16_mb_count <= frame_p8x16_mb_count + 16'd1;
+                    if (is_p_frame && is_inter_mb_reg && !is_skip_mb_reg && (p_partition_mode_reg == 2'd3)) begin
+                        case (p_sub_mb_type_reg)
+                            2'd0: frame_p8x8_mb_count <= frame_p8x8_mb_count + 16'd1;
+                            2'd1: frame_p8x4_mb_count <= frame_p8x4_mb_count + 16'd1;
+                            2'd2: frame_p4x8_mb_count <= frame_p4x8_mb_count + 16'd1;
+                            default: frame_p4x4_mb_count <= frame_p4x4_mb_count + 16'd1;
+                        endcase
+                    end
+                    if (cabac_non_skip_subset_ok_w && (i16_cbp_chroma != 2'd0))
+                        frame_cabac_chroma_mb_count <= frame_cabac_chroma_mb_count + 16'd1;
+
                     top_is_skip[mb_x] <= is_skip_mb_reg;
                     left_is_skip <= is_skip_mb_reg;
                     if (is_inter_mb_reg && !is_b_frame && !is_skip_mb_reg) begin
@@ -4545,170 +4199,8 @@ pred_buf = {(256*BD){1'b0}};
                             left_chr_cr_nb[nb_r*BD +: BD] <= chr_recon_cr[(nb_r*CHR_MB_WIDTH + (CHR_MB_WIDTH-1))*BD +: BD];
                         end
                     end
-                    `ifndef SYNTHESIS
-                    if (deblock_active_w && (deblock_changed_count_w != 16'd0)) begin
-                        $display("[DEBLOCK] frame=%0d mb=(%0d,%0d) idc=%0d changed_samples=%0d filtered_edges=%0d patch_writes=%0d pre_luma0=%0d post_luma0=%0d",
-                                 cur_frame_num, mb_x, mb_y, deblock_disable_idc_w,
-                                 deblock_changed_count_w, deblock_filtered_edge_count_w, deblock_patch_write_count_w,
-                                 luma_recon_buf[0 +: BD], ref_luma_write_buf_w[0 +: BD]);
-                    end
-                    `endif
                     ref_wr_idx <= 9'd0;
-                    deblock_fetch_idx <= 7'd0;
-                    deblock_fetch_started <= 1'b0;
-                    deblock_fetch_phase <= deblock_first_fetch_phase_fn(mb_left_avail, mb_top_avail);
-                    deblock_wr_phase <= deblock_first_write_phase_fn(mb_left_avail, mb_top_avail, deblock_active_w);
-                    if (deblock_patch_write_count_w != 16'd0) begin
-                        ref_rd_bank_sel <= current_write_bank;
-                        top_state <= TS_DEBLOCK_MB;
-                    end else begin
-                        top_state <= TS_REF_WR;
-                    end
-                end
-
-                TS_DEBLOCK_MB: begin
-                    if (deblock_fetch_phase != DBF_IDLE) begin
-                        ref_rd_bank_sel <= current_write_bank;
-                        case (deblock_fetch_phase)
-                            DBF_LEFT_LUMA: begin
-                                if (!deblock_fetch_started) begin
-                                    deblock_fetch_started <= 1'b1;
-                                end else begin
-`ifndef SYNTHESIS
-                                    if ((cur_frame_num == 8'd0) && (mb_x == 7'd1) && (mb_y == 6'd0) && (deblock_fetch_idx < 7'd4))
-                                        $display("[DBG_DEBLOCK_FETCH] idx=%0d addr=%0d data=%0d bank=%0d", deblock_fetch_idx, ref_mem_rd_addr, ref_mem_rd_data, current_write_bank);
-`endif
-                                    deblock_left_luma_p_buf[deblock_fetch_idx*BD +: BD] <= ref_mem_rd_data;
-                                    if (deblock_fetch_idx == 7'd63) begin
-                                        deblock_fetch_phase <= deblock_next_fetch_phase_fn(deblock_fetch_phase, mb_left_avail, mb_top_avail);
-                                        deblock_fetch_idx <= 7'd0;
-                                        deblock_fetch_started <= 1'b0;
-                                    end else begin
-                                        deblock_fetch_idx <= deblock_fetch_idx + 7'd1;
-                                    end
-                                end
-                            end
-                            DBF_TOP_LUMA: begin
-                                if (!deblock_fetch_started) begin
-                                    deblock_fetch_started <= 1'b1;
-                                end else begin
-                                    deblock_top_luma_p_buf[deblock_fetch_idx*BD +: BD] <= ref_mem_rd_data;
-                                    if (deblock_fetch_idx == 7'd63) begin
-                                        deblock_fetch_phase <= deblock_next_fetch_phase_fn(deblock_fetch_phase, mb_left_avail, mb_top_avail);
-                                        deblock_fetch_idx <= 7'd0;
-                                        deblock_fetch_started <= 1'b0;
-                                    end else begin
-                                        deblock_fetch_idx <= deblock_fetch_idx + 7'd1;
-                                    end
-                                end
-                            end
-                            DBF_LEFT_CHROMA: begin
-                                if (!deblock_fetch_started) begin
-                                    chr_cb_ref_rd_addr <= cur_chroma_addr_fn(mb_x - 7'd1, mb_y, deblock_fetch_idx[6:2], (CHR_MB_WIDTH - 4) + deblock_fetch_idx[1:0]);
-                                    chr_cr_ref_rd_addr <= cur_chroma_addr_fn(mb_x - 7'd1, mb_y, deblock_fetch_idx[6:2], (CHR_MB_WIDTH - 4) + deblock_fetch_idx[1:0]);
-                                    deblock_fetch_started <= 1'b1;
-                                end else begin
-                                    deblock_left_cb_p_buf[deblock_fetch_idx*BD +: BD] <= chr_cb_ref_rd_data;
-                                    deblock_left_cr_p_buf[deblock_fetch_idx*BD +: BD] <= chr_cr_ref_rd_data;
-                                    if (deblock_fetch_idx + 7'd1 >= (4 * CHR_MB_HEIGHT)) begin
-                                        deblock_fetch_phase <= deblock_next_fetch_phase_fn(deblock_fetch_phase, mb_left_avail, mb_top_avail);
-                                        deblock_fetch_idx <= 7'd0;
-                                        deblock_fetch_started <= 1'b0;
-                                    end else begin
-                                        deblock_fetch_idx <= deblock_fetch_idx + 7'd1;
-                                        chr_cb_ref_rd_addr <= cur_chroma_addr_fn(mb_x - 7'd1, mb_y, (deblock_fetch_idx + 7'd1) / 4, (CHR_MB_WIDTH - 4) + ((deblock_fetch_idx + 7'd1) % 4));
-                                        chr_cr_ref_rd_addr <= cur_chroma_addr_fn(mb_x - 7'd1, mb_y, (deblock_fetch_idx + 7'd1) / 4, (CHR_MB_WIDTH - 4) + ((deblock_fetch_idx + 7'd1) % 4));
-                                    end
-                                end
-                            end
-                            default: begin
-                                if (!deblock_fetch_started) begin
-                                    if (CHR_MB_WIDTH == 16) begin
-                                        chr_cb_ref_rd_addr <= cur_chroma_addr_fn(mb_x, mb_y - 6'd1, (CHR_MB_HEIGHT - 4) + deblock_fetch_idx[5:4], deblock_fetch_idx[3:0]);
-                                        chr_cr_ref_rd_addr <= cur_chroma_addr_fn(mb_x, mb_y - 6'd1, (CHR_MB_HEIGHT - 4) + deblock_fetch_idx[5:4], deblock_fetch_idx[3:0]);
-                                    end else begin
-                                        chr_cb_ref_rd_addr <= cur_chroma_addr_fn(mb_x, mb_y - 6'd1, (CHR_MB_HEIGHT - 4) + deblock_fetch_idx[4:3], {1'b0, deblock_fetch_idx[2:0]});
-                                        chr_cr_ref_rd_addr <= cur_chroma_addr_fn(mb_x, mb_y - 6'd1, (CHR_MB_HEIGHT - 4) + deblock_fetch_idx[4:3], {1'b0, deblock_fetch_idx[2:0]});
-                                    end
-                                    deblock_fetch_started <= 1'b1;
-                                end else begin
-                                    deblock_top_cb_p_buf[deblock_fetch_idx*BD +: BD] <= chr_cb_ref_rd_data;
-                                    deblock_top_cr_p_buf[deblock_fetch_idx*BD +: BD] <= chr_cr_ref_rd_data;
-                                    if (deblock_fetch_idx + 7'd1 >= (4 * CHR_MB_WIDTH)) begin
-                                        deblock_fetch_phase <= deblock_next_fetch_phase_fn(deblock_fetch_phase, mb_left_avail, mb_top_avail);
-                                        deblock_fetch_idx <= 7'd0;
-                                        deblock_fetch_started <= 1'b0;
-                                    end else begin
-                                        deblock_fetch_idx <= deblock_fetch_idx + 7'd1;
-                                        if (CHR_MB_WIDTH == 16) begin
-                                            chr_cb_ref_rd_addr <= cur_chroma_addr_fn(mb_x, mb_y - 6'd1, (CHR_MB_HEIGHT - 4) + ((deblock_fetch_idx + 7'd1) / 16), (deblock_fetch_idx + 7'd1) % 16);
-                                            chr_cr_ref_rd_addr <= cur_chroma_addr_fn(mb_x, mb_y - 6'd1, (CHR_MB_HEIGHT - 4) + ((deblock_fetch_idx + 7'd1) / 16), (deblock_fetch_idx + 7'd1) % 16);
-                                        end else begin
-                                            chr_cb_ref_rd_addr <= cur_chroma_addr_fn(mb_x, mb_y - 6'd1, (CHR_MB_HEIGHT - 4) + ((deblock_fetch_idx + 7'd1) / 8), (deblock_fetch_idx + 7'd1) % 8);
-                                            chr_cr_ref_rd_addr <= cur_chroma_addr_fn(mb_x, mb_y - 6'd1, (CHR_MB_HEIGHT - 4) + ((deblock_fetch_idx + 7'd1) / 8), (deblock_fetch_idx + 7'd1) % 8);
-                                        end
-                                    end
-                                end
-                            end
-                        endcase
-                    end else begin
-                        case (deblock_wr_phase)
-                            DBW_LEFT_LUMA: begin
-                                ref_mem_wr_en <= 1'b1;
-                                ref_mem_wr_addr <= cur_luma_addr_fn(mb_x - 7'd1, mb_y, ref_wr_idx / 3, 13 + (ref_wr_idx % 3));
-                                ref_mem_wr_data <= deblock_left_luma_patch_w[ref_wr_idx*BD +: BD];
-                                if (ref_wr_idx == 9'd47) begin
-                                    ref_wr_idx <= 9'd0;
-                                    deblock_wr_phase <= deblock_next_write_phase_fn(deblock_wr_phase, mb_left_avail, mb_top_avail);
-                                end else begin
-                                    ref_wr_idx <= ref_wr_idx + 9'd1;
-                                end
-                            end
-                            DBW_TOP_LUMA: begin
-                                ref_mem_wr_en <= 1'b1;
-                                ref_mem_wr_addr <= cur_luma_addr_fn(mb_x, mb_y - 6'd1, 13 + (ref_wr_idx / 16), ref_wr_idx % 16);
-                                ref_mem_wr_data <= deblock_top_luma_patch_w[ref_wr_idx*BD +: BD];
-                                if (ref_wr_idx == 9'd47) begin
-                                    ref_wr_idx <= 9'd0;
-                                    deblock_wr_phase <= deblock_next_write_phase_fn(deblock_wr_phase, mb_left_avail, mb_top_avail);
-                                end else begin
-                                    ref_wr_idx <= ref_wr_idx + 9'd1;
-                                end
-                            end
-                            DBW_LEFT_CHROMA: begin
-                                chr_cb_ref_wr_en <= 1'b1;
-                                chr_cr_ref_wr_en <= 1'b1;
-                                chr_cb_ref_wr_addr <= cur_chroma_addr_fn(mb_x - 7'd1, mb_y, ref_wr_idx, CHR_MB_WIDTH - 1);
-                                chr_cr_ref_wr_addr <= cur_chroma_addr_fn(mb_x - 7'd1, mb_y, ref_wr_idx, CHR_MB_WIDTH - 1);
-                                chr_cb_ref_wr_data <= deblock_left_cb_patch_w[ref_wr_idx*BD +: BD];
-                                chr_cr_ref_wr_data <= deblock_left_cr_patch_w[ref_wr_idx*BD +: BD];
-                                if (ref_wr_idx + 9'd1 >= CHR_MB_HEIGHT) begin
-                                    ref_wr_idx <= 9'd0;
-                                    deblock_wr_phase <= deblock_next_write_phase_fn(deblock_wr_phase, mb_left_avail, mb_top_avail);
-                                end else begin
-                                    ref_wr_idx <= ref_wr_idx + 9'd1;
-                                end
-                            end
-                            DBW_TOP_CHROMA: begin
-                                chr_cb_ref_wr_en <= 1'b1;
-                                chr_cr_ref_wr_en <= 1'b1;
-                                chr_cb_ref_wr_addr <= cur_chroma_addr_fn(mb_x, mb_y - 6'd1, CHR_MB_HEIGHT - 1, ref_wr_idx);
-                                chr_cr_ref_wr_addr <= cur_chroma_addr_fn(mb_x, mb_y - 6'd1, CHR_MB_HEIGHT - 1, ref_wr_idx);
-                                chr_cb_ref_wr_data <= deblock_top_cb_patch_w[ref_wr_idx*BD +: BD];
-                                chr_cr_ref_wr_data <= deblock_top_cr_patch_w[ref_wr_idx*BD +: BD];
-                                if (ref_wr_idx + 9'd1 >= CHR_MB_WIDTH) begin
-                                    ref_wr_idx <= 9'd0;
-                                    deblock_wr_phase <= deblock_next_write_phase_fn(deblock_wr_phase, mb_left_avail, mb_top_avail);
-                                end else begin
-                                    ref_wr_idx <= ref_wr_idx + 9'd1;
-                                end
-                            end
-                            default: begin
-                                ref_wr_idx <= 9'd0;
-                                top_state <= TS_REF_WR;
-                            end
-                        endcase
-                    end
+                    top_state <= TS_REF_WR;
                 end
 
                 // Write reconstructed luma (256 bytes) back to reference frame memory
@@ -4718,7 +4210,7 @@ pred_buf = {(256*BD){1'b0}};
                         ref_mem_wr_en <= 1'b1;
                         ref_mem_wr_addr <= ({mb_y, 4'd0} + {6'd0, ref_wr_idx[7:4]}) * FRAME_WIDTH[10:0]
                                          + {mb_x, 4'd0} + {7'd0, ref_wr_idx[3:0]};
-                        ref_mem_wr_data <= ref_luma_write_buf_w[ref_wr_idx[7:0]*BD +: BD];
+                        ref_mem_wr_data <= luma_recon_buf[ref_wr_idx[7:0]*BD +: BD];
                         ref_wr_idx <= ref_wr_idx + 9'd1;
                     end else if (ref_wr_idx < (9'd256 + CHR_MB_PIXELS[8:0])) begin
                         // Write chroma Cb and Cr simultaneously (CHR_MB_PIXELS each)
@@ -4737,10 +4229,10 @@ pred_buf = {(256*BD){1'b0}};
                             end
                             chr_cb_ref_wr_en <= 1'b1;
                             chr_cb_ref_wr_addr <= ca;
-                            chr_cb_ref_wr_data <= ref_cb_write_buf_w[ci*BD +: BD];
+                            chr_cb_ref_wr_data <= chr_recon_cb[ci*BD +: BD];
                             chr_cr_ref_wr_en <= 1'b1;
                             chr_cr_ref_wr_addr <= ca;
-                            chr_cr_ref_wr_data <= ref_cr_write_buf_w[ci*BD +: BD];
+                            chr_cr_ref_wr_data <= chr_recon_cr[ci*BD +: BD];
                         end
                         ref_wr_idx <= ref_wr_idx + 9'd1;
                     end else begin
@@ -4894,7 +4386,6 @@ pred_buf = {(256*BD){1'b0}};
                                         is_skip_mb_reg <= cabac_zero_cbp_p16x16_eligible_w ? 1'b0 : 1'b1;
                                         mb_has_residual <= 1'b0;
                                         recon_buf <= inter_pred_buf;
-                                        luma_recon_buf <= inter_pred_buf;
                                         chr_recon_cb <= interp_cb_i;
                                         chr_recon_cr <= interp_cr_i;
                                         top_state <= cabac_zero_cbp_p16x16_eligible_w ? TS_SKIP_CLR_FIFO :
@@ -5078,8 +4569,9 @@ pred_buf = {(256*BD){1'b0}};
                                                 end
                                                 mb_has_residual <= mb_nonzero_i;
                                                 if (!mb_nonzero_i) begin
-                                                    is_skip_mb_reg <= cabac_zero_cbp_p16x16_eligible_w ? 1'b0 :
-                                                                      (pskip_syntax_eligible_reg || bskip_syntax_eligible_reg);
+                                                    is_skip_mb_reg <= (is_p_frame && (p_partition_mode_reg != 2'd0)) ? 1'b0 :
+                                                                      (cabac_zero_cbp_p16x16_eligible_w ? 1'b0 :
+                                                                       (pskip_syntax_eligible_reg || bskip_syntax_eligible_reg));
                                                     top_state <= TS_SKIP_CLR_FIFO;
                                                 end else begin
                                                     top_state <= TS_DEFER_MB_HDR;
@@ -5546,6 +5038,8 @@ pred_buf = {(256*BD){1'b0}};
                                                     if (nz_coeff[nz_i] != 5'd0)
                                                         mb_nonzero_i = 1'b1;
                                                 end
+                                                if (i16_chroma_dc_nonzero || i16_chroma_ac_nonzero)
+                                                    i16_cbp_chroma <= 2'd2;
                                                 mb_has_residual <= mb_nonzero_i;
                                                 if (!mb_nonzero_i) begin
                                                     is_skip_mb_reg <= cabac_zero_cbp_p16x16_eligible_w ? 1'b0 :
@@ -5679,8 +5173,11 @@ pred_buf = {(256*BD){1'b0}};
                          else if (!flush_accepted) flush_accepted <= 1'b1;
                          else if (bs_cmd_done) begin
                              done <= 1'b1;
-                            $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d",
-                                     cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count);
+                            $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d p_l0_refgt0_mbs=%0d p16x8_mbs=%0d p8x16_mbs=%0d p8x8_mbs=%0d p8x4_mbs=%0d p4x8_mbs=%0d p4x4_mbs=%0d",
+                                     cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count, frame_p_l0_nonzero_ref_mb_count, frame_p16x8_mb_count, frame_p8x16_mb_count, frame_p8x8_mb_count, frame_p8x4_mb_count, frame_p4x8_mb_count, frame_p4x4_mb_count);
+                            $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d cabac_chroma_mbs=%0d cavlc_suppressed_bits=%0d",
+                                     cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count, frame_cabac_chroma_mb_count, frame_cabac_cavlc_suppressed_bits);
+
                              refbank_poc_lsb[current_write_bank] <= cur_pic_order_cnt_lsb;
                             if (is_p_frame) begin
                                 refbank_has_l0_ref0[current_write_bank] <= (valid_ref_count != 3'd0);
@@ -5705,7 +5202,7 @@ pred_buf = {(256*BD){1'b0}};
                                 refbank_has_l0_ref2[current_write_bank] <= (valid_ref_count >= 3'd4);
                                 refbank_l0_ref2_bank[current_write_bank] <= ancient_ref_bank;
                                 refbank_has_l1_ref0[current_write_bank] <= (valid_ref_count != 3'd0);
-                                refbank_l1_ref0_bank[current_write_bank] <= newest_ref_bank;
+                                refbank_l1_ref0_bank[current_write_bank] <= oldest_ref_bank;
                                 ancient_ref_bank <= oldest_ref_bank;
                                 oldest_ref_bank <= older_ref_bank;
                                 older_ref_bank <= newest_ref_bank;
@@ -5740,7 +5237,7 @@ pred_buf = {(256*BD){1'b0}};
     end
 
     localparam DEBUG_TRACE = 1'b1;
-    localparam [7:0] DEBUG_FRAME = 8'd1;
+    localparam [7:0] DEBUG_FRAME = 8'd0;
     localparam [11:0] DEBUG_MB_START = 12'd0;
     localparam [11:0] DEBUG_MB_END = 12'd1;
 

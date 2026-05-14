@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 
 
-DEFAULT_JOBS = 24
+DEFAULT_JOBS = 1
 
 
 @dataclass(frozen=True)
@@ -37,6 +37,11 @@ class BuildConfig:
     inter_sad_threshold: int = 8000
     enable_cabac_pskip: int = 0
     enable_cabac_p16x16: int = 0
+    enable_cavlc_luma_8x8: int = 0
+    base_qp: int = 26
+    mb_qp_delta: int = 0
+    chroma_qp_index_offset: int = 0
+    second_chroma_qp_index_offset: int = 0
     idr_interval: int = 12
     force_b_slice: int = 0
     force_bref_slice: int = 0
@@ -45,7 +50,12 @@ class BuildConfig:
     force_b_l1: int = 0
     force_b_direct: int = 0
     force_b_direct_temporal: int = 0
-    force_transform_8x8: int = 0
+    force_p16x8: int = 0
+    force_p8x16: int = 0
+    force_p8x8: int = 0
+    force_p8x4: int = 0
+    force_p4x8: int = 0
+    force_p4x4: int = 0
     force_b_bi_on_reorder_ref_slot: int = 0
     force_b_l0_on_reorder_ref_slot: int = 0
     force_b_l1_on_reorder_ref_slot: int = 0
@@ -57,7 +67,6 @@ class BuildConfig:
     force_b_direct_on_reorder_b_slot: int = 0
     force_b_direct_temporal_on_reorder_b_slot: int = 0
     reorder_b_gop: int = 0
-
 
 def repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
@@ -131,6 +140,11 @@ def build_sim(workspace: Path, config: BuildConfig, build_log_path: Path | None 
         f"INTER_SAD_THRESHOLD={config.inter_sad_threshold}",
         f"ENABLE_CABAC_PSKIP={config.enable_cabac_pskip}",
         f"ENABLE_CABAC_P16X16={config.enable_cabac_p16x16}",
+        f"ENABLE_CAVLC_LUMA_8X8={config.enable_cavlc_luma_8x8}",
+        f"BASE_QP={config.base_qp}",
+        f"MB_QP_DELTA={config.mb_qp_delta}",
+        f"CHROMA_QP_INDEX_OFFSET={config.chroma_qp_index_offset}",
+        f"SECOND_CHROMA_QP_INDEX_OFFSET={config.second_chroma_qp_index_offset}",
     ]
     if config.extra_verilator_args:
         cmd.append(f"EXTRA_VERILATOR_ARGS={' '.join(config.extra_verilator_args)}")
@@ -144,7 +158,6 @@ def build_sim(workspace: Path, config: BuildConfig, build_log_path: Path | None 
         build_log_path.parent.mkdir(parents=True, exist_ok=True)
         build_log_path.write_text("".join(build_logs), encoding="utf-8")
     return tb_dir / "Vh264_encoder_top"
-
 
 def run_sim(
     sim_bin: Path,
@@ -160,7 +173,12 @@ def run_sim(
     force_b_l1: int = 0,
     force_b_direct: int = 0,
     force_b_direct_temporal: int = 0,
-    force_transform_8x8: int = 0,
+    force_p16x8: int = 0,
+    force_p8x16: int = 0,
+    force_p8x8: int = 0,
+    force_p8x4: int = 0,
+    force_p4x8: int = 0,
+    force_p4x4: int = 0,
     force_b_bi_on_reorder_ref_slot: int = 0,
     force_b_l0_on_reorder_ref_slot: int = 0,
     force_b_l1_on_reorder_ref_slot: int = 0,
@@ -199,8 +217,19 @@ def run_sim(
         cmd.append("+force_b_direct=1")
     if force_b_direct_temporal:
         cmd.append("+force_b_direct_temporal=1")
-    if force_transform_8x8:
-        cmd.append("+force_transform_8x8=1")
+    if force_p16x8:
+        cmd.append("+force_p16x8=1")
+    if force_p8x16:
+        cmd.append("+force_p8x16=1")
+    if force_p8x8:
+        cmd.append("+force_p8x8=1")
+    if force_p8x4:
+        cmd.append("+force_p8x4=1")
+    if force_p4x8:
+        cmd.append("+force_p4x8=1")
+    if force_p4x4:
+        cmd.append("+force_p4x4=1")
+
     if force_b_bi_on_reorder_ref_slot:
         cmd.append("+force_b_bi_on_reorder_ref_slot=1")
     if force_b_l0_on_reorder_ref_slot:

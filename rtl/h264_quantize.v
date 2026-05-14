@@ -1,4 +1,4 @@
-// h264_quantize.v — Forward Quantization for a fixed intra QP.
+// h264_quantize.v — Forward Quantization for a configurable intra/inter QP.
 // The effective QP must include the H.264 high-bit-depth QpBdOffset so the
 // RTL reconstruction math matches what a standards-compliant decoder derives
 // from SPS/PPS when BIT_DEPTH > 8.
@@ -12,6 +12,9 @@ module h264_quantize #(
     input  wire        start,
     output reg         done,
 
+    // Base QP before QpBdOffset; valid range 0..51.
+    input  wire [5:0]  qp,
+
     // Input: 4x4 transform coefficients (16 * CW-bit signed)
     input  wire [16*CW-1:0] in_flat,
 
@@ -21,9 +24,6 @@ module h264_quantize #(
 
     localparam CW = BIT_DEPTH + 8;
     localparam integer QP_BD_OFFSET = 6 * (BIT_DEPTH - 8);
-    localparam integer FIXED_QP = 26 + QP_BD_OFFSET;
-    localparam integer QBITS = 15 + (FIXED_QP / 6);
-    localparam [31:0] F_INTRA = ((32'd1 << QBITS) + 32'd1) / 32'd3;
 
     reg [2:0] state;
     localparam S_IDLE  = 3'd0;
@@ -32,10 +32,15 @@ module h264_quantize #(
 
     reg [3:0] idx;
 
+    reg [6:0] qpe;
+    reg [2:0] qpm;
+    reg [4:0] qbits;
+    reg [31:0] f_intra;
+
     function [15:0] get_mf;
         input [3:0] pos;
         begin
-            case (FIXED_QP % 6)
+            case (qpm)
                 0: begin
                     if (pos[2] == 1'b0 && pos[0] == 1'b0)
                         get_mf = 16'd13107;
@@ -121,11 +126,15 @@ module h264_quantize #(
 
                 // verilator lint_off BLKSEQ
                 S_QUANT: begin
+                    qpe        = {1'b0, qp} + QP_BD_OFFSET;
+                    qpm        = qpe % 7'd6;
+                    qbits      = 5'd15 + (qpe / 7'd6);
+                    f_intra    = ((32'd1 << qbits) + 32'd1) / 32'd3;
                     coeff      = inp[idx];
                     coeff_sign = coeff[CW-1];
                     coeff_abs  = coeff_sign ? (~coeff + {{(CW-1){1'b0}}, 1'b1}) : coeff;
-                    product    = ({{32{1'b0}}, coeff_abs} * get_mf(idx)) + F_INTRA;
-                    level      = product >> QBITS;
+                    product    = ({{32{1'b0}}, coeff_abs} * get_mf(idx)) + f_intra;
+                    level      = product >> qbits;
                 // verilator lint_on BLKSEQ
 
                     quant_flat[idx*16 +: 16] <= coeff_sign ? (~level + 16'd1) : level;

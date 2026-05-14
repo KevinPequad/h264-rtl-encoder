@@ -16,6 +16,10 @@ Current state:
   path
 - the current P-slice path now supports zero-residual inter-MB header deferral
   and RTL-owned `P_SKIP` skip-run generation
+- the P/inter partition lane is now RTL-owned and decoder-validated end-to-end;
+  forced P16x8/P8x16/P8x8/P8x4/P4x8/P4x4, nonzero-MVD/ref_idx/MVP, qpel/subpel,
+  weighted-P, and followref/reference-consumption gates are green in the
+  post-merge smoke matrix (see output/h264_p_inter_lane_closeout_t_8258e748.md)
 - the current tree now also supports a limited non-reference `B`-slice path on
   intra / `I_PCM` macroblocks
 - the current tree now also supports limited non-reference inter-coded
@@ -37,14 +41,14 @@ Current state:
   commit `dc1d47094238f8ad973cdfb5738abd4f0d2ea951` with the standalone oracle,
   public-decoder checks, and a two-frame reference-bank-consumption proof
 - CABAC `P_L0_16x16` residual checkpoint is coefficient-driven in commit
-  `69aef76e387739ebc4b1b08d4147a6842dfc9124`; the focused residual quality gate
+  `69aef76e387739ebc4b1b08d4147a6842dfc9124`; the focused luma residual quality gate
   passed on validation worktree `t_e8e507e3` / validation report `t_df25a2fa`
 - the repository is still not complete as a full H.264 standard encoder
 
 Completion is still blocked by major missing features including full CABAC
 syntax integration beyond the current coefficient-driven `P_L0_16x16`
-checkpoint, broader `B` / `BREF` support, broader direct-mode support, broader
-partition/tool coverage, and the final long-run target.
+checkpoint, broader `B` / `BREF` / DPB support, broader direct-mode support,
+deblock, transform/profile/color closure, and the final long-run target.
 
 ## Source Inventory
 
@@ -101,6 +105,7 @@ partition/tool coverage, and the final long-run target.
 | `scripts/run_deblock_oracle_check.sh` | Standalone Verilator oracle check for the deblock edge datapath |
 | `scripts/run_deblock_reference_check.sh` | Public-decoder and two-frame reconstructed-reference consumption check for in-loop deblocking |
 | `scripts/run_cabac_residual4x4_scan_check.sh` | Standalone Verilator check for the CABAC residual 4x4 scan-event helper |
+| `scripts/audit_no_testbench_repair.py` | Static audit that proves RTL bitstream ownership is retained in the TB and helper repair hooks are absent |
 | `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for CABAC `P_L0_16x16` luma residual syntax; requires actual decoded luma reconstruction and serves as the checkpoint proof for the coefficient-driven residual path |
 | `docker/Dockerfile` | Containerized smoke-run environment |
 | `docker/run_one_frame.sh` | One-frame Docker smoke flow |
@@ -188,6 +193,10 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
   transform integration
 - I-frame support
 - P-frame support
+- P/inter partition lane now green: forced P16x8/P8x16/P8x8/P8x4/P4x8/P4x4,
+  per-partition ref_idx/MVD/MVP, nonzero-MVD, qpel/subpel, chroma fractional
+  interpolation, weighted-P, and following-frame reference-consumption gates
+  are RTL-owned and decoder-validated
 - non-reference `B`-slice support on the current intra / `I_PCM` path
 - limited non-reference inter-coded `B_L0_16x16`, `B_L1_16x16`, and
   `B_BI_16x16` support on the current reordered dual-list `16x16` B path

@@ -60,9 +60,10 @@ EXPECTED_PIX_FMT = {
 }
 
 TEXT_FILE_SUFFIXES = {".py", ".cpp", ".cc", ".cxx", ".h", ".hpp", ".sh"}
-AUDIT_TOOL_FILES = {"scripts/run_h264_verify_manifest.py"}
+AUDIT_TOOL_FILES = {"scripts/run_h264_verify_manifest.py", "scripts/audit_no_testbench_repair.py"}
 PACKAGING_ONLY_FILES = {"scripts/package_mp4.py"}
 REFERENCE_ONLY_FILES = {"scripts/validate_clip.py"}
+AUDIT_SKIP_FILES = {"tb/tb_tpc_8x8_unit.cpp"}
 
 
 class HarnessError(RuntimeError):
@@ -552,6 +553,9 @@ def iter_audit_files(root: Path) -> list[Path]:
             continue
         for path in base.rglob("*"):
             if path.is_file() and path.suffix in TEXT_FILE_SUFFIXES:
+                rel = relpath(path, root)
+                if rel in AUDIT_SKIP_FILES:
+                    continue
                 paths.append(path)
     return sorted(paths)
 

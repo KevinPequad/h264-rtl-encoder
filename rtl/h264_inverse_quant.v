@@ -1,4 +1,4 @@
-// h264_inverse_quant.v — Inverse Quantization for the fixed-QP RTL path.
+// h264_inverse_quant.v — Inverse Quantization for the configurable-QP RTL path.
 // The effective QP must include QpBdOffset so the encoder reconstruction path
 // matches the decoder's derived QP at high bit depth.
 
@@ -11,6 +11,9 @@ module h264_inverse_quant #(
     input  wire        start,
     output reg         done,
 
+    // Base QP before QpBdOffset; valid range 0..51.
+    input  wire [5:0]  qp,
+
     // Input: 4x4 quantized levels (256 bits = 16 * 16-bit signed)
     input  wire [255:0] quant_flat,
 
@@ -20,8 +23,6 @@ module h264_inverse_quant #(
 
     localparam CW = BIT_DEPTH + 8;
     localparam integer QP_BD_OFFSET = 6 * (BIT_DEPTH - 8);
-    localparam integer FIXED_QP = 26 + QP_BD_OFFSET;
-    localparam integer IQ_SHIFT = (FIXED_QP / 6) - 4;
 
     reg [2:0] state;
     localparam S_IDLE    = 3'd0;
@@ -30,10 +31,14 @@ module h264_inverse_quant #(
 
     reg [3:0] idx;
 
+    reg [6:0] qpe;
+    reg [2:0] qpm;
+    reg signed [5:0] iq_shift;
+
     function signed [15:0] get_scale;
         input [3:0] pos;
         begin
-            case (FIXED_QP % 6)
+            case (qpm)
                 0: begin
                     if (pos[2] == 1'b0 && pos[0] == 1'b0)
                         get_scale = 16'sd10;
@@ -110,14 +115,17 @@ module h264_inverse_quant #(
 
                 // verilator lint_off BLKSEQ
                 S_DEQUANT: begin
-                    level   = $signed(quant_flat[idx*16 +: 16]);
-                    scale   = get_scale(idx);
-                    product = level * (scale <<< 4);
-                    if (IQ_SHIFT >= 0) begin
-                        scaled = product <<< IQ_SHIFT;
+                    qpe      = {1'b0, qp} + QP_BD_OFFSET;
+                    qpm      = qpe % 7'd6;
+                    iq_shift = $signed({1'b0,(qpe / 7'd6)}) - 6'sd4;
+                    level    = $signed(quant_flat[idx*16 +: 16]);
+                    scale    = get_scale(idx);
+                    product  = level * (scale <<< 4);
+                    if (iq_shift >= 0) begin
+                        scaled = product <<< iq_shift;
                     end else begin
-                        round_bias = 32'sd1 <<< ((-IQ_SHIFT) - 1);
-                        scaled = (product + round_bias) >>> (-IQ_SHIFT);
+                        round_bias = 32'sd1 <<< ((-iq_shift) - 1);
+                        scaled = (product + round_bias) >>> (-iq_shift);
                     end
                 // verilator lint_on BLKSEQ
                     dequant_flat[idx*CW +: CW] <= scaled[CW-1:0];

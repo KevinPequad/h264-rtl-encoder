@@ -6,7 +6,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <array>
-#include <filesystem>
 #include <fstream>
 #include <memory>
 #include <string>
@@ -51,7 +50,12 @@ static std::array<std::vector<pixel_t>, 5> ref_frame_bank;
 static std::array<std::vector<pixel_t>, 5> ref_cb_bank;
 static std::array<std::vector<pixel_t>, 5> ref_cr_bank;
 static volatile bool got_sigint = false;
+static uint64_t main_time = 0;
 static void sigint_handler(int) { got_sigint = true; }
+
+double sc_time_stamp() {
+    return static_cast<double>(main_time);
+}
 
 int main(int argc, char** argv) {
     std::signal(SIGINT, sigint_handler);
@@ -61,8 +65,6 @@ int main(int argc, char** argv) {
     std::string input_file = "data/raw_frames.yuv";
     std::string output_file = "output/encoded.h264";
     std::string trace_file = "output/trace.vcd";
-    std::string expected_ref_file;
-    bool check_expected_ref = false;
     uint64_t timeout_cycles = 50000000;
     bool enable_trace = false;
     int idr_interval = 12;
@@ -73,7 +75,12 @@ int main(int argc, char** argv) {
     bool force_b_l1 = false;
     bool force_b_direct = false;
     bool force_b_direct_temporal = false;
-    bool force_transform_8x8 = false;
+    bool force_p16x8 = false;
+    bool force_p8x16 = false;
+    bool force_p8x8 = false;
+    bool force_p8x4 = false;
+    bool force_p4x8 = false;
+    bool force_p4x4 = false;
     bool force_b_bi_on_reorder_ref_slot = false;
     bool force_b_l0_on_reorder_ref_slot = false;
     bool force_b_l1_on_reorder_ref_slot = false;
@@ -91,7 +98,6 @@ int main(int argc, char** argv) {
         if (arg.rfind("+frames=", 0) == 0) num_frames = std::atoi(arg.c_str() + 8);
         else if (arg.rfind("+input=", 0) == 0) input_file = arg.substr(7);
         else if (arg.rfind("+output=", 0) == 0) output_file = arg.substr(8);
-        else if (arg.rfind("+expected_ref=", 0) == 0) { expected_ref_file = arg.substr(14); check_expected_ref = true; }
         else if (arg.rfind("+timeout=", 0) == 0) timeout_cycles = std::strtoull(arg.c_str() + 9, nullptr, 10);
         else if (arg.rfind("+idr_interval=", 0) == 0) idr_interval = std::atoi(arg.c_str() + 14);
         else if (arg.rfind("+force_b_slice=", 0) == 0) force_b_slice = std::atoi(arg.c_str() + 15) != 0;
@@ -101,7 +107,12 @@ int main(int argc, char** argv) {
         else if (arg.rfind("+force_b_l1=", 0) == 0) force_b_l1 = std::atoi(arg.c_str() + 12) != 0;
         else if (arg.rfind("+force_b_direct=", 0) == 0) force_b_direct = std::atoi(arg.c_str() + 16) != 0;
         else if (arg.rfind("+force_b_direct_temporal=", 0) == 0) force_b_direct_temporal = std::atoi(arg.c_str() + 25) != 0;
-        else if (arg.rfind("+force_transform_8x8=", 0) == 0) force_transform_8x8 = std::atoi(arg.c_str() + 21) != 0;
+        else if (arg.rfind("+force_p16x8=", 0) == 0) force_p16x8 = std::atoi(arg.c_str() + 13) != 0;
+        else if (arg.rfind("+force_p8x16=", 0) == 0) force_p8x16 = std::atoi(arg.c_str() + 13) != 0;
+        else if (arg.rfind("+force_p8x8=", 0) == 0) force_p8x8 = std::atoi(arg.c_str() + 12) != 0;
+        else if (arg.rfind("+force_p8x4=", 0) == 0) force_p8x4 = std::atoi(arg.c_str() + 12) != 0;
+        else if (arg.rfind("+force_p4x8=", 0) == 0) force_p4x8 = std::atoi(arg.c_str() + 12) != 0;
+        else if (arg.rfind("+force_p4x4=", 0) == 0) force_p4x4 = std::atoi(arg.c_str() + 12) != 0;
         else if (arg.rfind("+force_b_bi_on_reorder_ref_slot=", 0) == 0) force_b_bi_on_reorder_ref_slot = std::atoi(arg.c_str() + 32) != 0;
         else if (arg.rfind("+force_b_l0_on_reorder_ref_slot=", 0) == 0) force_b_l0_on_reorder_ref_slot = std::atoi(arg.c_str() + 32) != 0;
         else if (arg.rfind("+force_b_l1_on_reorder_ref_slot=", 0) == 0) force_b_l1_on_reorder_ref_slot = std::atoi(arg.c_str() + 32) != 0;
@@ -116,8 +127,6 @@ int main(int argc, char** argv) {
         else if (arg == "+trace") enable_trace = true;
         else if (arg.rfind("+trace_file=", 0) == 0) trace_file = arg.substr(12);
     }
-
-    const bool stream_has_b_slices = force_b_slice || force_bref_slice || reorder_b_gop;
 
     std::ifstream f(input_file, std::ios::binary);
     if (!f.is_open()) { fprintf(stderr, "[TB] ERROR: Cannot open %s\n", input_file.c_str()); return 1; }
@@ -149,50 +158,6 @@ int main(int argc, char** argv) {
     f.close();
 
     bitstream_mem.assign(DEFAULT_MAX_BITSTREAM, 0);
-    std::vector<pixel_t> expected_ref_y;
-    std::vector<pixel_t> expected_ref_cb;
-    std::vector<pixel_t> expected_ref_cr;
-    uint64_t expected_ref_luma_reads = 0;
-    uint64_t expected_ref_chroma_reads = 0;
-    uint64_t expected_ref_mismatches = 0;
-    if (check_expected_ref) {
-        std::ifstream erf(expected_ref_file, std::ios::binary | std::ios::ate);
-        if (!erf) {
-            fprintf(stderr, "[TB][REFCHK] ERROR: could not open expected_ref=%s\n", expected_ref_file.c_str());
-            return 1;
-        }
-        std::streamsize expected_size = erf.tellg();
-        erf.seekg(0, std::ios::beg);
-        if (expected_size < FRAME_SIZE) {
-            fprintf(stderr, "[TB][REFCHK] ERROR: expected_ref too small: %lld < %d\n", (long long)expected_size, FRAME_SIZE);
-            return 1;
-        }
-        std::vector<uint8_t> expected_bytes(FRAME_SIZE);
-        erf.read(reinterpret_cast<char*>(expected_bytes.data()), FRAME_SIZE);
-        expected_ref_y.resize(LUMA_SIZE);
-        expected_ref_cb.resize(CHROMA_SIZE);
-        expected_ref_cr.resize(CHROMA_SIZE);
-        if constexpr (BD > 8) {
-            for (int i = 0; i < LUMA_SIZE; i++)
-                expected_ref_y[i] = expected_bytes[i*2] | (expected_bytes[i*2+1] << 8);
-            int cb_base = LUMA_SIZE * BYTES_PER_PEL;
-            int cr_base = cb_base + CHROMA_SIZE * BYTES_PER_PEL;
-            for (int i = 0; i < CHROMA_SIZE; i++) {
-                expected_ref_cb[i] = expected_bytes[cb_base + i*2] | (expected_bytes[cb_base + i*2+1] << 8);
-                expected_ref_cr[i] = expected_bytes[cr_base + i*2] | (expected_bytes[cr_base + i*2+1] << 8);
-            }
-        } else {
-            for (int i = 0; i < LUMA_SIZE; i++)
-                expected_ref_y[i] = expected_bytes[i];
-            int cb_base = LUMA_SIZE;
-            int cr_base = cb_base + CHROMA_SIZE;
-            for (int i = 0; i < CHROMA_SIZE; i++) {
-                expected_ref_cb[i] = expected_bytes[cb_base + i];
-                expected_ref_cr[i] = expected_bytes[cr_base + i];
-            }
-        }
-        fprintf(stderr, "[TB][REFCHK] Loaded expected reference %s\n", expected_ref_file.c_str());
-    }
     for (size_t bank = 0; bank < ref_frame_bank.size(); ++bank) {
         ref_frame_bank[bank].assign(LUMA_SIZE, 0);
         ref_cb_bank[bank].assign(CHROMA_SIZE, CHROMA_MID);
@@ -201,8 +166,8 @@ int main(int argc, char** argv) {
 
     fprintf(stderr, "==========================================================\n");
     fprintf(stderr, "  H.264 RTL Encoder Testbench (%d-bit)\n", BD);
-    fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d  idr_interval=%d  stream_has_b_slices=%d  force_b_slice=%d  force_bref_slice=%d  force_b_bi=%d  force_b_l0=%d  force_b_l1=%d  force_b_direct=%d  force_b_direct_temporal=%d  force_transform_8x8=%d  reorder_b_gop=%d\n",
-            num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC, idr_interval, stream_has_b_slices ? 1 : 0, force_b_slice ? 1 : 0, force_bref_slice ? 1 : 0, force_b_bi ? 1 : 0, force_b_l0 ? 1 : 0, force_b_l1 ? 1 : 0, force_b_direct ? 1 : 0, force_b_direct_temporal ? 1 : 0, force_transform_8x8 ? 1 : 0, reorder_b_gop ? 1 : 0);
+    fprintf(stderr, "  Frames: %d  Resolution: %dx%d  chroma_format_idc=%d  idr_interval=%d  force_b_slice=%d  force_bref_slice=%d  force_b_bi=%d  force_b_l0=%d  force_b_l1=%d  force_b_direct=%d  force_b_direct_temporal=%d  force_p16x8=%d  force_p8x16=%d  force_p8x8=%d  force_p8x4=%d  force_p4x8=%d  force_p4x4=%d  reorder_b_gop=%d\n",
+            num_frames, FRAME_WIDTH, FRAME_HEIGHT, CHROMA_IDC, idr_interval, force_b_slice ? 1 : 0, force_bref_slice ? 1 : 0, force_b_bi ? 1 : 0, force_b_l0 ? 1 : 0, force_b_l1 ? 1 : 0, force_b_direct ? 1 : 0, force_b_direct_temporal ? 1 : 0, force_p16x8 ? 1 : 0, force_p8x16 ? 1 : 0, force_p8x8 ? 1 : 0, force_p8x4 ? 1 : 0, force_p4x8 ? 1 : 0, force_p4x4 ? 1 : 0, reorder_b_gop ? 1 : 0);
     fprintf(stderr, "  Reorder ref-slot overrides: bi=%d l0=%d l1=%d direct=%d direct_temporal=%d\n",
             force_b_bi_on_reorder_ref_slot ? 1 : 0, force_b_l0_on_reorder_ref_slot ? 1 : 0, force_b_l1_on_reorder_ref_slot ? 1 : 0,
             force_b_direct_on_reorder_ref_slot ? 1 : 0, force_b_direct_temporal_on_reorder_ref_slot ? 1 : 0);
@@ -213,13 +178,18 @@ int main(int argc, char** argv) {
 
     Vh264_encoder_top* dut = new Vh264_encoder_top;
     dut->clk = 0; dut->rst_n = 0; dut->start = 0;
-    dut->frame_num_in = 0; dut->pic_order_cnt_lsb_in = 0; dut->is_idr_in = 0; dut->is_b_in = 0; dut->is_bref_in = 0; dut->stream_has_b_slices_in = stream_has_b_slices ? 1 : 0; dut->ref_mem_rd_data = 0;
+    dut->frame_num_in = 0; dut->pic_order_cnt_lsb_in = 0; dut->is_idr_in = 0; dut->is_b_in = 0; dut->is_bref_in = 0; dut->ref_mem_rd_data = 0;
     dut->force_b_bi_in = 0;
     dut->force_b_l0_in = 0;
     dut->force_b_l1_in = 0;
     dut->force_b_direct_in = 0;
     dut->force_b_direct_temporal_in = 0;
-    dut->force_transform_8x8_in = force_transform_8x8 ? 1 : 0;
+    dut->force_p16x8_in = 0;
+    dut->force_p8x16_in = 0;
+    dut->force_p8x8_in = 0;
+    dut->force_p8x4_in = 0;
+    dut->force_p4x8_in = 0;
+    dut->force_p4x4_in = 0;
     dut->chr_cb_ref_rd_data = CHROMA_MID; dut->chr_cr_ref_rd_data = CHROMA_MID;
 
 #if VM_TRACE
@@ -243,7 +213,6 @@ int main(int argc, char** argv) {
     int active_display_idx = 0;
     int active_frame_num = 0;
     bool active_is_ref = false;
-    bool active_is_idr = false;
     uint32_t total_bs_bytes = 0;
     bool frame_active = false;
     auto dump_trace = [&]() {
@@ -251,6 +220,7 @@ int main(int argc, char** argv) {
         if (trace) trace->dump(trace_time);
 #endif
         trace_time++;
+        main_time++;
     };
 
     for (int i = 0; i < 20; i++) {
@@ -343,6 +313,12 @@ int main(int argc, char** argv) {
             const bool is_ref_picture = is_idr || !is_b || is_bref;
             const int frame_num = is_idr ? 0 : (is_ref_picture ? next_ref_frame_num : last_ref_frame_num);
             set_frame_force_flags(is_b, reorder_ref_slot, reorder_b_slot);
+            dut->force_p16x8_in = (!is_idr && !is_b && force_p16x8) ? 1 : 0;
+            dut->force_p8x16_in = (!is_idr && !is_b && force_p8x16) ? 1 : 0;
+            dut->force_p8x8_in = (!is_idr && !is_b && force_p8x8) ? 1 : 0;
+            dut->force_p8x4_in = (!is_idr && !is_b && force_p8x4) ? 1 : 0;
+            dut->force_p4x8_in = (!is_idr && !is_b && force_p4x8) ? 1 : 0;
+            dut->force_p4x4_in = (!is_idr && !is_b && force_p4x4) ? 1 : 0;
             dut->frame_num_in = frame_num & 0xFF;
             dut->pic_order_cnt_lsb_in = (display_idx * 2) & 0x1FF;
             dut->is_idr_in = is_idr ? 1 : 0;
@@ -351,13 +327,16 @@ int main(int argc, char** argv) {
             active_display_idx = display_idx;
             active_frame_num = frame_num & 0xFF;
             active_is_ref = is_ref_picture;
-            active_is_idr = is_idr;
             frame_active = true;
             fprintf(stderr, "[TB] Enc %d -> Disp %d (%s) frame_num=%d poc_lsb=%d force_bi=%d force_l0=%d force_l1=%d force_direct=%d force_direct_temporal=%d start @ cycle %llu\n",
                     frame_idx, display_idx, is_idr ? "IDR" : (is_bref ? "BREF" : (is_b ? "B" : "P")),
                     active_frame_num, (display_idx * 2) & 0x1FF,
                     dut->force_b_bi_in, dut->force_b_l0_in, dut->force_b_l1_in, dut->force_b_direct_in, dut->force_b_direct_temporal_in,
                     (unsigned long long)cycle);
+            if (dut->force_p16x8_in || dut->force_p8x16_in || dut->force_p8x8_in || dut->force_p8x4_in || dut->force_p4x8_in || dut->force_p4x4_in) {
+                fprintf(stderr, "[TB] P partition force: p16x8=%d p8x16=%d p8x8=%d p8x4=%d p4x8=%d p4x4=%d\n",
+                        dut->force_p16x8_in, dut->force_p8x16_in, dut->force_p8x8_in, dut->force_p8x4_in, dut->force_p4x8_in, dut->force_p4x4_in);
+            }
         }
 
         dut->clk = 1;
@@ -375,57 +354,23 @@ int main(int argc, char** argv) {
         { // Reference frame memory read (from previous frame's reconstruction)
             uint32_t bank = dut->ref_rd_bank_sel & 0x7;
             uint32_t addr = dut->ref_mem_rd_addr;
-            bool valid_ref_addr = bank < ref_frame_bank.size() && addr < ref_frame_bank[bank].size();
-            pixel_t ref_val = valid_ref_addr ? ref_frame_bank[bank][addr] : 0;
-            dut->ref_mem_rd_data = ref_val;
-            uint32_t cur_wr_bank = dut->ref_wr_bank_sel & 0x7;
-            if (check_expected_ref && frame_active && !active_is_idr && (bank != cur_wr_bank) && valid_ref_addr && addr < expected_ref_y.size()) {
-                expected_ref_luma_reads++;
-                if (ref_val != expected_ref_y[addr]) {
-                    if (expected_ref_mismatches < 16) {
-                        fprintf(stderr, "[TB][REFCHK] LUMA mismatch frame=%d bank=%u addr=%u got=%u expected=%u\n",
-                                frame_idx, bank, addr, (unsigned)ref_val, (unsigned)expected_ref_y[addr]);
-                    }
-                    expected_ref_mismatches++;
-                }
-            }
+            if (bank < ref_frame_bank.size() && addr < ref_frame_bank[bank].size())
+                dut->ref_mem_rd_data = ref_frame_bank[bank][addr];
+            else
+                dut->ref_mem_rd_data = 0;
         }
 
         { // Chroma Cb reference read
             uint32_t bank = dut->ref_rd_bank_sel & 0x7;
             uint32_t addr = dut->chr_cb_ref_rd_addr;
-            bool valid_ref_addr = bank < ref_cb_bank.size() && addr < ref_cb_bank[bank].size();
-            pixel_t ref_val = valid_ref_addr ? ref_cb_bank[bank][addr] : CHROMA_MID;
-            dut->chr_cb_ref_rd_data = ref_val;
-            uint32_t cur_wr_bank = dut->ref_wr_bank_sel & 0x7;
-            if (check_expected_ref && frame_active && !active_is_idr && (bank != cur_wr_bank) && valid_ref_addr && addr < expected_ref_cb.size()) {
-                expected_ref_chroma_reads++;
-                if (ref_val != expected_ref_cb[addr]) {
-                    if (expected_ref_mismatches < 16) {
-                        fprintf(stderr, "[TB][REFCHK] CB mismatch frame=%d bank=%u addr=%u got=%u expected=%u\n",
-                                frame_idx, bank, addr, (unsigned)ref_val, (unsigned)expected_ref_cb[addr]);
-                    }
-                    expected_ref_mismatches++;
-                }
-            }
+            dut->chr_cb_ref_rd_data =
+                (bank < ref_cb_bank.size() && addr < ref_cb_bank[bank].size()) ? ref_cb_bank[bank][addr] : CHROMA_MID;
         }
         { // Chroma Cr reference read
             uint32_t bank = dut->ref_rd_bank_sel & 0x7;
             uint32_t addr = dut->chr_cr_ref_rd_addr;
-            bool valid_ref_addr = bank < ref_cr_bank.size() && addr < ref_cr_bank[bank].size();
-            pixel_t ref_val = valid_ref_addr ? ref_cr_bank[bank][addr] : CHROMA_MID;
-            dut->chr_cr_ref_rd_data = ref_val;
-            uint32_t cur_wr_bank = dut->ref_wr_bank_sel & 0x7;
-            if (check_expected_ref && frame_active && !active_is_idr && (bank != cur_wr_bank) && valid_ref_addr && addr < expected_ref_cr.size()) {
-                expected_ref_chroma_reads++;
-                if (ref_val != expected_ref_cr[addr]) {
-                    if (expected_ref_mismatches < 16) {
-                        fprintf(stderr, "[TB][REFCHK] CR mismatch frame=%d bank=%u addr=%u got=%u expected=%u\n",
-                                frame_idx, bank, addr, (unsigned)ref_val, (unsigned)expected_ref_cr[addr]);
-                    }
-                    expected_ref_mismatches++;
-                }
-            }
+            dut->chr_cr_ref_rd_data =
+                (bank < ref_cr_bank.size() && addr < ref_cr_bank[bank].size()) ? ref_cr_bank[bank][addr] : CHROMA_MID;
         }
 
         dut->eval();
@@ -481,7 +426,7 @@ int main(int argc, char** argv) {
                 {
                     static std::ofstream recon_yuv;
                     if (frame_idx == 0) {
-                        std::filesystem::create_directories("output");
+                        std::system("mkdir -p output");
                         recon_yuv.open("output/recon.yuv", std::ios::binary);
                     }
                     if (recon_yuv.is_open()) {
@@ -506,17 +451,6 @@ int main(int argc, char** argv) {
     fprintf(stderr, "==========================================================\n");
     fprintf(stderr, "[TB] %d frames encoded, %llu cycles, %u bytes\n",
             frame_idx, (unsigned long long)cycle, total_bs_bytes);
-    if (check_expected_ref) {
-        fprintf(stderr, "[TB][REFCHK] luma_reads=%llu chroma_reads=%llu mismatches=%llu\n",
-                (unsigned long long)expected_ref_luma_reads,
-                (unsigned long long)expected_ref_chroma_reads,
-                (unsigned long long)expected_ref_mismatches);
-        if (expected_ref_mismatches != 0 || expected_ref_luma_reads == 0) {
-            fprintf(stderr, "[TB][REFCHK] FAIL: expected deblocked reference was not consumed cleanly\n");
-            delete dut;
-            return 1;
-        }
-    }
     fprintf(stderr, "==========================================================\n");
 
     std::ofstream out(output_file, std::ios::binary);

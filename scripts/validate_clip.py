@@ -15,7 +15,7 @@ from rtl_runner import BuildConfig, build_sim, repo_root, require_tool, run_cmd,
 
 
 PSNR_RE = re.compile(r"PSNR y:(?P<y>[0-9.inf-]+).*average:(?P<avg>[0-9.inf-]+)")
-SSIM_RE = re.compile(r"SSIM Y:(?P<y>[0-9.inf-]+).*All:(?P<all>[0-9.inf-]+)")
+SSIM_RE = re.compile(r"SSIM Y:(?P<y>[0-9.-]+).*All:(?P<all>[0-9.-]+)")
 SIM_SUMMARY_RE = re.compile(r"\[TB\]\s+(?P<frames>\d+)\s+frames encoded,\s+(?P<cycles>\d+)\s+cycles,\s+(?P<bytes>\d+)\s+bytes")
 PSKIP_RE = re.compile(
     r"\[PSKIP\]\s+Frame\s+(?P<frame>\d+)\s+skip_mbs=(?P<skip>\d+)\s+"
@@ -24,6 +24,16 @@ PSKIP_RE = re.compile(
     r"b_direct_refgt0_mbs=(?P<b_direct_refgt0>\d+)"
     r"(?:\s+b_direct_l1src_mbs=(?P<b_direct_l1src>\d+))?"
     r"(?:\s+cabac_p16x16_mbs=(?P<cabac_p16x16>\d+))?"
+    r"(?:\s+p_l0_refgt0_mbs=(?P<p_l0_refgt0>\d+))?"
+    r"(?:\s+p16x8_mbs=(?P<p16x8>\d+))?"
+    r"(?:\s+p8x16_mbs=(?P<p8x16>\d+))?"
+    r"(?:\s+p8x8_mbs=(?P<p8x8>\d+))?"
+    r"(?:\s+p8x4_mbs=(?P<p8x4>\d+))?"
+    r"(?:\s+p4x8_mbs=(?P<p4x8>\d+))?"
+    r"(?:\s+p4x4_mbs=(?P<p4x4>\d+))?"
+    r"(?:\s+cabac_chroma_mbs=(?P<cabac_chroma>\d+))?"
+    r"(?:\s+cavlc_suppressed_bits=(?P<cavlc_suppressed_bits>\d+))?"
+
 )
 DECODE_ERROR_PATTERNS = (
     "error while decoding",
@@ -75,6 +85,16 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     frames_with_direct_refgt0 = 0
     frames_with_direct_l1src = 0
     frames_with_cabac_p16x16 = 0
+    frames_with_p_l0_refgt0 = 0
+    frames_with_p16x8 = 0
+    frames_with_p8x16 = 0
+    frames_with_p8x8 = 0
+    frames_with_p8x4 = 0
+    frames_with_p4x8 = 0
+    frames_with_p4x4 = 0
+    frames_with_cabac_chroma = 0
+    frames_with_cavlc_suppressed = 0
+
     max_skip = 0
     max_l1 = 0
     max_bi = 0
@@ -83,6 +103,16 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     max_direct_refgt0 = 0
     max_direct_l1src = 0
     max_cabac_p16x16 = 0
+    max_p_l0_refgt0 = 0
+    max_p16x8 = 0
+    max_p8x16 = 0
+    max_p8x8 = 0
+    max_p8x4 = 0
+    max_p4x8 = 0
+    max_p4x4 = 0
+    max_cabac_chroma = 0
+    max_cavlc_suppressed = 0
+
     total_skip = 0
     total_l1 = 0
     total_bi = 0
@@ -91,6 +121,16 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     total_direct_refgt0 = 0
     total_direct_l1src = 0
     total_cabac_p16x16 = 0
+    total_p_l0_refgt0 = 0
+    total_p16x8 = 0
+    total_p8x16 = 0
+    total_p8x8 = 0
+    total_p8x4 = 0
+    total_p4x8 = 0
+    total_p4x4 = 0
+    total_cabac_chroma = 0
+    total_cavlc_suppressed = 0
+
 
     for match in PSKIP_RE.finditer(sim_log):
         skip = int(match.group("skip"))
@@ -101,6 +141,16 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         direct_refgt0 = int(match.group("b_direct_refgt0"))
         direct_l1src = int(match.group("b_direct_l1src") or 0)
         cabac_p16x16 = int(match.group("cabac_p16x16") or 0)
+        p_l0_refgt0 = int(match.group("p_l0_refgt0") or 0)
+        p16x8 = int(match.group("p16x8") or 0)
+        p8x16 = int(match.group("p8x16") or 0)
+        p8x8 = int(match.group("p8x8") or 0)
+        p8x4 = int(match.group("p8x4") or 0)
+        p4x8 = int(match.group("p4x8") or 0)
+        p4x4 = int(match.group("p4x4") or 0)
+        cabac_chroma = int(match.group("cabac_chroma") or 0)
+        cavlc_suppressed_bits = int(match.group("cavlc_suppressed_bits") or 0)
+
         total_skip += skip
         total_l1 += l1
         total_bi += bi
@@ -109,6 +159,16 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         total_direct_refgt0 += direct_refgt0
         total_direct_l1src += direct_l1src
         total_cabac_p16x16 += cabac_p16x16
+        total_p_l0_refgt0 += p_l0_refgt0
+        total_p16x8 += p16x8
+        total_p8x16 += p8x16
+        total_p8x8 += p8x8
+        total_p8x4 += p8x4
+        total_p4x8 += p4x8
+        total_p4x4 += p4x4
+        total_cabac_chroma += cabac_chroma
+        total_cavlc_suppressed += cavlc_suppressed_bits
+
         if skip:
             frames_with_skip += 1
         if l1:
@@ -125,6 +185,25 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
             frames_with_direct_l1src += 1
         if cabac_p16x16:
             frames_with_cabac_p16x16 += 1
+        if p_l0_refgt0:
+            frames_with_p_l0_refgt0 += 1
+        if p16x8:
+            frames_with_p16x8 += 1
+        if p8x16:
+            frames_with_p8x16 += 1
+        if p8x8:
+            frames_with_p8x8 += 1
+        if p8x4:
+            frames_with_p8x4 += 1
+        if p4x8:
+            frames_with_p4x8 += 1
+        if p4x4:
+            frames_with_p4x4 += 1
+        if cabac_chroma:
+            frames_with_cabac_chroma += 1
+        if cavlc_suppressed_bits:
+            frames_with_cavlc_suppressed += 1
+
         max_skip = max(max_skip, skip)
         max_l1 = max(max_l1, l1)
         max_bi = max(max_bi, bi)
@@ -133,6 +212,16 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         max_direct_refgt0 = max(max_direct_refgt0, direct_refgt0)
         max_direct_l1src = max(max_direct_l1src, direct_l1src)
         max_cabac_p16x16 = max(max_cabac_p16x16, cabac_p16x16)
+        max_p_l0_refgt0 = max(max_p_l0_refgt0, p_l0_refgt0)
+        max_p16x8 = max(max_p16x8, p16x8)
+        max_p8x16 = max(max_p8x16, p8x16)
+        max_p8x8 = max(max_p8x8, p8x8)
+        max_p8x4 = max(max_p8x4, p8x4)
+        max_p4x8 = max(max_p4x8, p4x8)
+        max_p4x4 = max(max_p4x4, p4x4)
+        max_cabac_chroma = max(max_cabac_chroma, cabac_chroma)
+        max_cavlc_suppressed = max(max_cavlc_suppressed, cavlc_suppressed_bits)
+
 
     return {
         "frames_with_skip": frames_with_skip,
@@ -143,6 +232,16 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "frames_with_direct_refgt0": frames_with_direct_refgt0,
         "frames_with_direct_l1src": frames_with_direct_l1src,
         "frames_with_cabac_p16x16": frames_with_cabac_p16x16,
+        "frames_with_p_l0_refgt0": frames_with_p_l0_refgt0,
+        "frames_with_p16x8": frames_with_p16x8,
+        "frames_with_p8x16": frames_with_p8x16,
+        "frames_with_p8x8": frames_with_p8x8,
+        "frames_with_p8x4": frames_with_p8x4,
+        "frames_with_p4x8": frames_with_p4x8,
+        "frames_with_p4x4": frames_with_p4x4,
+        "frames_with_cabac_chroma": frames_with_cabac_chroma,
+        "frames_with_cavlc_suppressed": frames_with_cavlc_suppressed,
+
         "max_skip": max_skip,
         "max_l1": max_l1,
         "max_bi": max_bi,
@@ -151,6 +250,16 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "max_direct_refgt0": max_direct_refgt0,
         "max_direct_l1src": max_direct_l1src,
         "max_cabac_p16x16": max_cabac_p16x16,
+        "max_p_l0_refgt0": max_p_l0_refgt0,
+        "max_p16x8": max_p16x8,
+        "max_p8x16": max_p8x16,
+        "max_p8x8": max_p8x8,
+        "max_p8x4": max_p8x4,
+        "max_p4x8": max_p4x8,
+        "max_p4x4": max_p4x4,
+        "max_cabac_chroma": max_cabac_chroma,
+        "max_cavlc_suppressed": max_cavlc_suppressed,
+
         "total_skip": total_skip,
         "total_l1": total_l1,
         "total_bi": total_bi,
@@ -159,6 +268,16 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "total_direct_refgt0": total_direct_refgt0,
         "total_direct_l1src": total_direct_l1src,
         "total_cabac_p16x16": total_cabac_p16x16,
+        "total_p_l0_refgt0": total_p_l0_refgt0,
+        "total_p16x8": total_p16x8,
+        "total_p8x16": total_p8x16,
+        "total_p8x8": total_p8x8,
+        "total_p8x4": total_p8x4,
+        "total_p4x8": total_p4x8,
+        "total_p4x4": total_p4x4,
+        "total_cabac_chroma": total_cabac_chroma,
+        "total_cavlc_suppressed": total_cavlc_suppressed,
+
     }
 
 
@@ -367,6 +486,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--inter-sad-threshold", type=int, default=8000)
     parser.add_argument("--enable-cabac-pskip", type=int, choices=(0, 1), default=0)
     parser.add_argument("--enable-cabac-p16x16", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--enable-cavlc-luma-8x8", type=int, choices=(0, 1), default=0)
+    parser.add_argument("--base-qp", type=int, default=26)
+    parser.add_argument("--mb-qp-delta", type=int, default=0)
+    parser.add_argument("--chroma-qp-index-offset", type=int, default=0)
+    parser.add_argument("--second-chroma-qp-index-offset", type=int, default=0)
     parser.add_argument("--luma-log2-weight-denom", type=int, default=0)
     parser.add_argument("--luma-weight", type=int, default=1)
     parser.add_argument("--luma-offset", type=int, default=0)
@@ -387,6 +511,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--force-b-l1", action="store_true")
     parser.add_argument("--force-b-direct", action="store_true")
     parser.add_argument("--force-b-direct-temporal", action="store_true")
+    parser.add_argument("--force-p16x8", action="store_true")
+    parser.add_argument("--force-p8x16", action="store_true")
+    parser.add_argument("--force-p8x8", action="store_true")
+    parser.add_argument("--force-p8x4", action="store_true")
+    parser.add_argument("--force-p4x8", action="store_true")
+    parser.add_argument("--force-p4x4", action="store_true")
+    parser.add_argument("--require-p16x8-min", type=int, default=0)
+    parser.add_argument("--require-p8x16-min", type=int, default=0)
+    parser.add_argument("--require-p8x8-min", type=int, default=0)
+    parser.add_argument("--require-p8x4-min", type=int, default=0)
+    parser.add_argument("--require-p4x8-min", type=int, default=0)
+    parser.add_argument("--require-p4x4-min", type=int, default=0)
     parser.add_argument("--force-b-bi-on-reorder-ref-slot", action="store_true")
     parser.add_argument("--force-b-l0-on-reorder-ref-slot", action="store_true")
     parser.add_argument("--force-b-l1-on-reorder-ref-slot", action="store_true")
@@ -444,6 +580,11 @@ def main() -> int:
         inter_sad_threshold=args.inter_sad_threshold,
         enable_cabac_pskip=args.enable_cabac_pskip,
         enable_cabac_p16x16=args.enable_cabac_p16x16,
+        enable_cavlc_luma_8x8=args.enable_cavlc_luma_8x8,
+        base_qp=args.base_qp,
+        mb_qp_delta=args.mb_qp_delta,
+        chroma_qp_index_offset=args.chroma_qp_index_offset,
+        second_chroma_qp_index_offset=args.second_chroma_qp_index_offset,
         luma_log2_weight_denom=args.luma_log2_weight_denom,
         luma_weight=args.luma_weight,
         luma_offset=args.luma_offset,
@@ -460,6 +601,12 @@ def main() -> int:
         force_b_l1=1 if args.force_b_l1 else 0,
         force_b_direct=1 if args.force_b_direct else 0,
         force_b_direct_temporal=1 if args.force_b_direct_temporal else 0,
+        force_p16x8=1 if args.force_p16x8 else 0,
+        force_p8x16=1 if args.force_p8x16 else 0,
+        force_p8x8=1 if args.force_p8x8 else 0,
+        force_p8x4=1 if args.force_p8x4 else 0,
+        force_p4x8=1 if args.force_p4x8 else 0,
+        force_p4x4=1 if args.force_p4x4 else 0,
         force_b_bi_on_reorder_ref_slot=1 if args.force_b_bi_on_reorder_ref_slot else 0,
         force_b_l0_on_reorder_ref_slot=1 if args.force_b_l0_on_reorder_ref_slot else 0,
         force_b_l1_on_reorder_ref_slot=1 if args.force_b_l1_on_reorder_ref_slot else 0,
@@ -487,6 +634,12 @@ def main() -> int:
         force_b_l1=1 if args.force_b_l1 else 0,
         force_b_direct=1 if args.force_b_direct else 0,
         force_b_direct_temporal=1 if args.force_b_direct_temporal else 0,
+        force_p16x8=1 if args.force_p16x8 else 0,
+        force_p8x16=1 if args.force_p8x16 else 0,
+        force_p8x8=1 if args.force_p8x8 else 0,
+        force_p8x4=1 if args.force_p8x4 else 0,
+        force_p4x8=1 if args.force_p4x8 else 0,
+        force_p4x4=1 if args.force_p4x4 else 0,
         force_b_bi_on_reorder_ref_slot=1 if args.force_b_bi_on_reorder_ref_slot else 0,
         force_b_l0_on_reorder_ref_slot=1 if args.force_b_l0_on_reorder_ref_slot else 0,
         force_b_l1_on_reorder_ref_slot=1 if args.force_b_l1_on_reorder_ref_slot else 0,
@@ -512,6 +665,36 @@ def main() -> int:
     if decode_errors:
         raise RuntimeError(
             "FFmpeg decoder reported H.264 errors:\n" + "\n".join(decode_errors[:16])
+        )
+    if b_mode_summary.get("total_p16x8", 0) < args.require_p16x8_min:
+        raise RuntimeError(
+            f"Expected at least {args.require_p16x8_min} P_L0_L0_16x8 macroblocks, "
+            f"saw {b_mode_summary.get('total_p16x8', 0)}"
+        )
+    if b_mode_summary.get("total_p8x16", 0) < args.require_p8x16_min:
+        raise RuntimeError(
+            f"Expected at least {args.require_p8x16_min} P_L0_L0_8x16 macroblocks, "
+            f"saw {b_mode_summary.get('total_p8x16', 0)}"
+        )
+    if b_mode_summary.get("total_p8x8", 0) < args.require_p8x8_min:
+        raise RuntimeError(
+            f"Expected at least {args.require_p8x8_min} P_L0_8x8 macroblocks, "
+            f"saw {b_mode_summary.get('total_p8x8', 0)}"
+        )
+    if b_mode_summary.get("total_p8x4", 0) < args.require_p8x4_min:
+        raise RuntimeError(
+            f"Expected at least {args.require_p8x4_min} P_L0_8x4 macroblocks, "
+            f"saw {b_mode_summary.get('total_p8x4', 0)}"
+        )
+    if b_mode_summary.get("total_p4x8", 0) < args.require_p4x8_min:
+        raise RuntimeError(
+            f"Expected at least {args.require_p4x8_min} P_L0_4x8 macroblocks, "
+            f"saw {b_mode_summary.get('total_p4x8', 0)}"
+        )
+    if b_mode_summary.get("total_p4x4", 0) < args.require_p4x4_min:
+        raise RuntimeError(
+            f"Expected at least {args.require_p4x4_min} P_L0_4x4 macroblocks, "
+            f"saw {b_mode_summary.get('total_p4x4', 0)}"
         )
 
     rtl_psnr = None
