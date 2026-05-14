@@ -1094,7 +1094,9 @@ Additional project-level open work:
 
 The encoder should only be marked complete once:
 
-- the final decoded `1280x720 @ 24 fps` Big Buck Bunny output is produced
+- the remaining feature classes have the smallest representative RTL-owned
+  proof that actually exercises their behavior; fixed 10-second/240-frame clips
+  are optional soak evidence only
 - the stream came from the RTL byte path itself
 - the remaining gaps against full H.264 standard support are closed
 - the final result is visually verified and decodable in FFmpeg
@@ -1105,5 +1107,5 @@ The encoder should only be marked complete once:
 - use the local `x264` source tree as the default software encoder comparison
   baseline after consulting the spec
 - keep the encoder end to end through the RTL bitstream path
-- use all `24` threads by default for build and simulation work on this machine
+- use `THREADS=1 BUILD_JOBS=1` by default; only use more threads for an explicit fast/max-thread run or a justified batch gate
 - be wary of simulation times and prove fixes on small cases first
