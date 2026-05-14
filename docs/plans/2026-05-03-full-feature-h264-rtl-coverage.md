@@ -13,9 +13,10 @@
 ## Non-Negotiable Ordering
 
 1. **Feature coverage first.** No final 720p/10-second/full RTL proof while major feature gaps remain.
-2. **Focused Verilator gates are allowed.** Small tests are required after each feature so we do not stack unverified RTL.
-3. **No Yosys/ASIC proof yet.** Synthesis proof happens after codec feature coverage and RTL decode validation are closed.
-4. **RTL owns the bitstream.** The testbench cannot patch, rewrite, or paper over syntax.
+2. **Proof size follows behavior.** Use the smallest frame count that verifies the active feature; 2 frames is fine for IDR→P / reference-consumption proof, and more frames are required only when the feature needs longer reference/GOP behavior.
+3. **Focused Verilator gates are allowed.** Small tests are required after each feature so we do not stack unverified RTL.
+4. **No Yosys/ASIC proof yet.** Synthesis proof happens after codec feature coverage and RTL decode validation are closed.
+5. **RTL owns the bitstream.** The testbench cannot patch, rewrite, or paper over syntax.
 
 ---
 
@@ -275,9 +276,9 @@ positions/levels, then `mb_qp_delta`, chroma, and the remaining I/P/B bins.
 **Commands:**
 Use `scripts/validate_clip.py` staged from small to large:
 
-1. `320x176`, 24 frames, decode-only
-2. `1280x720`, 24 frames, decode-only
-3. final target: `1280x720 @ 24 fps`, 240 frames / 10 seconds, RTL-owned bytes
+1. smallest representative focused proof for the feature under test; 2 frames is acceptable when it proves IDR→P / reference consumption
+2. `320x176` or `1280x720` representative decode-only proof with only as many frames as the feature needs
+3. final representative target: `1280x720 @ 24 fps`, RTL-owned bytes; 240 frames / 10 seconds is optional soak/regression evidence, not the required gate
 
 **Exit criteria:**
 - FFmpeg strict decode passes
