@@ -115,7 +115,7 @@ module h264_cabac_residual4x4_bins #(
                 bin_valid <= 1'b0;
                 case (state)
                     S_IDLE: begin
-                        if (event_valid) begin
+                        if (!bin_valid && event_valid) begin
                             case (event_kind)
                                 EV_CBF: begin
                                     emit_bin(event_value, 1'b0, 9'd85);
@@ -144,7 +144,7 @@ module h264_cabac_residual4x4_bins #(
                     end
 
                     S_LEVEL_GT1: begin
-                        emit_bin(pending_abs > {{(COEFF_W-2){1'b0}}, 2'd2}, 1'b0, 9'd228);
+                        emit_bin(pending_abs > {{(COEFF_W-2){1'b0}}, 2'd2}, 1'b0, 9'd232);
                         if (pending_abs > {{(COEFF_W-2){1'b0}}, 2'd2}) begin
                             suffix_value <= pending_abs - {{(COEFF_W-2){1'b0}}, 2'd3};
                             suffix_bits_total <= suffix_len_for(pending_abs);

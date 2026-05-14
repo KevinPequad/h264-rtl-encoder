@@ -130,6 +130,7 @@ module h264_bitstream #(
     localparam S_TRAIL   = 4'd5;
     localparam S_EMIT    = 4'd6;
     localparam S_FLUSH   = 4'd7;
+    localparam S_CABAC_RES = 4'd8;
 
     reg [3:0]  state;
     reg [3:0]  return_state;
@@ -347,8 +348,17 @@ module h264_bitstream #(
     reg [6:0]  cabac_cbp_luma_ctx_state_76;
     reg [6:0]  cabac_cbp_chroma_ctx_state_77;
     reg [6:0]  cabac_qp_delta_ctx_state_60;
-    reg [3:0]  cabac_pending_ctx_kind;
-    reg [1:0]  cabac_pending_ctx_sel;
+    reg [6:0]  cabac_res_cbf_ctx_state [0:3];
+    reg [6:0]  cabac_res_sig_ctx_state [0:14];
+    reg [6:0]  cabac_res_last_ctx_state [0:14];
+    reg [6:0]  cabac_res_level_ctx_state_0;
+    reg [6:0]  cabac_res_level_ctx_state_1;
+    reg [4:0]  cabac_pending_ctx_kind;
+    reg [3:0]  cabac_pending_ctx_sel;
+    reg [3:0]  cabac_res_block_idx;
+    reg        cabac_res_scan_start;
+    reg        cabac_res_scan_done_pending;
+    integer    cabac_res_i;
     reg        cabac_start;
     reg        cabac_bin_valid;
     reg        cabac_bin_value;
@@ -367,19 +377,23 @@ module h264_bitstream #(
 
     localparam DEBUG_CABAC_P16X16 = 1'b0;
 
-    localparam [3:0] CABAC_CTX_NONE      = 4'd0;
-    localparam [3:0] CABAC_CTX_SKIP      = 4'd1;
-    localparam [3:0] CABAC_CTX_MBTYPE14  = 4'd2;
-    localparam [3:0] CABAC_CTX_MBTYPE15  = 4'd3;
-    localparam [3:0] CABAC_CTX_MBTYPE16  = 4'd4;
-    localparam [3:0] CABAC_CTX_MVDX      = 4'd5;
-    localparam [3:0] CABAC_CTX_MVDY      = 4'd6;
-    localparam [3:0] CABAC_CTX_CBP0      = 4'd7;
-    localparam [3:0] CABAC_CTX_CBP1      = 4'd8;
-    localparam [3:0] CABAC_CTX_CBP2      = 4'd9;
-    localparam [3:0] CABAC_CTX_CBP3      = 4'd10;
-    localparam [3:0] CABAC_CTX_CBPCHROMA = 4'd11;
-    localparam [3:0] CABAC_CTX_QPDELTA   = 4'd12;
+    localparam [4:0] CABAC_CTX_NONE      = 5'd0;
+    localparam [4:0] CABAC_CTX_SKIP      = 5'd1;
+    localparam [4:0] CABAC_CTX_MBTYPE14  = 5'd2;
+    localparam [4:0] CABAC_CTX_MBTYPE15  = 5'd3;
+    localparam [4:0] CABAC_CTX_MBTYPE16  = 5'd4;
+    localparam [4:0] CABAC_CTX_MVDX      = 5'd5;
+    localparam [4:0] CABAC_CTX_MVDY      = 5'd6;
+    localparam [4:0] CABAC_CTX_CBP0      = 5'd7;
+    localparam [4:0] CABAC_CTX_CBP1      = 5'd8;
+    localparam [4:0] CABAC_CTX_CBP2      = 5'd9;
+    localparam [4:0] CABAC_CTX_CBP3      = 5'd10;
+    localparam [4:0] CABAC_CTX_CBPCHROMA = 5'd11;
+    localparam [4:0] CABAC_CTX_QPDELTA   = 5'd12;
+    localparam [4:0] CABAC_CTX_RES_CBF   = 5'd13;
+    localparam [4:0] CABAC_CTX_RES_SIG   = 5'd14;
+    localparam [4:0] CABAC_CTX_RES_LAST  = 5'd15;
+    localparam [4:0] CABAC_CTX_RES_LEVEL = 5'd16;
 
     function automatic [6:0] cabac_init_state;
         input integer m;
@@ -557,6 +571,89 @@ module h264_bitstream #(
         .active(cabac_active)
     );
 
+
+    function automatic signed [15:0] cabac_luma_coeff_at;
+        input [3:0] block_i;
+        input [3:0] coeff_i;
+        integer bit_base_i;
+        begin
+            bit_base_i = ((block_i * 16) + coeff_i) * 16;
+            cabac_luma_coeff_at = cabac_luma_scan_flat[bit_base_i +: 16];
+        end
+    endfunction
+
+    function automatic [1:0] cabac_res_cbf_ctx_sel_for;
+        input [3:0] block_i;
+        reg left_coded_i;
+        reg top_coded_i;
+        begin
+            left_coded_i = (block_i[1:0] != 2'd0) ? cabac_luma_nz_mask[block_i - 4'd1] : 1'b0;
+            top_coded_i = (block_i >= 4'd4) ? cabac_luma_nz_mask[block_i - 4'd4] : 1'b0;
+            cabac_res_cbf_ctx_sel_for = {top_coded_i, left_coded_i};
+        end
+    endfunction
+
+    wire        cabac_res_event_valid;
+    wire        cabac_res_event_ready;
+    wire [2:0]  cabac_res_event_kind;
+    wire        cabac_res_event_value;
+    wire [3:0]  cabac_res_event_coeff_idx;
+    wire [15:0] cabac_res_event_level_abs;
+    wire        cabac_res_event_level_sign;
+    wire        cabac_res_scan_done;
+    wire        cabac_res_scan_busy;
+    wire        cabac_res_bin_valid;
+    wire        cabac_res_bin_value;
+    wire        cabac_res_bin_bypass;
+    wire [8:0]  cabac_res_bin_ctx_idx;
+    wire        cabac_res_bin_done;
+
+    h264_cabac_residual4x4_scan u_cabac_res_scan (
+        .clk(clk), .rst_n(rst_n), .start(cabac_res_scan_start),
+        .coeff0(cabac_luma_coeff_at(cabac_res_block_idx, 4'd0)),
+        .coeff1(cabac_luma_coeff_at(cabac_res_block_idx, 4'd1)),
+        .coeff2(cabac_luma_coeff_at(cabac_res_block_idx, 4'd2)),
+        .coeff3(cabac_luma_coeff_at(cabac_res_block_idx, 4'd3)),
+        .coeff4(cabac_luma_coeff_at(cabac_res_block_idx, 4'd4)),
+        .coeff5(cabac_luma_coeff_at(cabac_res_block_idx, 4'd5)),
+        .coeff6(cabac_luma_coeff_at(cabac_res_block_idx, 4'd6)),
+        .coeff7(cabac_luma_coeff_at(cabac_res_block_idx, 4'd7)),
+        .coeff8(cabac_luma_coeff_at(cabac_res_block_idx, 4'd8)),
+        .coeff9(cabac_luma_coeff_at(cabac_res_block_idx, 4'd9)),
+        .coeff10(cabac_luma_coeff_at(cabac_res_block_idx, 4'd10)),
+        .coeff11(cabac_luma_coeff_at(cabac_res_block_idx, 4'd11)),
+        .coeff12(cabac_luma_coeff_at(cabac_res_block_idx, 4'd12)),
+        .coeff13(cabac_luma_coeff_at(cabac_res_block_idx, 4'd13)),
+        .coeff14(cabac_luma_coeff_at(cabac_res_block_idx, 4'd14)),
+        .coeff15(cabac_luma_coeff_at(cabac_res_block_idx, 4'd15)),
+        .event_valid(cabac_res_event_valid),
+        .event_ready(cabac_res_event_ready),
+        .event_kind(cabac_res_event_kind),
+        .event_value(cabac_res_event_value),
+        .event_coeff_idx(cabac_res_event_coeff_idx),
+        .event_level_abs(cabac_res_event_level_abs),
+        .event_level_sign(cabac_res_event_level_sign),
+        .done(cabac_res_scan_done),
+        .busy(cabac_res_scan_busy)
+    );
+
+    h264_cabac_residual4x4_bins u_cabac_res_bins (
+        .clk(clk), .rst_n(rst_n),
+        .event_valid(cabac_res_event_valid),
+        .event_ready(cabac_res_event_ready),
+        .event_kind(cabac_res_event_kind),
+        .event_value(cabac_res_event_value),
+        .event_coeff_idx(cabac_res_event_coeff_idx),
+        .event_level_abs(cabac_res_event_level_abs),
+        .event_level_sign(cabac_res_event_level_sign),
+        .bin_valid(cabac_res_bin_valid),
+        .bin_ready(cabac_bin_ready),
+        .bin_value(cabac_res_bin_value),
+        .bin_bypass(cabac_res_bin_bypass),
+        .bin_ctx_idx(cabac_res_bin_ctx_idx),
+        .done(cabac_res_bin_done)
+    );
+
     // Find MSB position of se_code1 (priority encoder)
     reg [3:0] se_msb;
     always @(*) begin
@@ -648,8 +745,20 @@ module h264_bitstream #(
             cabac_cbp_luma_ctx_state_76 <= 7'd0;
             cabac_cbp_chroma_ctx_state_77 <= 7'd0;
             cabac_qp_delta_ctx_state_60 <= 7'd0;
+            for (cabac_res_i = 0; cabac_res_i < 4; cabac_res_i = cabac_res_i + 1) begin
+                cabac_res_cbf_ctx_state[cabac_res_i] <= 7'd0;
+            end
+            cabac_res_level_ctx_state_0 <= 7'd0;
+            cabac_res_level_ctx_state_1 <= 7'd0;
+            for (cabac_res_i = 0; cabac_res_i < 15; cabac_res_i = cabac_res_i + 1) begin
+                cabac_res_sig_ctx_state[cabac_res_i] <= 7'd0;
+                cabac_res_last_ctx_state[cabac_res_i] <= 7'd0;
+            end
             cabac_pending_ctx_kind <= CABAC_CTX_NONE;
-            cabac_pending_ctx_sel <= 2'd0;
+            cabac_pending_ctx_sel <= 4'd0;
+            cabac_res_block_idx <= 4'd0;
+            cabac_res_scan_start <= 1'b0;
+            cabac_res_scan_done_pending <= 1'b0;
             cabac_start <= 1'b0;
             cabac_bin_valid <= 1'b0;
             cabac_bin_value <= 1'b0;
@@ -664,6 +773,7 @@ module h264_bitstream #(
             cabac_bin_value <= 1'b0;
             cabac_bin_bypass <= 1'b0;
             cabac_bin_terminate <= 1'b0;
+            cabac_res_scan_start <= 1'b0;
 
             if (cabac_ctx_state_wr) begin
                 case (cabac_pending_ctx_kind)
@@ -704,6 +814,15 @@ module h264_bitstream #(
                     CABAC_CTX_CBP3: cabac_cbp_luma_ctx_state_76 <= cabac_ctx_state_out;
                     CABAC_CTX_CBPCHROMA: cabac_cbp_chroma_ctx_state_77 <= cabac_ctx_state_out;
                     CABAC_CTX_QPDELTA: cabac_qp_delta_ctx_state_60 <= cabac_ctx_state_out;
+                    CABAC_CTX_RES_CBF: cabac_res_cbf_ctx_state[cabac_pending_ctx_sel[1:0]] <= cabac_ctx_state_out;
+                    CABAC_CTX_RES_SIG: cabac_res_sig_ctx_state[cabac_pending_ctx_sel] <= cabac_ctx_state_out;
+                    CABAC_CTX_RES_LAST: cabac_res_last_ctx_state[cabac_pending_ctx_sel] <= cabac_ctx_state_out;
+                    CABAC_CTX_RES_LEVEL: begin
+                        if (cabac_pending_ctx_sel == 4'd0)
+                            cabac_res_level_ctx_state_0 <= cabac_ctx_state_out;
+                        else
+                            cabac_res_level_ctx_state_1 <= cabac_ctx_state_out;
+                    end
                     default: begin end
                 endcase
             end
@@ -1266,6 +1385,42 @@ module h264_bitstream #(
                                     cabac_cbp_luma_ctx_state_76 <= cabac_init_state(-23, 67, 26);
                                     cabac_cbp_chroma_ctx_state_77 <= cabac_init_state(-28, 82, 26);
                                     cabac_qp_delta_ctx_state_60 <= cabac_init_state(0, 41, 26);
+                                    cabac_res_cbf_ctx_state[0] <= cabac_init_state(-7, 92, 26);
+                                    cabac_res_cbf_ctx_state[1] <= cabac_init_state(-5, 89, 26);
+                                    cabac_res_cbf_ctx_state[2] <= cabac_init_state(-7, 96, 26);
+                                    cabac_res_cbf_ctx_state[3] <= cabac_init_state(-13, 108, 26);
+                                    cabac_res_sig_ctx_state[0] <= cabac_init_state(-2, 85, 26);
+                                    cabac_res_sig_ctx_state[1] <= cabac_init_state(-6, 78, 26);
+                                    cabac_res_sig_ctx_state[2] <= cabac_init_state(-1, 75, 26);
+                                    cabac_res_sig_ctx_state[3] <= cabac_init_state(-7, 77, 26);
+                                    cabac_res_sig_ctx_state[4] <= cabac_init_state(2, 54, 26);
+                                    cabac_res_sig_ctx_state[5] <= cabac_init_state(5, 50, 26);
+                                    cabac_res_sig_ctx_state[6] <= cabac_init_state(-3, 68, 26);
+                                    cabac_res_sig_ctx_state[7] <= cabac_init_state(1, 50, 26);
+                                    cabac_res_sig_ctx_state[8] <= cabac_init_state(6, 42, 26);
+                                    cabac_res_sig_ctx_state[9] <= cabac_init_state(-4, 81, 26);
+                                    cabac_res_sig_ctx_state[10] <= cabac_init_state(1, 63, 26);
+                                    cabac_res_sig_ctx_state[11] <= cabac_init_state(-4, 70, 26);
+                                    cabac_res_sig_ctx_state[12] <= cabac_init_state(0, 67, 26);
+                                    cabac_res_sig_ctx_state[13] <= cabac_init_state(2, 57, 26);
+                                    cabac_res_sig_ctx_state[14] <= cabac_init_state(-2, 76, 26);
+                                    cabac_res_last_ctx_state[0] <= cabac_init_state(11, 28, 26);
+                                    cabac_res_last_ctx_state[1] <= cabac_init_state(2, 40, 26);
+                                    cabac_res_last_ctx_state[2] <= cabac_init_state(3, 44, 26);
+                                    cabac_res_last_ctx_state[3] <= cabac_init_state(0, 49, 26);
+                                    cabac_res_last_ctx_state[4] <= cabac_init_state(0, 46, 26);
+                                    cabac_res_last_ctx_state[5] <= cabac_init_state(2, 44, 26);
+                                    cabac_res_last_ctx_state[6] <= cabac_init_state(2, 51, 26);
+                                    cabac_res_last_ctx_state[7] <= cabac_init_state(0, 47, 26);
+                                    cabac_res_last_ctx_state[8] <= cabac_init_state(4, 39, 26);
+                                    cabac_res_last_ctx_state[9] <= cabac_init_state(2, 62, 26);
+                                    cabac_res_last_ctx_state[10] <= cabac_init_state(6, 46, 26);
+                                    cabac_res_last_ctx_state[11] <= cabac_init_state(0, 54, 26);
+                                    cabac_res_last_ctx_state[12] <= cabac_init_state(3, 54, 26);
+                                    cabac_res_last_ctx_state[13] <= cabac_init_state(2, 58, 26);
+                                    cabac_res_last_ctx_state[14] <= cabac_init_state(4, 63, 26);
+                                    cabac_res_level_ctx_state_0 <= cabac_init_state(-6, 76, 26);
+                                    cabac_res_level_ctx_state_1 <= cabac_init_state(-2, 59, 26);
                                     cabac_start <= 1'b1;
                                 end
                                 cmd_done <= 1'b1;
@@ -1436,11 +1591,12 @@ module h264_bitstream #(
                             6'd0: begin
                                 if (cabac_slice_active) begin
                                     if (!is_skip_mb &&
-                                        !(is_inter_mb && !is_b_slice && !mb_has_residual &&
+                                        !(is_inter_mb && !is_b_slice &&
                                           (p_partition_mode == 2'd0) &&
                                           (slice_num_ref_idx_l0_active_minus1 == 2'd0) &&
                                           (mb_ref_idx_l0 == 2'd0) &&
-                                          (mvd_x_l0 == 9'sd0) && (mvd_y_l0 == 9'sd0))) begin
+                                          (mvd_x_l0 == 9'sd0) && (mvd_y_l0 == 9'sd0) &&
+                                          (!mb_has_residual || ((cabac_cbp_luma != 4'd0) && (cabac_cbp_chroma == 2'd0))))) begin
                                         `ifndef SYNTHESIS
                                         $fatal(1,
                                                "[CABAC_PSUBSET] Unsupported CABAC MB inter=%0d skip=%0d residual=%0d ref=%0d mvd=(%0d,%0d) refs=%0d",
@@ -1759,7 +1915,7 @@ module h264_bitstream #(
                                 cabac_pending_ctx_kind <= CABAC_CTX_CBP0;
                                 cabac_pending_ctx_sel <= cabac_cbp_luma_ctx0_sel;
                                 cabac_bin_valid <= 1'b1;
-                                cabac_bin_value <= 1'b0;
+                                cabac_bin_value <= cabac_cbp_luma[0];
                                 cabac_bin_bypass <= 1'b0;
                                 cabac_bin_terminate <= 1'b0;
                                 sub <= 6'd41;
@@ -1788,7 +1944,7 @@ module h264_bitstream #(
                                 cabac_pending_ctx_kind <= CABAC_CTX_CBP1;
                                 cabac_pending_ctx_sel <= cabac_cbp_luma_ctx1_sel;
                                 cabac_bin_valid <= 1'b1;
-                                cabac_bin_value <= 1'b0;
+                                cabac_bin_value <= cabac_cbp_luma[1];
                                 cabac_bin_bypass <= 1'b0;
                                 cabac_bin_terminate <= 1'b0;
                                 sub <= 6'd42;
@@ -1817,7 +1973,7 @@ module h264_bitstream #(
                                 cabac_pending_ctx_kind <= CABAC_CTX_CBP2;
                                 cabac_pending_ctx_sel <= cabac_cbp_luma_ctx2_sel;
                                 cabac_bin_valid <= 1'b1;
-                                cabac_bin_value <= 1'b0;
+                                cabac_bin_value <= cabac_cbp_luma[2];
                                 cabac_bin_bypass <= 1'b0;
                                 cabac_bin_terminate <= 1'b0;
                                 sub <= 6'd43;
@@ -1841,7 +1997,7 @@ module h264_bitstream #(
                                 cabac_pending_ctx_kind <= CABAC_CTX_CBP3;
                                 cabac_pending_ctx_sel <= 2'd0;
                                 cabac_bin_valid <= 1'b1;
-                                cabac_bin_value <= 1'b0;
+                                cabac_bin_value <= cabac_cbp_luma[3];
                                 cabac_bin_bypass <= 1'b0;
                                 cabac_bin_terminate <= 1'b0;
                                 sub <= 6'd44;
@@ -1893,7 +2049,7 @@ module h264_bitstream #(
                                     cabac_bin_value <= 1'b0;
                                     cabac_bin_bypass <= 1'b0;
                                     cabac_bin_terminate <= 1'b0;
-                                    sub <= 6'd47;
+                                    sub <= 6'd63;
                                 end else begin
                                     cabac_mb_counter <= cabac_mb_counter + 12'd1;
                                     sub <= 6'd46;
@@ -1904,6 +2060,22 @@ module h264_bitstream #(
                                 cmd_done <= 1'b1;
                                 busy     <= 1'b0;
                                 state    <= S_IDLE;
+                            end
+                            6'd63: begin
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC qp_delta bit overflow");
+                                    `endif
+                                end
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                end
+                                cabac_res_block_idx <= 4'd0;
+                                cabac_res_scan_done_pending <= 1'b0;
+                                cabac_res_scan_start <= 1'b1;
+                                state <= S_CABAC_RES;
+                                sub <= 6'd0;
                             end
                             6'd20: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
@@ -2236,6 +2408,71 @@ module h264_bitstream #(
 
                             default: state <= S_IDLE;
                         endcase
+                    end
+
+                    S_CABAC_RES: begin
+                        if (cabac_bits_overflow) begin
+                            `ifndef SYNTHESIS
+                            $fatal(1, "[CABAC_PSUBSET] CABAC residual bit overflow");
+                            `endif
+                        end
+                        if (cabac_bits_valid) begin
+                            bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                            bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                        end
+                        if (cabac_res_bin_valid) begin
+                            cabac_bin_valid <= 1'b1;
+                            cabac_bin_value <= cabac_res_bin_value;
+                            cabac_bin_bypass <= cabac_res_bin_bypass;
+                            cabac_bin_terminate <= 1'b0;
+                            case (cabac_res_bin_ctx_idx)
+                                9'd85: begin
+                                    cabac_ctx_state_in <= cabac_res_cbf_ctx_state[cabac_res_cbf_ctx_sel_for(cabac_res_block_idx)];
+                                    cabac_pending_ctx_kind <= CABAC_CTX_RES_CBF;
+                                    cabac_pending_ctx_sel <= {2'd0, cabac_res_cbf_ctx_sel_for(cabac_res_block_idx)};
+                                end
+                                9'd227: begin
+                                    cabac_ctx_state_in <= cabac_res_level_ctx_state_0;
+                                    cabac_pending_ctx_kind <= CABAC_CTX_RES_LEVEL;
+                                    cabac_pending_ctx_sel <= 4'd0;
+                                end
+                                9'd232: begin
+                                    cabac_ctx_state_in <= cabac_res_level_ctx_state_1;
+                                    cabac_pending_ctx_kind <= CABAC_CTX_RES_LEVEL;
+                                    cabac_pending_ctx_sel <= 4'd1;
+                                end
+                                default: begin
+                                    if ((cabac_res_bin_ctx_idx >= 9'd105) && (cabac_res_bin_ctx_idx <= 9'd119)) begin
+                                        cabac_ctx_state_in <= cabac_res_sig_ctx_state[cabac_res_bin_ctx_idx - 9'd105];
+                                        cabac_pending_ctx_kind <= CABAC_CTX_RES_SIG;
+                                        cabac_pending_ctx_sel <= cabac_res_bin_ctx_idx - 9'd105;
+                                    end else if ((cabac_res_bin_ctx_idx >= 9'd166) && (cabac_res_bin_ctx_idx <= 9'd180)) begin
+                                        cabac_ctx_state_in <= cabac_res_last_ctx_state[cabac_res_bin_ctx_idx - 9'd166];
+                                        cabac_pending_ctx_kind <= CABAC_CTX_RES_LAST;
+                                        cabac_pending_ctx_sel <= cabac_res_bin_ctx_idx - 9'd166;
+                                    end else begin
+                                        cabac_ctx_state_in <= 7'd0;
+                                        cabac_pending_ctx_kind <= CABAC_CTX_NONE;
+                                        cabac_pending_ctx_sel <= 4'd0;
+                                    end
+                                end
+                            endcase
+                        end
+                        if (cabac_res_scan_done)
+                            cabac_res_scan_done_pending <= 1'b1;
+                        if (cabac_res_scan_done_pending && !cabac_res_bin_valid) begin
+                            if (cabac_res_block_idx == 4'd15) begin
+                                cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                cabac_res_scan_done_pending <= 1'b0;
+                                sub <= 6'd46;
+                                state <= S_MB_HDR;
+                            end else begin
+                                cabac_res_block_idx <= cabac_res_block_idx + 4'd1;
+                                cabac_res_scan_done_pending <= 1'b0;
+                                sub <= 6'd0;
+                                cabac_res_scan_start <= 1'b1;
+                            end
+                        end
                     end
 
                     S_TRAIL: begin

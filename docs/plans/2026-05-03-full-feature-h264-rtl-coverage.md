@@ -104,13 +104,14 @@ Current intentional dirty RTL files to review/fold into feature branch:
 
 ---
 
-**CABAC checkpoint correction:** current integrated CABAC `P_L0_16x16` is only the
-single-ref / zero-CBP / zero-MVD subset. The residual scan-event and bin/context helpers exist
-as standalone building blocks, but nonzero luma/chroma CABAC coefficient syntax
-still needs a real RED/GREEN integration gate; do not treat the old residual
-checkpoint wording as feature completion.
-the next CABAC step is general residual-bin coverage from coefficient
-positions/levels, then `mb_qp_delta`, chroma, and the remaining I/P/B bins.
+**CABAC checkpoint correction:** current integrated CABAC `P_L0_16x16` now covers
+the strict single-ref / zero-MVD lane for zero-CBP and a focused luma-only
+nonzero-residual subset. The residual scan-event and bin/context helpers are
+wired through persistent residual CABAC context state into the bitstream core for
+that luma subset, with `scripts/run_cabac_p16x16_residual_green_check.sh` proving
+strict FFmpeg decode. Chroma-residual CABAC remains guarded; the next CABAC step
+is extending residual-bin coverage to chroma syntax, then `mb_qp_delta` variants
+and the remaining I/P/B bins.
 
 ## Milestone 2: Broader Inter Partitions
 

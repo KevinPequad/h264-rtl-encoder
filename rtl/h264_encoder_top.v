@@ -735,14 +735,17 @@ module h264_encoder_top #(
         (mb_ref_idx_reg == 2'd0) &&
         (mvd_x_l0_w == 9'sd0) &&
         (mvd_y_l0_w == 9'sd0);
-    // Current integrated CABAC P16x16 path is intentionally limited to the
-    // zero-CBP / zero-MVD subset. Residual CABAC coefficient syntax is not
-    // complete yet; do not suppress the CAVLC residual FIFO for nonzero luma or
-    // chroma CBP because that creates decoder-invalid mixed syntax.
+    // Integrated CABAC P16x16 currently supports the strict zero-MVD/single-ref
+    // lane, plus a focused luma-only residual bring-up subset. Chroma residual
+    // CABAC stays guarded until its coefficient syntax is wired and verified.
+    wire        cabac_luma_residual_p16x16_eligible_w =
+        mb_has_residual &&
+        (mb_cbp_luma_w != 4'd0) &&
+        (i16_cbp_chroma == 2'd0);
     wire        cabac_non_skip_subset_ok_w =
         cabac_zero_cbp_p16x16_eligible_w &&
         !is_skip_mb_reg &&
-        !mb_has_residual;
+        (!mb_has_residual || cabac_luma_residual_p16x16_eligible_w);
     wire        cabac_suppress_cavlc_payload_w =
         cabac_slice_enable_w && cabac_non_skip_subset_ok_w;
 
@@ -2062,7 +2065,13 @@ pred_buf = {(256*BD){1'b0}};
         (nz_coeff[7]  != 5'd0), (nz_coeff[6]  != 5'd0), (nz_coeff[5] != 5'd0),  (nz_coeff[4]  != 5'd0),
         (nz_coeff[3]  != 5'd0), (nz_coeff[2]  != 5'd0), (nz_coeff[1] != 5'd0),  (nz_coeff[0]  != 5'd0)
     };
-    wire [4095:0] cabac_luma_scan_flat_w = {16{scan_flat}};
+    reg [255:0] cabac_luma_scan_buf [0:15];
+    wire [4095:0] cabac_luma_scan_flat_w = {
+        cabac_luma_scan_buf[15], cabac_luma_scan_buf[14], cabac_luma_scan_buf[13], cabac_luma_scan_buf[12],
+        cabac_luma_scan_buf[11], cabac_luma_scan_buf[10], cabac_luma_scan_buf[9],  cabac_luma_scan_buf[8],
+        cabac_luma_scan_buf[7],  cabac_luma_scan_buf[6],  cabac_luma_scan_buf[5],  cabac_luma_scan_buf[4],
+        cabac_luma_scan_buf[3],  cabac_luma_scan_buf[2],  cabac_luma_scan_buf[1],  cabac_luma_scan_buf[0]
+    };
     reg [4:0] left_mb_nz [0:3];
     reg [4:0] top_mb_nz [0:MB_COLS*4-1];
     reg [3:0] intra_mode_cur [0:15];
@@ -3665,7 +3674,7 @@ pred_buf = {(256*BD){1'b0}};
                                        end
                                    end
                         BS_ZIGZAG: if (!blk_started) begin zz_start <= 1'b1; iq_start <= 1'b1; blk_started <= 1'b1; iq_done_latched <= 1'b0; end
-                                   else begin if (iq_done) iq_done_latched <= 1'b1; if (zz_done) begin nz_coeff[sub_blk] <= total_coeffs; blk_state <= BS_CAVLC; blk_started <= 1'b0; end end
+                                   else begin if (iq_done) iq_done_latched <= 1'b1; if (zz_done) begin nz_coeff[sub_blk] <= total_coeffs; if (is_luma) cabac_luma_scan_buf[sub_blk[3:0]] <= scan_flat; blk_state <= BS_CAVLC; blk_started <= 1'b0; end end
                         BS_CAVLC:  if (!blk_started && !bs_busy) begin cavlc_start <= 1'b1; blk_started <= 1'b1; end
                                    else begin if (iq_done) iq_done_latched <= 1'b1; if (cavlc_done) begin blk_state <= BS_IQ; blk_started <= 1'b0; end end
                         BS_IQ:     if (iq_done || iq_done_latched) begin blk_state <= BS_IT; blk_started <= 1'b0; end else if (iq_done) iq_done_latched <= 1'b1;
@@ -5259,17 +5268,6 @@ pred_buf = {(256*BD){1'b0}};
     always @(posedge clk) begin
         // dbg_frame_cnt is reset and advanced in the main FSM block; keep this
         // debug trace block read-only to avoid multi-driver/reset lint noise.
-        if (dbg_detail_mb && zz_done) begin
-            $display("[ZZD] F%0d MB%0d sb=%0d isL=%0d isCb=%0d isCr=%0d nC=%0d TC=%0d T1=%0d last=%0d chDC=%0d chAC=%0d",
-                dbg_frame_cnt, mb_count, sub_blk, is_luma, is_cb, is_cr, nC_val, total_coeffs, trailing_ones, last_nonzero_idx, cavlc_is_chroma_dc, cavlc_is_chroma_ac);
-            $display("[ZZS] F%0d MB%0d sb=%0d scan=%064x_%064x_%064x_%064x",
-                dbg_frame_cnt, mb_count, sub_blk,
-                scan_flat[255:192], scan_flat[191:128], scan_flat[127:64], scan_flat[63:0]);
-        end
-        if (dbg_detail_mb && cavlc_bits_valid) begin
-            $display("[CVO] F%0d MB%0d sb=%0d bits=%08x count=%0d chDC=%0d",
-                dbg_frame_cnt, mb_count, sub_blk, cavlc_bits, cavlc_count, cavlc_is_chroma_dc);
-        end
         if (DEBUG_TRACE && dbg_frame_cnt == DEBUG_FRAME && bs_cmd_mb_hdr) begin
             $display("[MBH] F%0d MB%0d x=%0d y=%0d inter=%0d ref=%0d rbank=%0d wbank=%0d mvx=%0d mvy=%0d mvpx=%0d mvpy=%0d mvdx=%0d mvdy=%0d type=%0d predbits=%016x predcnt=%0d bytes=%0d",
                 dbg_frame_cnt, mb_count, mb_x, mb_y, is_inter_mb_reg,

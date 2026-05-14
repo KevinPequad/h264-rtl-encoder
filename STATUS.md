@@ -105,9 +105,10 @@ transform/profile/color closure, and the final long-run target.
 | `scripts/run_deblock_reference_check.sh` | Public-decoder and two-frame reconstructed-reference consumption check for in-loop deblocking |
 | `scripts/run_cabac_residual4x4_scan_check.sh` | Standalone Verilator check for the CABAC residual 4x4 scan-event helper |
 | `scripts/run_cabac_residual4x4_bins_check.sh` | Standalone Verilator check for CABAC residual 4x4 bin/context emission scaffold |
-| `scripts/run_cabac_p16x16_residual_red_check.sh` | RED gate showing integrated nonzero luma residual CABAC P16x16 is still blocked by the subset guard |
+| `scripts/run_cabac_p16x16_residual_green_check.sh` | GREEN gate proving integrated CABAC P16x16 luma-only nonzero residual strict-decodes with FFmpeg |
+| `scripts/run_cabac_p16x16_residual_red_check.sh` | Legacy alias for the promoted luma residual GREEN gate |
 | `scripts/audit_no_testbench_repair.py` | Static audit that proves RTL bitstream ownership is retained in the TB and helper repair hooks are absent |
-| `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for the current CABAC `P_L0_16x16` zero-CBP subset; residual-CABAC integration still needs a separate RED/GREEN gate |
+| `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for the CABAC `P_L0_16x16` zero-CBP subset |
 | `docker/Dockerfile` | Containerized smoke-run environment |
 | `docker/run_one_frame.sh` | One-frame Docker smoke flow |
 | `tools/parse_422.c` | Small debug/parser utility |
