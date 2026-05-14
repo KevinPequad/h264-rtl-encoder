@@ -1356,6 +1356,20 @@ module h264_encoder_top #(
                 map_refbank_l1_ref_bank(newest_ref_bank, col_ref_idx_l1, col_ref_bank_l1_valid, col_ref_bank_l1);
                 map_b_l0_bank_to_ref_idx(col_ref_bank_l1, cur_ref_idx_l1_valid, cur_ref_idx_l0_from_l1);
 
+                // In reordered BREF chains the colocated picture can point at a
+                // reference bank that aged out of the current B-slice List0.
+                // Keep temporal-direct available by remapping that colocated
+                // reference to the deepest current List0 slot instead of
+                // dropping the B_DIRECT candidate and falling back to L1.
+                if (col_ref_bank_l0_valid && !cur_ref_idx_l0_valid && (valid_ref_count >= 3'd3)) begin
+                    cur_ref_idx_l0_valid = 1'b1;
+                    cur_ref_idx_l0_from_l0 = (valid_ref_count >= 3'd4) ? 2'd2 : 2'd1;
+                end
+                if (col_ref_bank_l1_valid && !cur_ref_idx_l1_valid && (valid_ref_count >= 3'd3)) begin
+                    cur_ref_idx_l1_valid = 1'b1;
+                    cur_ref_idx_l0_from_l1 = (valid_ref_count >= 3'd4) ? 2'd2 : 2'd1;
+                end
+
                 calc_temporal_direct_candidate_from_colocated(
                     col_has_l0,
                     col_ref_bank_l0_valid,
@@ -1399,7 +1413,7 @@ module h264_encoder_top #(
                 end else if (cand_l0_valid || cand_l1_valid) begin
                     direct_valid = 1'b1;
                     direct_use_bi = 1'b1;
-                    if (cand_l1_valid && (!cand_l0_valid || (cand_l1_metric_i < cand_l0_metric_i))) begin
+                    if (cand_l1_valid && (!cand_l0_valid || (cand_l1_metric_i <= cand_l0_metric_i))) begin
                         direct_from_col_l1 = 1'b1;
                         direct_ref_idx_l0 = cand_l1_ref_idx_l0;
                         direct_ref_idx_l1 = cand_l1_ref_idx_l1;
@@ -3319,11 +3333,11 @@ pred_buf = {(256*BD){1'b0}};
                                     if (direct_temporal_slice_mode_reg &&
                                         b_direct_pending_use_bi &&
                                         (b_direct_pending_ref_idx_l0 != 2'd0))
-                                        direct_auto_bias_i = 32;
+                                        direct_auto_bias_i = (INTER_SAD_THRESHOLD << 1);
                                 end
 
                                 if (b_direct_pending_valid &&
-                                    (direct_final_sad_i < INTER_SAD_THRESHOLD) &&
+                                    (direct_final_sad_i < (INTER_SAD_THRESHOLD + direct_auto_bias_i)) &&
                                     (direct_final_sad_i <= (bi_final_sad_i + direct_auto_bias_i)) &&
                                     (direct_final_sad_i <= (best_sad_i + direct_auto_bias_i)) &&
                                     (direct_final_sad_i <= (b_bi_luma_sad_l0 + direct_auto_bias_i))) begin
