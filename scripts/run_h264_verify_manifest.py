@@ -239,7 +239,31 @@ def expected_pix_fmt(config: dict[str, Any]) -> str | None:
 def expected_profile(config: dict[str, Any]) -> str | None:
     bit_depth = int(config.get("bit_depth", 8))
     chroma = int(config.get("chroma_format_idc", 1))
-    if config.get("enable_cabac_pskip") or config.get("enable_cabac_p16x16"):
+    uses_main_only_tools = any(
+        bool(config.get(key))
+        for key in (
+            "enable_cabac_pskip",
+            "enable_cabac_p16x16",
+            "force_b_slice",
+            "force_bref_slice",
+            "force_b_bi",
+            "force_b_l0",
+            "force_b_l1",
+            "force_b_direct",
+            "force_b_direct_temporal",
+            "force_b_bi_on_reorder_ref_slot",
+            "force_b_l0_on_reorder_ref_slot",
+            "force_b_l1_on_reorder_ref_slot",
+            "force_b_direct_on_reorder_ref_slot",
+            "force_b_direct_temporal_on_reorder_ref_slot",
+            "force_b_bi_on_reorder_b_slot",
+            "force_b_l0_on_reorder_b_slot",
+            "force_b_l1_on_reorder_b_slot",
+            "force_b_direct_on_reorder_b_slot",
+            "force_b_direct_temporal_on_reorder_b_slot",
+        )
+    )
+    if uses_main_only_tools:
         return "Main"
     if bit_depth == 8 and chroma == 1:
         return "Constrained Baseline"
@@ -610,6 +634,12 @@ def static_rtl_ownership_audit(root: Path | None = None) -> dict[str, Any]:
                 if "negative_malformed" in stripped or "malformed_bitstream_decode" in stripped:
                     allowed_findings.append({"kind": "allowed_negative_fixture", "file": rel, "line": line_no, "text": stripped[:240]})
                 continue
+            if rel.startswith("tb/tb_tpc_8x8_unit.cpp"):
+                # Transform/quant unit tests load residual vectors into DUT RAM;
+                # they do not build, patch, or write final H.264 syntax bytes.
+                if any(token in stripped for token in ("write_residual", "d.write_residual")):
+                    allowed_findings.append({"kind": "allowed_transform_unit_test", "file": rel, "line": line_no, "text": stripped[:240]})
+                    continue
             for pattern, reason in high_confidence_patterns:
                 if pattern.search(stripped):
                     if stripped.startswith("//") or stripped.startswith("#"):
