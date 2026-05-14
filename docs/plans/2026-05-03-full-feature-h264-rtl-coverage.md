@@ -105,8 +105,8 @@ Current intentional dirty RTL files to review/fold into feature branch:
 ---
 
 **CABAC checkpoint correction:** current integrated CABAC `P_L0_16x16` is only the
-single-ref / zero-CBP / zero-MVD subset. The residual scan-event helper exists
-as a standalone building block, but nonzero luma/chroma CABAC coefficient syntax
+single-ref / zero-CBP / zero-MVD subset. The residual scan-event and bin/context helpers exist
+as standalone building blocks, but nonzero luma/chroma CABAC coefficient syntax
 still needs a real RED/GREEN integration gate; do not treat the old residual
 checkpoint wording as feature completion.
 the next CABAC step is general residual-bin coverage from coefficient

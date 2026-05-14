@@ -41,7 +41,7 @@ Current state:
   commit `dc1d47094238f8ad973cdfb5738abd4f0d2ea951` with the standalone oracle,
   public-decoder checks, and a two-frame reference-bank-consumption proof
 - CABAC `P_L0_16x16` integration is currently limited to the strict zero-CBP / zero-MVD subset;
-  the standalone CABAC residual scan-event helper exists, but full CABAC residual coefficient syntax is not integrated yet
+  the standalone CABAC residual scan-event and bin/context helpers exist, but full CABAC residual coefficient syntax is not integrated yet
 - the repository is still not complete as a full H.264 standard encoder
 
 Completion is still blocked by major missing features including full CABAC
@@ -104,6 +104,8 @@ transform/profile/color closure, and the final long-run target.
 | `scripts/run_deblock_oracle_check.sh` | Standalone Verilator oracle check for the deblock edge datapath |
 | `scripts/run_deblock_reference_check.sh` | Public-decoder and two-frame reconstructed-reference consumption check for in-loop deblocking |
 | `scripts/run_cabac_residual4x4_scan_check.sh` | Standalone Verilator check for the CABAC residual 4x4 scan-event helper |
+| `scripts/run_cabac_residual4x4_bins_check.sh` | Standalone Verilator check for CABAC residual 4x4 bin/context emission scaffold |
+| `scripts/run_cabac_p16x16_residual_red_check.sh` | RED gate showing integrated nonzero luma residual CABAC P16x16 is still blocked by the subset guard |
 | `scripts/audit_no_testbench_repair.py` | Static audit that proves RTL bitstream ownership is retained in the TB and helper repair hooks are absent |
 | `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for the current CABAC `P_L0_16x16` zero-CBP subset; residual-CABAC integration still needs a separate RED/GREEN gate |
 | `docker/Dockerfile` | Containerized smoke-run environment |
