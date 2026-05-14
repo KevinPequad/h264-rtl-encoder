@@ -128,11 +128,11 @@ The testbench must not:
 
 ## Environment
 
-- Prefer the Linux flow on this machine via **WSL Ubuntu**
-- The checked-in shell scripts are Linux-oriented
+- Current operator preference: run H.264 codec Kanban/validation work on **Chud PC 2** at `/home/chudpc2/code/h264-rtl-encoder` over SSH, using the slow-burn thread policy.
+- The local `/home/chudpc/code/h264-rtl-encoder` checkout may be used as a mirror/control copy, but new long-running validation should target Chud PC 2 unless the user redirects.
+- The checked-in shell scripts are Linux-oriented.
 - A Docker smoke path now exists via `docker/Dockerfile` and
-  `docker/run_one_frame.sh`
-- The primary validated flow is still WSL for the larger runs
+  `docker/run_one_frame.sh`.
 
 ## References
 
@@ -155,9 +155,9 @@ The testbench must not:
 
 ## Threading And Runtime Discipline
 
-- Use all available host threads by default for build and simulation-related work unless a debugging task clearly needs fewer
-- On this machine, that means **24 threads**
-- Default to multithreaded builds and simulation orchestration with all **24 threads**
+- **Slow-burn default:** use single-threaded Verilator/build gates unless the user explicitly asks for a fast/max-thread run.
+- For normal H.264 Kanban/agent work on this machine, prefer `THREADS=1` and `BUILD_JOBS=1` so the computer stays usable and long-running codec validation can proceed quietly in the background.
+- Do not escalate to all available host threads just because a script or older instruction mentions 24 threads; ask or document a specific reason before doing so.
 - After RTL source edits, prefer a clean rebuild before trusting validation
   results so stale Verilated outputs do not mask the new logic
 - Be wary of simulation times
@@ -1124,5 +1124,5 @@ The testbench must not:
 - Full completion also means there are no known missing H.264 feature classes
   hiding behind partial implementations, subset-only smoke coverage, or stale
   assumptions about what the RTL already supports
-- Use **24 threads**
+- Use the slow-burn default (`THREADS=1 BUILD_JOBS=1`) unless the user explicitly asks for a fast/max-thread run
 - Be wary of simulation time before scaling up

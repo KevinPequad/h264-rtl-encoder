@@ -26,6 +26,13 @@ PSKIP_RE = re.compile(
     r"b_direct_refgt0_mbs=(?P<b_direct_refgt0>\d+)"
     r"(?:\s+b_direct_l1src_mbs=(?P<b_direct_l1src>\d+))?"
     r"(?:\s+cabac_p16x16_mbs=(?P<cabac_p16x16>\d+))?"
+    r"(?:\s+p_l0_refgt0_mbs=(?P<p_l0_refgt0>\d+))?"
+    r"(?:\s+p16x8_mbs=(?P<p16x8>\d+))?"
+    r"(?:\s+p8x16_mbs=(?P<p8x16>\d+))?"
+    r"(?:\s+p8x8_mbs=(?P<p8x8>\d+))?"
+    r"(?:\s+p8x4_mbs=(?P<p8x4>\d+))?"
+    r"(?:\s+p4x8_mbs=(?P<p4x8>\d+))?"
+    r"(?:\s+p4x4_mbs=(?P<p4x4>\d+))?"
 )
 DECODE_ERROR_PATTERNS = (
     "error while decoding",
@@ -67,6 +74,11 @@ class SmokeCase:
     inter_sad_threshold: int = 8000
     enable_cabac_pskip: int = 0
     enable_cabac_p16x16: int = 0
+    enable_cavlc_luma_8x8: int = 0
+    base_qp: int = 26
+    mb_qp_delta: int = 0
+    chroma_qp_index_offset: int = 0
+    second_chroma_qp_index_offset: int = 0
     idr_interval: int = 12
     force_b_slice: int = 0
     force_bref_slice: int = 0
@@ -85,8 +97,16 @@ class SmokeCase:
     force_b_l1_on_reorder_b_slot: int = 0
     force_b_direct_on_reorder_b_slot: int = 0
     force_b_direct_temporal_on_reorder_b_slot: int = 0
+    force_p16x8: int = 0
+    force_p8x16: int = 0
+    force_p8x8: int = 0
+    force_p8x4: int = 0
+    force_p4x8: int = 0
+    force_p4x4: int = 0
     reorder_b_gop: int = 0
     flat_y_frames: tuple[int, ...] | None = None
+    generate_input: bool = True
+    input_kind: str = "default"
     require_skip_min: int = 0
     require_bi_min: int = 0
     require_direct_min: int = 0
@@ -95,6 +115,13 @@ class SmokeCase:
     require_direct_refgt0_min: int = 0
     require_direct_l1src_min: int = 0
     require_cabac_p16x16_min: int = 0
+    require_p_l0_refgt0_min: int = 0
+    require_p16x8_min: int = 0
+    require_p8x16_min: int = 0
+    require_p8x8_min: int = 0
+    require_p8x4_min: int = 0
+    require_p4x8_min: int = 0
+    require_p4x4_min: int = 0
 
 
 CASES = [
@@ -110,6 +137,162 @@ CASES = [
         inter_sad_threshold=0,
     ),
     SmokeCase(
+        "smoke_8b_420_p16x8_force",
+        8,
+        1,
+        "smoke_32x16_3f_p16x8.yuv",
+        "smoke_32x16_3f_p16x8.h264",
+        frames=3,
+        enable_idr_ipcm=1,
+        force_p16x8=1,
+        flat_y_frames=(64, 64, 64),
+        require_p16x8_min=4,
+    ),
+    SmokeCase(
+        "smoke_8b_420_p8x16_force",
+        8,
+        1,
+        "smoke_32x16_3f_p8x16.yuv",
+        "smoke_32x16_3f_p8x16.h264",
+        frames=3,
+        enable_idr_ipcm=1,
+        force_p8x16=1,
+        flat_y_frames=(64, 64, 64),
+        require_p8x16_min=4,
+    ),
+    SmokeCase(
+        "smoke_8b_420_p16x8_followref",
+        8,
+        1,
+        "smoke_32x16_3f_p16x8_followref.yuv",
+        "smoke_32x16_3f_p16x8_followref.h264",
+        frames=3,
+        enable_idr_ipcm=1,
+        force_p16x8=1,
+        # Frames 1 and 2 differ from the IDR but match each other, so the
+        # second P frame exercises consumption of the partition-coded reference.
+        flat_y_frames=(64, 80, 80),
+        require_p16x8_min=4,
+    ),
+    SmokeCase(
+        "smoke_8b_420_p8x16_followref",
+        8,
+        1,
+        "smoke_32x16_3f_p8x16_followref.yuv",
+        "smoke_32x16_3f_p8x16_followref.h264",
+        frames=3,
+        enable_idr_ipcm=1,
+        force_p8x16=1,
+        flat_y_frames=(64, 80, 80),
+        require_p8x16_min=4,
+    ),
+    SmokeCase(
+        "smoke_8b_420_p8x8_force",
+        8,
+        1,
+        "smoke_32x16_3f_p8x8.yuv",
+        "smoke_32x16_3f_p8x8.h264",
+        frames=3,
+        enable_idr_ipcm=1,
+        force_p8x8=1,
+        flat_y_frames=(64, 64, 64),
+        require_p8x8_min=4,
+    ),
+    SmokeCase(
+        "smoke_8b_420_p8x4_force",
+        8,
+        1,
+        "smoke_32x16_3f_p8x4.yuv",
+        "smoke_32x16_3f_p8x4.h264",
+        frames=3,
+        enable_idr_ipcm=1,
+        force_p8x4=1,
+        flat_y_frames=(64, 64, 64),
+        require_p8x4_min=4,
+    ),
+    SmokeCase(
+        "smoke_8b_420_p4x8_force",
+        8,
+        1,
+        "smoke_32x16_3f_p4x8.yuv",
+        "smoke_32x16_3f_p4x8.h264",
+        frames=3,
+        enable_idr_ipcm=1,
+        force_p4x8=1,
+        flat_y_frames=(64, 64, 64),
+        require_p4x8_min=4,
+    ),
+    SmokeCase(
+        "smoke_8b_420_p4x4_force",
+        8,
+        1,
+        "smoke_32x16_3f_p4x4.yuv",
+        "smoke_32x16_3f_p4x4.h264",
+        frames=3,
+        enable_idr_ipcm=1,
+        force_p4x4=1,
+        flat_y_frames=(64, 64, 64),
+        require_p4x4_min=4,
+    ),
+    SmokeCase(
+        "smoke_8b_420_p8x8_followref",
+        8,
+        1,
+        "smoke_32x16_3f_p8x8_followref.yuv",
+        "smoke_32x16_3f_p8x8_followref.h264",
+        frames=3,
+        enable_idr_ipcm=1,
+        force_p8x8=1,
+        flat_y_frames=(64, 80, 80),
+        require_p8x8_min=4,
+    ),
+    # Self-generated fixture: frame 0 is the base gradient, frames 1..2 are the
+    # same image shifted right by two pixels with edge replication. This keeps the
+    # nonzero-MVD gate reproducible on a clean checkout.
+    SmokeCase(
+        "smoke_8b_420_p8x8_nonzero_mvd",
+        8,
+        1,
+        "scratch_p8x8_nonzero_mvd_32x16_3f.yuv",
+        "scratch_p8x8_nonzero_mvd_32x16_3f.h264",
+        frames=3,
+        enable_idr_ipcm=1,
+        force_p8x8=1,
+        generate_input=True,
+        input_kind="p8x8_nonzero_mvd",
+        require_p8x8_min=4,
+    ),
+    SmokeCase(
+        "smoke_8b_420_pref1_alt",
+        8,
+        1,
+        "smoke_32x16_4f_pref1_alt.yuv",
+        "smoke_32x16_4f_pref1_alt.h264",
+        frames=4,
+        enable_idr_ipcm=1,
+        enable_p_ipcm=1,
+        ipcm_sad_threshold=100_000_000,
+        inter_sad_threshold=100_000_000,
+        flat_y_frames=(255, 0, 255, 0),
+        require_p_l0_refgt0_min=1,
+    ),
+    SmokeCase(
+        "smoke_8b_420_weightedp_small",
+        8,
+        1,
+        "smoke_32x16_2f_weightedp_small.yuv",
+        "smoke_32x16_2f_weightedp_small.h264",
+        weighted_pred_enable=1,
+        enable_idr_ipcm=1,
+        luma_log2_weight_denom=2,
+        luma_weight=5,
+        chroma_log2_weight_denom=2,
+        chroma_weight_cb=5,
+        chroma_weight_cr=5,
+        flat_y_frames=(255, 0),
+    ),
+    SmokeCase(
+
         "smoke_8b_422",
         8,
         2,
@@ -154,6 +337,20 @@ CASES = [
         inter_sad_threshold=0,
     ),
     SmokeCase(
+        "smoke_10b_422_cavlc_offsets",
+        10,
+        2,
+        "smoke_32x16_2f_cavlc_offsets_422.yuv",
+        "smoke_32x16_2f_cavlc_offsets_422.h264",
+        frames=2,
+        enable_idr_ipcm=0,
+        enable_p_ipcm=0,
+        inter_sad_threshold=1_000_000_000,
+        chroma_qp_index_offset=2,
+        second_chroma_qp_index_offset=-2,
+        flat_y_frames=(512, 520),
+    ),
+    SmokeCase(
         "smoke_10b_444_ipcm",
         10,
         3,
@@ -175,6 +372,19 @@ CASES = [
         enable_cabac_pskip=1,
         flat_y_frames=(32, 32, 32, 32),
         require_skip_min=6,
+    ),
+    SmokeCase(
+        "smoke_8b_420_cavlc_8x8_p16x16",
+        8,
+        1,
+        "smoke_32x16_2f_cavlc_8x8.yuv",
+        "smoke_32x16_2f_cavlc_8x8.h264",
+        frames=2,
+        enable_idr_ipcm=0,
+        enable_p_ipcm=0,
+        inter_sad_threshold=1_000_000_000,
+        enable_cavlc_luma_8x8=1,
+        flat_y_frames=(64, 70),
     ),
     SmokeCase(
         "smoke_8b_420_cabac_p16x16",
@@ -339,10 +549,11 @@ CASES = [
         inter_sad_threshold=40_000,
         force_bref_slice=1,
         force_b_l1_on_reorder_ref_slot=1,
+        force_b_direct_temporal_on_reorder_b_slot=1,
         reorder_b_gop=1,
         flat_y_frames=(255, 128, 0, 100, 200, 0, 0),
         require_direct_min=1,
-        require_direct_l1src_min=1,
+        require_direct_refgt0_min=1,
     ),
     SmokeCase(
         "smoke_8b_420_bdirect_temporal_bref_bi_ref1",
@@ -365,7 +576,7 @@ CASES = [
         require_bi_min=1,
         require_direct_min=1,
         require_l0_refgt0_min=1,
-        require_direct_l1src_min=1,
+        require_direct_refgt0_min=1,
     ),
     SmokeCase(
         "smoke_8b_420_bl0_ref1",
@@ -496,6 +707,48 @@ def generate_smoke_input(
                         write_sample(out_f, plane_value(bit_depth, "v", x, y, frame_idx), bit_depth)
 
 
+def generate_p8x8_nonzero_mvd_input(
+    path: Path,
+    width: int,
+    height: int,
+    frames: int,
+    bit_depth: int,
+    chroma_format_idc: int,
+) -> None:
+    """Generate the self-contained 3-frame fixture for the P8x8 nonzero-MVD gate.
+
+    This reproduces the previously hand-crafted scratch YUV exactly: frame 0 is the
+    base luma gradient, and frames 1..N repeat the same image shifted right by two
+    pixels with edge replication so the first non-IDR P slice exercises a nonzero
+    MVD path.
+    """
+
+    if (width, height, frames, bit_depth, chroma_format_idc) != (32, 16, 3, 8, 1):
+        raise ValueError(
+            "smoke_8b_420_p8x8_nonzero_mvd expects the canonical 32x16 3-frame 8-bit 4:2:0 fixture"
+        )
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    chroma_height = height // 2
+    chroma_width = width // 2
+    c_value = 128 if bit_depth == 8 else 512
+
+    with path.open("wb") as out_f:
+        for frame_idx in range(frames):
+            for y in range(height):
+                for x in range(width):
+                    source_x = x if frame_idx == 0 else min(x + 2, width - 1)
+                    write_sample(out_f, plane_value(bit_depth, "y", source_x, y, 0), bit_depth)
+
+            for _ in range(chroma_height):
+                for _ in range(chroma_width):
+                    write_sample(out_f, c_value, bit_depth)
+
+            for _ in range(chroma_height):
+                for _ in range(chroma_width):
+                    write_sample(out_f, c_value, bit_depth)
+
+
 def ffprobe_stream(path: Path) -> dict[str, str]:
     proc = run_cmd(
         [
@@ -555,6 +808,13 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     frames_with_direct_refgt0 = 0
     frames_with_direct_l1src = 0
     frames_with_cabac_p16x16 = 0
+    frames_with_p_l0_refgt0 = 0
+    frames_with_p16x8 = 0
+    frames_with_p8x16 = 0
+    frames_with_p8x8 = 0
+    frames_with_p8x4 = 0
+    frames_with_p4x8 = 0
+    frames_with_p4x4 = 0
     max_skip = 0
     max_l1 = 0
     max_bi = 0
@@ -563,6 +823,13 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     max_direct_refgt0 = 0
     max_direct_l1src = 0
     max_cabac_p16x16 = 0
+    max_p_l0_refgt0 = 0
+    max_p16x8 = 0
+    max_p8x16 = 0
+    max_p8x8 = 0
+    max_p8x4 = 0
+    max_p4x8 = 0
+    max_p4x4 = 0
     total_skip = 0
     total_l1 = 0
     total_bi = 0
@@ -571,6 +838,13 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
     total_direct_refgt0 = 0
     total_direct_l1src = 0
     total_cabac_p16x16 = 0
+    total_p_l0_refgt0 = 0
+    total_p16x8 = 0
+    total_p8x16 = 0
+    total_p8x8 = 0
+    total_p8x4 = 0
+    total_p4x8 = 0
+    total_p4x4 = 0
 
     for match in PSKIP_RE.finditer(sim_log):
         skip = int(match.group("skip"))
@@ -581,6 +855,13 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         direct_refgt0 = int(match.group("b_direct_refgt0"))
         direct_l1src = int(match.group("b_direct_l1src") or 0)
         cabac_p16x16 = int(match.group("cabac_p16x16") or 0)
+        p_l0_refgt0 = int(match.group("p_l0_refgt0") or 0)
+        p16x8 = int(match.group("p16x8") or 0)
+        p8x16 = int(match.group("p8x16") or 0)
+        p8x8 = int(match.group("p8x8") or 0)
+        p8x4 = int(match.group("p8x4") or 0)
+        p4x8 = int(match.group("p4x8") or 0)
+        p4x4 = int(match.group("p4x4") or 0)
         total_skip += skip
         total_l1 += l1
         total_bi += bi
@@ -589,6 +870,13 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         total_direct_refgt0 += direct_refgt0
         total_direct_l1src += direct_l1src
         total_cabac_p16x16 += cabac_p16x16
+        total_p_l0_refgt0 += p_l0_refgt0
+        total_p16x8 += p16x8
+        total_p8x16 += p8x16
+        total_p8x8 += p8x8
+        total_p8x4 += p8x4
+        total_p4x8 += p4x8
+        total_p4x4 += p4x4
         if skip:
             frames_with_skip += 1
         if l1:
@@ -605,6 +893,20 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
             frames_with_direct_l1src += 1
         if cabac_p16x16:
             frames_with_cabac_p16x16 += 1
+        if p_l0_refgt0:
+            frames_with_p_l0_refgt0 += 1
+        if p16x8:
+            frames_with_p16x8 += 1
+        if p8x16:
+            frames_with_p8x16 += 1
+        if p8x8:
+            frames_with_p8x8 += 1
+        if p8x4:
+            frames_with_p8x4 += 1
+        if p4x8:
+            frames_with_p4x8 += 1
+        if p4x4:
+            frames_with_p4x4 += 1
         max_skip = max(max_skip, skip)
         max_l1 = max(max_l1, l1)
         max_bi = max(max_bi, bi)
@@ -613,6 +915,13 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         max_direct_refgt0 = max(max_direct_refgt0, direct_refgt0)
         max_direct_l1src = max(max_direct_l1src, direct_l1src)
         max_cabac_p16x16 = max(max_cabac_p16x16, cabac_p16x16)
+        max_p_l0_refgt0 = max(max_p_l0_refgt0, p_l0_refgt0)
+        max_p16x8 = max(max_p16x8, p16x8)
+        max_p8x16 = max(max_p8x16, p8x16)
+        max_p8x8 = max(max_p8x8, p8x8)
+        max_p8x4 = max(max_p8x4, p8x4)
+        max_p4x8 = max(max_p4x8, p4x8)
+        max_p4x4 = max(max_p4x4, p4x4)
 
     return {
         "frames_with_skip": frames_with_skip,
@@ -623,6 +932,13 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "frames_with_direct_refgt0": frames_with_direct_refgt0,
         "frames_with_direct_l1src": frames_with_direct_l1src,
         "frames_with_cabac_p16x16": frames_with_cabac_p16x16,
+        "frames_with_p_l0_refgt0": frames_with_p_l0_refgt0,
+        "frames_with_p16x8": frames_with_p16x8,
+        "frames_with_p8x16": frames_with_p8x16,
+        "frames_with_p8x8": frames_with_p8x8,
+        "frames_with_p8x4": frames_with_p8x4,
+        "frames_with_p4x8": frames_with_p4x8,
+        "frames_with_p4x4": frames_with_p4x4,
         "max_skip": max_skip,
         "max_l1": max_l1,
         "max_bi": max_bi,
@@ -631,6 +947,13 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "max_direct_refgt0": max_direct_refgt0,
         "max_direct_l1src": max_direct_l1src,
         "max_cabac_p16x16": max_cabac_p16x16,
+        "max_p_l0_refgt0": max_p_l0_refgt0,
+        "max_p16x8": max_p16x8,
+        "max_p8x16": max_p8x16,
+        "max_p8x8": max_p8x8,
+        "max_p8x4": max_p8x4,
+        "max_p4x8": max_p4x8,
+        "max_p4x4": max_p4x4,
         "total_skip": total_skip,
         "total_l1": total_l1,
         "total_bi": total_bi,
@@ -639,6 +962,13 @@ def parse_b_mode_summary(sim_log: str) -> dict[str, int]:
         "total_direct_refgt0": total_direct_refgt0,
         "total_direct_l1src": total_direct_l1src,
         "total_cabac_p16x16": total_cabac_p16x16,
+        "total_p_l0_refgt0": total_p_l0_refgt0,
+        "total_p16x8": total_p16x8,
+        "total_p8x16": total_p8x16,
+        "total_p8x8": total_p8x8,
+        "total_p8x4": total_p8x4,
+        "total_p4x8": total_p4x8,
+        "total_p4x4": total_p4x4,
     }
 
 
@@ -677,15 +1007,28 @@ def main() -> int:
         output_path = output_dir / case.output_file
         log_path = output_dir / f"{case.name}.sim.log"
         build_log_path = output_dir / f"{case.name}.build.log"
-        generate_smoke_input(
-            input_path,
-            case.width,
-            case.height,
-            case.frames,
-            case.bit_depth,
-            case.chroma_format_idc,
-            case.flat_y_frames,
-        )
+        if case.generate_input:
+            if case.input_kind == "default":
+                generate_smoke_input(
+                    input_path,
+                    case.width,
+                    case.height,
+                    case.frames,
+                    case.bit_depth,
+                    case.chroma_format_idc,
+                    case.flat_y_frames,
+                )
+            elif case.input_kind == "p8x8_nonzero_mvd":
+                generate_p8x8_nonzero_mvd_input(
+                    input_path,
+                    case.width,
+                    case.height,
+                    case.frames,
+                    case.bit_depth,
+                    case.chroma_format_idc,
+                )
+            else:
+                raise ValueError(f"Unknown smoke input kind: {case.input_kind}")
 
         workspace = stage_workspace(f"h264_{case.name}_")
         config = BuildConfig(
@@ -700,6 +1043,11 @@ def main() -> int:
             inter_sad_threshold=case.inter_sad_threshold,
             enable_cabac_pskip=case.enable_cabac_pskip,
             enable_cabac_p16x16=case.enable_cabac_p16x16,
+            enable_cavlc_luma_8x8=case.enable_cavlc_luma_8x8,
+            base_qp=case.base_qp,
+            mb_qp_delta=case.mb_qp_delta,
+            chroma_qp_index_offset=case.chroma_qp_index_offset,
+            second_chroma_qp_index_offset=case.second_chroma_qp_index_offset,
             luma_log2_weight_denom=case.luma_log2_weight_denom,
             luma_weight=case.luma_weight,
             luma_offset=case.luma_offset,
@@ -726,6 +1074,12 @@ def main() -> int:
             force_b_l1_on_reorder_b_slot=case.force_b_l1_on_reorder_b_slot,
             force_b_direct_on_reorder_b_slot=case.force_b_direct_on_reorder_b_slot,
             force_b_direct_temporal_on_reorder_b_slot=case.force_b_direct_temporal_on_reorder_b_slot,
+            force_p16x8=case.force_p16x8,
+            force_p8x16=case.force_p8x16,
+            force_p8x8=case.force_p8x8,
+            force_p8x4=case.force_p8x4,
+            force_p4x8=case.force_p4x8,
+            force_p4x4=case.force_p4x4,
             reorder_b_gop=case.reorder_b_gop,
         )
         sim_bin = build_sim(workspace, config, build_log_path=build_log_path)
@@ -753,6 +1107,12 @@ def main() -> int:
             force_b_l1_on_reorder_b_slot=case.force_b_l1_on_reorder_b_slot,
             force_b_direct_on_reorder_b_slot=case.force_b_direct_on_reorder_b_slot,
             force_b_direct_temporal_on_reorder_b_slot=case.force_b_direct_temporal_on_reorder_b_slot,
+            force_p16x8=case.force_p16x8,
+            force_p8x16=case.force_p8x16,
+            force_p8x8=case.force_p8x8,
+            force_p8x4=case.force_p8x4,
+            force_p4x8=case.force_p4x8,
+            force_p4x4=case.force_p4x4,
             reorder_b_gop=case.reorder_b_gop,
             capture=True,
         )
@@ -802,6 +1162,41 @@ def main() -> int:
                 f"{case.name} expected at least {case.require_cabac_p16x16_min} CABAC P_L0_16x16 macroblocks, "
                 f"saw {b_mode_summary.get('total_cabac_p16x16', 0)}"
             )
+        if b_mode_summary.get("total_p_l0_refgt0", 0) < case.require_p_l0_refgt0_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_p_l0_refgt0_min} nonzero P List0 refs, "
+                f"saw {b_mode_summary.get('total_p_l0_refgt0', 0)}"
+            )
+        if b_mode_summary.get("total_p16x8", 0) < case.require_p16x8_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_p16x8_min} P_L0_L0_16x8 macroblocks, "
+                f"saw {b_mode_summary.get('total_p16x8', 0)}"
+            )
+        if b_mode_summary.get("total_p8x16", 0) < case.require_p8x16_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_p8x16_min} P_L0_L0_8x16 macroblocks, "
+                f"saw {b_mode_summary.get('total_p8x16', 0)}"
+            )
+        if b_mode_summary.get("total_p8x8", 0) < case.require_p8x8_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_p8x8_min} P_L0_8x8 macroblocks, "
+                f"saw {b_mode_summary.get('total_p8x8', 0)}"
+            )
+        if b_mode_summary.get("total_p8x4", 0) < case.require_p8x4_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_p8x4_min} P_L0_8x4 macroblocks, "
+                f"saw {b_mode_summary.get('total_p8x4', 0)}"
+            )
+        if b_mode_summary.get("total_p4x8", 0) < case.require_p4x8_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_p4x8_min} P_L0_4x8 macroblocks, "
+                f"saw {b_mode_summary.get('total_p4x8', 0)}"
+            )
+        if b_mode_summary.get("total_p4x4", 0) < case.require_p4x4_min:
+            raise RuntimeError(
+                f"{case.name} expected at least {case.require_p4x4_min} P_L0_4x4 macroblocks, "
+                f"saw {b_mode_summary.get('total_p4x4', 0)}"
+            )
 
         result = {
             "name": case.name,
@@ -823,7 +1218,13 @@ def main() -> int:
             f"b_direct_max={b_mode_summary.get('max_direct', 0)} "
             f"b_l0_refgt0_max={b_mode_summary.get('max_l0_refgt0', 0)} "
             f"b_direct_refgt0_max={b_mode_summary.get('max_direct_refgt0', 0)} "
-            f"b_direct_l1src_max={b_mode_summary.get('max_direct_l1src', 0)}"
+            f"b_direct_l1src_max={b_mode_summary.get('max_direct_l1src', 0)} "
+            f"p16x8_max={b_mode_summary.get('max_p16x8', 0)} "
+            f"p8x16_max={b_mode_summary.get('max_p8x16', 0)} "
+            f"p8x8_max={b_mode_summary.get('max_p8x8', 0)} "
+            f"p8x4_max={b_mode_summary.get('max_p8x4', 0)} "
+            f"p4x8_max={b_mode_summary.get('max_p4x8', 0)} "
+            f"p4x4_max={b_mode_summary.get('max_p4x4', 0)}"
         )
 
     output_dir.mkdir(parents=True, exist_ok=True)

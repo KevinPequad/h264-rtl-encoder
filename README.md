@@ -33,6 +33,11 @@ Implemented and validated now:
   residual
 - limited reference-`B` / `BREF` support on the current reordered dual-list
   `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` path
+- header/control signaling now uses a stream-level B-slice contract: I/P-only
+  8-bit 4:2:0 streams stay Constrained Baseline, while B/BREF/reordered-GOP
+  streams advertise Main profile and `max_num_reorder_frames = 1` from the
+  first SPS; HRD and `transform_8x8` signaling remain off until those lanes
+  exist
 - full directional `Intra_4x4` mode support in RTL
 - `Intra_16x16` luma prediction and syntax support in RTL
 - current IDR path now routes through RTL `Intra_16x16` macroblock coding
@@ -51,20 +56,26 @@ Implemented and validated now:
   current inter path
 - validated multi-frame subset runs plus current-tree near-exact
   `Intra_16x16` IDR validation
+- CABAC `P_L0_16x16` residual checkpoint validated as a focused
+  coefficient-driven gate
+- deblock/reconstructed-frame ownership lane validated on canonical commit
+  `dc1d47094238f8ad973cdfb5738abd4f0d2ea951` with the standalone oracle,
+  public-decoder checks, and a two-frame reference-bank-consumption proof
 - Docker one-frame smoke run
 
 Still missing before full-standard completion, using the current `x264`
 software encoder as the implementation baseline:
 
 - full CABAC syntax integration beyond the current skip-capable plus explicit
-  zero-CBP / single-ref / zero-MVD `P_L0_16x16` P-slice subset
+  zero-CBP / single-ref / zero-MVD `P_L0_16x16` checkpoint; broader
+  coefficient-significance/last/level coding, `mb_qp_delta`, chroma residuals,
+  `ref_idx`/`MVD` coverage, and full I/P/B CABAC remain to implement
 - broader `B` / `BREF` picture support, broader direct-mode handling, and the
   associated reference management
 - broader standards-complete sub-pel motion handling across richer inter modes
-- broader inter partition and transform coverage including `8x8dct`-class tools
+- broader inter partition coverage beyond the current High-profile 8x8 transform gates
 - broader validated `4:4:4` support beyond the current `320x176`
   strict-decode non-`I_PCM` path and spot `I_PCM` coverage
-- full in-loop deblocking
 - broader profile and tool coverage
 - final `1280x720 @ 24 fps`, `10`-second RTL-path completion run
 
@@ -141,7 +152,7 @@ Why `x264`:
 - it is the strongest practical H.264 software encoder baseline in common use
 - its current source exposes the exact feature classes this RTL repo still
   needs, including CABAC, `B-frames`, reference-frame management, weighted
-  prediction, direct motion-vector modes, sub-pel motion refinement, deblocking,
+  prediction, direct motion-vector modes, sub-pel motion refinement,
   profiles / levels, and broader chroma / bit-depth support
 
 Key feature evidence in the local `x264` checkout:
@@ -174,8 +185,10 @@ Current implemented features:
   `frame_num` field
 - SPS VUI timing signaling in RTL with `num_units_in_tick`,
   `time_scale`, and `fixed_frame_rate_flag`
-- SPS VUI bitstream-restriction signaling in RTL for the current no-reorder,
-  four-reference subset
+- SPS VUI bitstream-restriction signaling in RTL: I/P-only streams advertise
+  `max_num_reorder_frames = 0`, and B/BREF/reordered-GOP streams advertise
+  `max_num_reorder_frames = 1` while keeping the current four-reference
+  buffering subset
 - PPS generation in RTL
 - IDR slice header generation in RTL
 - non-IDR slice header generation in RTL
@@ -300,11 +313,15 @@ Current implemented features:
 - reconstruction loop in RTL
 - reference-frame writeback for reconstructed luma
 - reference-frame writeback for reconstructed chroma
+- in-loop deblock/reconstructed-frame ownership validated on canonical commit
+  `dc1d47094238f8ad973cdfb5738abd4f0d2ea951`; coverage includes the standalone
+  oracle, public-decoder checks, and two-frame reference-bank consumption
 - standalone CABAC arithmetic coding core in `rtl/h264_cabac_core.v`, plus a
   current final-path CABAC subset for skip-capable P slices with dual PPS
   emission, CABAC slice-header fields, CABAC-coded `mb_skip_flag`,
-  CABAC-coded `end_of_slice_flag`, and an explicit single-ref / zero-CBP /
-  zero-MVD `P_L0_16x16` subset
+  CABAC-coded `end_of_slice_flag`, an explicit single-ref / zero-CBP /
+  zero-MVD `P_L0_16x16` subset, and the validated focused
+  `P_L0_16x16` residual checkpoint
 - parameterized resolution
 - parameterized bit depth
 - parameterized chroma format
@@ -316,7 +333,8 @@ Implemented now relative to the chosen `x264` baseline:
 - CAVLC-based coefficient coding in RTL
 - current CABAC final-path subset on skip-capable P slices, with CABAC PPS
   selection, CABAC-coded `mb_skip_flag`, CABAC-coded `end_of_slice_flag`, and
-  an explicit single-ref / zero-CBP / zero-MVD `P_L0_16x16` subset
+  an explicit single-ref / zero-CBP / zero-MVD `P_L0_16x16` subset, and the
+  validated focused `P_L0_16x16` residual checkpoint
 - I and P picture flow
 - non-reference `B`-picture syntax on the current intra / `I_PCM` path
 - limited non-reference `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` inter
@@ -336,8 +354,9 @@ Implemented now relative to the chosen `x264` baseline:
 - `Intra_16x16` luma prediction and syntax support
 - `I_PCM` macroblock coding on the current IDR path and current P-slice intra
   path, with raw-sample byte emission owned by the RTL writer
-- exact `I_PCM` validation now also covers `4:4:4` on the current IDR and
-  P-slice intra path at `32x16` for both `8-bit` and `10-bit`
+- exact `I_PCM` byte-path coverage now also reaches `4:4:4` on the current IDR and
+  P-slice intra path at `32x16` for both `8-bit` and `10-bit`, but the dedicated
+  strict FFmpeg `4:4:4 I_PCM` smoke rows are still red on the current tree
 - up-to-four-reference P-slice inter flow with integer-pel search and current
   quarter-pel luma refinement
 - zero-residual inter-MB handling and `P_SKIP` skip-run ownership on the RTL
@@ -352,7 +371,18 @@ Supported and smoke-verified modes:
 - `10-bit 4:2:0`
 - `10-bit 4:2:2`
 
-Current additional validated `I_PCM`-only coverage:
+Transform / profile / color closeout from `t_267d06fd`:
+
+- `8-bit 4:2:0` I/P-only -> Constrained Baseline (`output/smoke_8b_420.trace_headers.txt`)
+- `8-bit 4:2:0` B-direct / CABAC P16x16 -> Main (`output/smoke_32x16_2f_cabac_p16x16.h264`, `output/smoke_8b_420_bdirect.trace_headers.txt`, `output/smoke_8b_420_cabac_p16x16.trace_headers.txt`)
+- `10-bit 4:2:0` -> High 10 (`output/smoke_32x16_2f_10b.h264`)
+- `8-bit 4:2:2` -> High 4:2:2 (`output/smoke_32x16_2f_422.h264`, `output/smoke_10b_422.trace_headers.txt`)
+- `8-bit 4:4:4` / `10-bit 4:4:4` -> High 4:4:4 Predictive (`output/smoke_32x16_2f_444.h264`, `output/smoke_32x16_2f_10b_444.h264`)
+- High-profile 8x8 smoke -> High with `transform_8x8_mode_flag = 1` (`output/smoke_32x16_2f_high8x8.h264`, `output/smoke_8b_420_high8x8.sim.log`)
+
+Validation artifacts are `output/header_trace_matrix_summary_filtered.json` plus the per-case trace / smoke outputs listed above.
+
+Current additional I_PCM-byte-path coverage (the dedicated strict-FFmpeg `4:4:4` smoke rows are still red):
 
 - `8-bit 4:4:4`
 - `10-bit 4:4:4`
@@ -387,11 +417,9 @@ Important non-completion gaps:
   is not implemented
 - broader full-standard sub-pel motion handling beyond the current `16x16`
   quarter-pel luma path is not implemented
-- broader inter partition coverage and `8x8dct`-class transform support are not
-  implemented
-- broader `4:4:4` chroma-format support beyond the current `320x176`
-  strict-decode non-`I_PCM` path and spot `I_PCM` coverage is not implemented
-- full in-loop deblocking is not implemented
+- broader inter partition coverage beyond the current High-profile 8x8
+  transform gates is not implemented
+- broader `4:4:4` chroma-format support beyond the current `320x176` strict-decode non-`I_PCM` path and the still-red `32x16` `4:4:4 I_PCM` smoke rows is not implemented
 - full-standard profile / level / tool coverage is not implemented
 - the final `240`-frame `1280x720 @ 24 fps` run is not closed yet
 
@@ -417,6 +445,10 @@ Verified validation/features around the current encoder flow:
 - multi-frame validation at `1280x720`
 - PSNR / SSIM comparison scripts
 - x264 reference comparison scripts
+- standalone 8x8 transform / inverse-transform / quantization /
+  inverse-quantization gates at 8-bit and 10-bit, plus High-profile 8x8 smoke
+  coverage
+- chroma/profile/bit-depth validation on the `tpc_i_cavlc_8b420_4x4` row
 - side-by-side decoded-vs-source image generation
 - staged clean-build log capture for reproducible validation runs
 - simulator log and cycle-count capture for regressions
@@ -981,9 +1013,8 @@ Recent correctness fix:
   `4:2:2`, and the checked-in `tb/Makefile` exposes `ENABLE_IDR_IPCM`,
   `ENABLE_P_IPCM`, `IPCM_SAD_THRESHOLD`, and `INTER_SAD_THRESHOLD` so the path
   can be reproduced without raw `EXTRA_VERILATOR_ARGS`
-- the current tree now also validates exact RTL-owned `4:4:4 I_PCM` output on
-  the IDR path and current P-slice intra path at `32x16` for `8-bit` and
-  `10-bit`, with SPS/profile signaling decoding as `High 4:4:4 Predictive`
+- the current tree emits `4:4:4 I_PCM` bytes on the IDR path and current P-slice intra path at `32x16` for `8-bit` and
+  `10-bit`, and ffprobe still reports `High 4:4:4 Predictive`, but the dedicated strict FFmpeg `4:4:4 I_PCM` smoke rows are still red on the current tree
 - the `4:4:4` inter path must use the ChromaArrayType `3`
   `coded_block_pattern` table rather than the `4:2:x` inter code; the current
   RTL writer now emits the correct full-residual inter code on that path, and
@@ -1090,6 +1121,11 @@ python3 scripts/package_mp4.py output.h264 output.mp4 --fps 24 --width 320 --hei
   inputs and emits paired `.build.log` / `.sim.log` artifacts per case
   - use `--case <name>` to run only specific smoke cases; filtered runs write
     `output/smoke_matrix_summary_filtered.json`
+- `python3 scripts/trace_header_matrix.py` regenerates focused smoke rows and
+  asserts decoded `trace_headers` fields for profile selection, VUI/HRD,
+  CABAC PPS selection, B/reorder signaling, and `transform_8x8` exclusions
+  - use `--case <name>` for a focused row; filtered runs write
+    `output/header_trace_matrix_summary_filtered.json`
 - `python3 scripts/validate_clip.py` runs staged multi-frame validation with
   a clean staged rebuild, strict decode checking, paired `.build.log` /
   `.sim.log` artifacts, MP4 output, and comparison metrics

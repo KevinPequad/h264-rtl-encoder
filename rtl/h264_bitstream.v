@@ -12,7 +12,9 @@ module h264_bitstream #(
     parameter MB_ROWS = 11,
     parameter BIT_DEPTH = 8,
     parameter CHROMA_FORMAT_IDC = 1,
-    parameter FRAME_RATE = 24
+    parameter FRAME_RATE = 24,
+    parameter DEBLOCK_ENABLE = 1,
+    parameter DISABLE_DEBLOCKING_FILTER_IDC = 0
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -30,10 +32,17 @@ module h264_bitstream #(
     input  wire        cavlc_valid,
     input  wire [31:0] cavlc_bits,
     input  wire [5:0]  cavlc_count,
+    input  wire [3:0]  cavlc_cbp_luma,
+    input  wire [1:0]  cavlc_cbp_chroma,
+    input  wire        transform_8x8_mode_enable,
+    input  wire        transform_size_8x8_flag,
+    input  wire signed [8:0] pic_init_qp_minus26,
+    input  wire signed [8:0] chroma_qp_index_offset,
+    input  wire signed [8:0] second_chroma_qp_index_offset,
 
     // MB coding info
     /* verilator lint_off UNUSED */
-    input  wire [7:0]  mb_qp_delta,
+    input  wire signed [8:0] mb_qp_delta,
     /* verilator lint_on UNUSED */
     input  wire        mb_has_residual,
     input  wire        cabac_feature_enable,
@@ -53,9 +62,14 @@ module h264_bitstream #(
     input  wire        is_b_bi_mb,
     input  wire        direct_spatial_mv_pred_flag,
     input  wire [1:0]  mb_ref_idx_l0,
+    input  wire [1:0]  mb_ref_idx_l0_part1,
     input  wire [1:0]  mb_ref_idx_l1,
+    input  wire [1:0]  p_partition_mode,
+    input  wire [1:0]  p_sub_mb_type,
     input  wire signed [8:0] mvd_x_l0,
     input  wire signed [8:0] mvd_y_l0,
+    input  wire signed [8:0] mvd_x_l0_part1,
+    input  wire signed [8:0] mvd_y_l0_part1,
     input  wire signed [8:0] mvd_x_l1,
     input  wire signed [8:0] mvd_y_l1,
     input  wire [1:0]  cabac_mvd_ctx_x,
@@ -63,10 +77,15 @@ module h264_bitstream #(
     input  wire [1:0]  cabac_cbp_luma_ctx0_sel,
     input  wire [1:0]  cabac_cbp_luma_ctx1_sel,
     input  wire [1:0]  cabac_cbp_luma_ctx2_sel,
+    input  wire [3:0]  cabac_cbp_luma,
+    input  wire [1:0]  cabac_cbp_chroma,
+    input  wire [4095:0] cabac_luma_scan_flat,
+    input  wire [15:0] cabac_luma_nz_mask,
     input  wire [1:0]  slice_num_ref_idx_l0_active_minus1,
     input  wire        hold_fifo_drain,
     input  wire        is_intra16_mb,
     input  wire        is_ipcm_mb,
+    input  wire        force_transform_8x8_in,
     input  wire [5:0]  intra_mb_type_code_num,
     input  wire [63:0] intra_pred_bits,
     input  wire [6:0]  intra_pred_count,
@@ -121,7 +140,7 @@ module h264_bitstream #(
     reg [7:0]  write_byte;
 
     // CAVLC input buffer — holds one pending fragment when we're busy
-    
+
     // =====================================================================
     // CAVLC Output FIFO (absorbs bursty bit emission)
     //
@@ -150,13 +169,16 @@ module h264_bitstream #(
     integer dbg_fifo_deq_idx;
 `endif
 
-    wire use_high_profile = (BIT_DEPTH > 8) || (CHROMA_FORMAT_IDC != 1);
-    wire use_high444_profile = (CHROMA_FORMAT_IDC == 3);
+    wire use_high10_profile = (BIT_DEPTH > 8) && (CHROMA_FORMAT_IDC == 1);
+    wire use_high420_profile = (CHROMA_FORMAT_IDC == 1) && (force_transform_8x8_in || transform_8x8_mode_enable);
     wire use_high422_profile = (CHROMA_FORMAT_IDC == 2) || (BIT_DEPTH > 10);
-    // The current CABAC P-skip subset and weighted-P path cannot be signaled
-    // as Baseline. Keep the existing non-High CAVLC subset on Baseline for
-    // now, and switch to Main when these tools are enabled.
+    wire use_high444_profile = (CHROMA_FORMAT_IDC == 3);
+    wire use_high_profile = use_high10_profile || use_high420_profile || use_high422_profile || use_high444_profile;
+    // The current CABAC P-skip subset and weighted-prediction path cannot be
+    // signaled as Baseline. Keep the current non-High CAVLC subset on
+    // Baseline for now, and switch to Main when these tools are enabled.
     wire use_main_profile = (weighted_pred_enable || cabac_feature_enable) && !use_high_profile;
+
     wire weighted_pred_flag = weighted_pred_enable;
     wire [1:0] weighted_bipred_idc = weighted_pred_enable ? 2'b01 : 2'b00;
     wire slice_multi_ref_enable = (slice_num_ref_idx_l0_active_minus1 != 2'd0);
@@ -246,8 +268,10 @@ module h264_bitstream #(
         (chroma_weight_cr != $signed(9'd1 << chroma_log2_weight_denom)) || (chroma_offset_cr != 9'sd0);
     wire [7:0] sps_profile_idc = use_high444_profile ? 8'hF4 :
                                  use_high422_profile ? 8'h7A :
-                                 use_high_profile   ? 8'h6E :
-                                 use_main_profile   ? 8'h4D : 8'h42;
+                                 use_high10_profile  ? 8'h6E :
+                                 use_high420_profile ? 8'h64 :
+                                 use_high_profile   ? 8'h4D : 8'h42;
+
     wire [7:0] sps_constraint_flags = (use_high_profile || use_main_profile) ? 8'h00 : 8'hC0;
     localparam integer FRAME_NUM_BITS = 8;
     localparam integer LOG2_MAX_FRAME_NUM_MINUS4 = FRAME_NUM_BITS - 4;
@@ -322,6 +346,7 @@ module h264_bitstream #(
     reg [6:0]  cabac_cbp_luma_ctx_state_75;
     reg [6:0]  cabac_cbp_luma_ctx_state_76;
     reg [6:0]  cabac_cbp_chroma_ctx_state_77;
+    reg [6:0]  cabac_qp_delta_ctx_state_60;
     reg [3:0]  cabac_pending_ctx_kind;
     reg [1:0]  cabac_pending_ctx_sel;
     reg        cabac_start;
@@ -354,6 +379,7 @@ module h264_bitstream #(
     localparam [3:0] CABAC_CTX_CBP2      = 4'd9;
     localparam [3:0] CABAC_CTX_CBP3      = 4'd10;
     localparam [3:0] CABAC_CTX_CBPCHROMA = 4'd11;
+    localparam [3:0] CABAC_CTX_QPDELTA   = 4'd12;
 
     function automatic [6:0] cabac_init_state;
         input integer m;
@@ -466,6 +492,10 @@ module h264_bitstream #(
         endcase
     end
     reg [12:0] pending_skip_run;
+    reg [2:0]  p8x8_sub_idx;
+    reg [4:0]  p8x8_mvd_idx;
+    wire [4:0] p8x8_mvd_total_w = (p_sub_mb_type == 2'd0) ? 5'd4 :
+                                      (p_sub_mb_type == 2'd3) ? 5'd16 : 5'd8;
     wire [5:0] ue_big_total_bits = {ue_big_msb, 1'b0} + 6'd1;
     reg [24:0] ue_big_bits;
     always @(*) begin
@@ -494,6 +524,12 @@ module h264_bitstream #(
     wire [9:0]  mvd_y_l0_codenum_w = (mvd_y_l0 == 9'sd0) ? 10'd0 :
                                      (mvd_y_l0[8])       ? ({(~mvd_y_l0 + 9'd1), 1'b0}) :
                                                             ({mvd_y_l0, 1'b0} - 10'd1);
+    wire [9:0]  mvd_x_l0_part1_codenum_w = (mvd_x_l0_part1 == 9'sd0) ? 10'd0 :
+                                            (mvd_x_l0_part1[8])       ? ({(~mvd_x_l0_part1 + 9'd1), 1'b0}) :
+                                                                        ({mvd_x_l0_part1, 1'b0} - 10'd1);
+    wire [9:0]  mvd_y_l0_part1_codenum_w = (mvd_y_l0_part1 == 9'sd0) ? 10'd0 :
+                                            (mvd_y_l0_part1[8])       ? ({(~mvd_y_l0_part1 + 9'd1), 1'b0}) :
+                                                                        ({mvd_y_l0_part1, 1'b0} - 10'd1);
     wire [9:0]  mvd_x_l1_codenum_w = (mvd_x_l1 == 9'sd0) ? 10'd0 :
                                      (mvd_x_l1[8])       ? ({(~mvd_x_l1 + 9'd1), 1'b0}) :
                                                             ({mvd_x_l1, 1'b0} - 10'd1);
@@ -611,6 +647,7 @@ module h264_bitstream #(
             cabac_cbp_luma_ctx_state_75 <= 7'd0;
             cabac_cbp_luma_ctx_state_76 <= 7'd0;
             cabac_cbp_chroma_ctx_state_77 <= 7'd0;
+            cabac_qp_delta_ctx_state_60 <= 7'd0;
             cabac_pending_ctx_kind <= CABAC_CTX_NONE;
             cabac_pending_ctx_sel <= 2'd0;
             cabac_start <= 1'b0;
@@ -666,6 +703,7 @@ module h264_bitstream #(
                     end
                     CABAC_CTX_CBP3: cabac_cbp_luma_ctx_state_76 <= cabac_ctx_state_out;
                     CABAC_CTX_CBPCHROMA: cabac_cbp_chroma_ctx_state_77 <= cabac_ctx_state_out;
+                    CABAC_CTX_QPDELTA: cabac_qp_delta_ctx_state_60 <= cabac_ctx_state_out;
                     default: begin end
                 endcase
             end
@@ -680,20 +718,12 @@ module h264_bitstream #(
 
             if (do_write) begin
                 if (zero_cnt >= 2'd2 && write_byte <= 8'h03) begin
-`ifdef VERILATOR
-                    if (dbg_fifo_deq_idx >= 1470 && dbg_fifo_deq_idx <= 1495)
-                        $display("[BSWR] epb byte=03 bitcnt=%0d bytes=%0d", bit_cnt, bs_bytes_written);
-`endif
                     bs_mem_data      <= 8'h03;
                     bs_mem_wr        <= 1'b1;
                     bs_mem_addr      <= bs_bytes_written;
                     bs_bytes_written <= bs_bytes_written + 24'd1;
                     zero_cnt         <= 2'd0;
                 end else begin
-`ifdef VERILATOR
-                    if (dbg_fifo_deq_idx >= 1470 && dbg_fifo_deq_idx <= 1495)
-                        $display("[BSWR] byte=%02x bitcnt=%0d bytes=%0d", write_byte, bit_cnt, bs_bytes_written);
-`endif
                     bs_mem_data      <= write_byte;
                     bs_mem_wr        <= 1'b1;
                     bs_mem_addr      <= bs_bytes_written;
@@ -716,15 +746,13 @@ module h264_bitstream #(
                         end else if (cmd_write_slice_hdr) begin
                             state <= S_SLICE; sub <= 6'd0; busy <= 1'b1; cabac_slice_active <= cabac_slice_enable; cabac_mb_counter <= 12'd0; cabac_pending_ctx_kind <= CABAC_CTX_NONE; cabac_pending_ctx_sel <= 2'd0;
                         end else if (cmd_write_mb_header) begin
-                            state <= S_MB_HDR; sub <= 6'd0; busy <= 1'b1; ipcm_sample_idx <= 10'd0;
+                            state <= S_MB_HDR; sub <= 6'd0; busy <= 1'b1; ipcm_sample_idx <= 10'd0; p8x8_sub_idx <= 3'd0; p8x8_mvd_idx <= 5'd0;
                         end else if (cmd_write_trailing) begin
                             state <= S_TRAIL; sub <= 6'd0; busy <= 1'b1;
                         end else if (cmd_flush) begin
                             state <= S_FLUSH; busy <= 1'b1;
                         end else if (!hold_fifo_drain && !fifo_empty) begin
 `ifdef VERILATOR
-                            if (dbg_fifo_deq_idx >= 1470 && dbg_fifo_deq_idx <= 1495)
-                                $display("[BSDQ] idx=%0d rdptr=%0d cnt=%0d bitcnt=%0d bits=%08x bytes=%0d", dbg_fifo_deq_idx, fifo_rd_ptr, fifo_rd_count, bit_cnt, fifo_rd_bits, bs_bytes_written);
                             dbg_fifo_deq_idx <= dbg_fifo_deq_idx + 1;
 `endif
                             bit_buf <= bit_buf | (({fifo_rd_bits, 64'd0} >> bit_cnt[6:0]));
@@ -888,7 +916,6 @@ module h264_bitstream #(
                                 else
                                     sub <= 6'd27;
                             end
-                            // Emit remaining bytes
                             6'd27: begin
                                 state <= S_EMIT;
                                 return_state <= S_SPS;
@@ -1010,7 +1037,7 @@ module h264_bitstream #(
                                            ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]) |
                                            (({weighted_pred_flag, weighted_bipred_idc, 93'd0}) >> (bit_cnt + {2'b0, ue_total_bits}));
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits} + 7'd3;
-                                se_input <= 9'sd0; // pic_init_qp_minus26
+                                se_input <= pic_init_qp_minus26; // pic_init_qp_minus26
                                 sub <= 6'd19;
                             end
                             6'd19: begin
@@ -1022,7 +1049,7 @@ module h264_bitstream #(
                             6'd20: begin
                                 bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, se_total_bits};
-                                se_input <= 9'sd0; // chroma_qp_index_offset
+                                se_input <= chroma_qp_index_offset; // chroma_qp_index_offset
                                 sub <= 6'd21;
                             end
                             6'd21: begin
@@ -1031,7 +1058,7 @@ module h264_bitstream #(
                                                ({se_ue_bits, 75'd0} >> bit_cnt[6:0]) |
                                                (({5'b10000, 91'd0}) >> (bit_cnt + {2'b0, se_total_bits}));
                                     bit_cnt <= bit_cnt + {2'b0, se_total_bits} + 7'd5;
-                                    se_input <= 9'sd0; // second_chroma_qp_index_offset
+                                    se_input <= second_chroma_qp_index_offset; // second_chroma_qp_index_offset
                                     sub <= 6'd22;
                                 end else begin
                                     bit_buf <= bit_buf |
@@ -1238,6 +1265,7 @@ module h264_bitstream #(
                                     cabac_cbp_luma_ctx_state_75 <= cabac_init_state(-25, 101, 26);
                                     cabac_cbp_luma_ctx_state_76 <= cabac_init_state(-23, 67, 26);
                                     cabac_cbp_chroma_ctx_state_77 <= cabac_init_state(-28, 82, 26);
+                                    cabac_qp_delta_ctx_state_60 <= cabac_init_state(0, 41, 26);
                                     cabac_start <= 1'b1;
                                 end
                                 cmd_done <= 1'b1;
@@ -1409,14 +1437,17 @@ module h264_bitstream #(
                                 if (cabac_slice_active) begin
                                     if (!is_skip_mb &&
                                         !(is_inter_mb && !is_b_slice && !mb_has_residual &&
+                                          (p_partition_mode == 2'd0) &&
                                           (slice_num_ref_idx_l0_active_minus1 == 2'd0) &&
                                           (mb_ref_idx_l0 == 2'd0) &&
                                           (mvd_x_l0 == 9'sd0) && (mvd_y_l0 == 9'sd0))) begin
+                                        `ifndef SYNTHESIS
                                         $fatal(1,
                                                "[CABAC_PSUBSET] Unsupported CABAC MB inter=%0d skip=%0d residual=%0d ref=%0d mvd=(%0d,%0d) refs=%0d",
                                                is_inter_mb, is_skip_mb, mb_has_residual, mb_ref_idx_l0,
                                                $signed(mvd_x_l0), $signed(mvd_y_l0),
                                                slice_num_ref_idx_l0_active_minus1 + 2'd1);
+                                        `endif
                                     end else if (cabac_mb_counter != 12'd0) begin
                                         cabac_bin_valid <= 1'b1;
                                         cabac_bin_value <= 1'b0;
@@ -1475,10 +1506,21 @@ module h264_bitstream #(
                                             sub <= 6'd22;
                                         end
                                     end else begin
-                                        // Current P inter path uses P_L0_16x16, which is mb_type=0.
-                                        bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
-                                        bit_cnt <= bit_cnt + 7'd1;
-                                        sub <= 6'd10;  // jump to inter path
+                                        // P inter mb_type: P_L0_16x16=0, P_L0_L0_16x8=1, P_L0_L0_8x16=2, P_8x8=3.
+                                        if (p_partition_mode == 2'd1) begin
+                                            ue_input <= 10'd1;
+                                            sub <= 6'd22;
+                                        end else if (p_partition_mode == 2'd2) begin
+                                            ue_input <= 10'd2;
+                                            sub <= 6'd22;
+                                        end else if (p_partition_mode == 2'd3) begin
+                                            ue_input <= 10'd3;
+                                            sub <= 6'd22;
+                                        end else begin
+                                            bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
+                                            bit_cnt <= bit_cnt + 7'd1;
+                                            sub <= 6'd10;  // jump to inter path
+                                        end
                                     end
                                 end else begin
                                     ue_input <= {4'd0, intra_mb_type_code_num};
@@ -1529,8 +1571,11 @@ module h264_bitstream #(
                             6'd32: begin
                                 if (DEBUG_CABAC_P16X16 && !is_skip_mb)
                                     $display("[CABACDBG] mb=%0d sub=32 terminate0", cabac_mb_counter);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC terminate(0) bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1559,8 +1604,11 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16 && !is_skip_mb)
                                     $display("[CABACDBG] mb=%0d sub=34 skip outstate=%0d bits_valid=%0d bits_count=%0d",
                                              cabac_mb_counter, cabac_ctx_state_out, cabac_bits_valid, cabac_bits_count);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC skip-flag bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1589,8 +1637,11 @@ module h264_bitstream #(
                             6'd36: begin
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=36 mbtype14 state=%0d", cabac_mb_counter, cabac_mb_type_ctx_state_14);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC mb_type[14] bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1609,8 +1660,11 @@ module h264_bitstream #(
                             6'd37: begin
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=37 mbtype15 state=%0d", cabac_mb_counter, cabac_mb_type_ctx_state_15);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC mb_type[15] bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1629,8 +1683,11 @@ module h264_bitstream #(
                             6'd38: begin
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=38 mbtype16 state=%0d", cabac_mb_counter, cabac_mb_type_ctx_state_16);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC mb_type[16] bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1654,8 +1711,11 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=39 mvdx ctx=%0d state=%0d",
                                              cabac_mb_counter, cabac_mvd_ctx_x, cabac_ctx_state_in);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC mvd_x bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1679,8 +1739,11 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=40 mvdy ctx=%0d state=%0d",
                                              cabac_mb_counter, cabac_mvd_ctx_y, cabac_ctx_state_in);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC mvd_y bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1705,8 +1768,11 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=41 cbp0 sel=%0d state=%0d",
                                              cabac_mb_counter, cabac_cbp_luma_ctx0_sel, cabac_ctx_state_in);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC cbp_luma[0] bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1731,8 +1797,11 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=42 cbp1 sel=%0d state=%0d",
                                              cabac_mb_counter, cabac_cbp_luma_ctx1_sel, cabac_ctx_state_in);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC cbp_luma[1] bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1757,8 +1826,11 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=43 cbp2 sel=%0d state=%0d",
                                              cabac_mb_counter, cabac_cbp_luma_ctx2_sel, cabac_ctx_state_in);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC cbp_luma[2] bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1778,8 +1850,11 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=44 cbp3 state=%0d",
                                              cabac_mb_counter, cabac_ctx_state_in);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC cbp_luma[3] bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
@@ -1799,16 +1874,31 @@ module h264_bitstream #(
                                 if (DEBUG_CABAC_P16X16)
                                     $display("[CABACDBG] mb=%0d sub=45 cbpchroma state=%0d",
                                              cabac_mb_counter, cabac_ctx_state_in);
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSUBSET] CABAC cbp_chroma bit overflow");
+                                    `endif
+                                    end
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
                                     return_state <= S_MB_HDR;
                                 end
-                                cabac_mb_counter <= cabac_mb_counter + 12'd1;
-                                sub <= 6'd46;
+                                if (mb_has_residual && ((cabac_cbp_luma != 4'd0) || cabac_cbp_chroma)) begin
+                                    cabac_ctx_state_in <= cabac_qp_delta_ctx_state_60;
+                                    cabac_pending_ctx_kind <= CABAC_CTX_QPDELTA;
+                                    cabac_pending_ctx_sel <= 2'd0;
+                                    cabac_bin_valid <= 1'b1;
+                                    cabac_bin_value <= 1'b0;
+                                    cabac_bin_bypass <= 1'b0;
+                                    cabac_bin_terminate <= 1'b0;
+                                    sub <= 6'd47;
+                                end else begin
+                                    cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                    sub <= 6'd46;
+                                end
+
                             end
                             6'd46: begin
                                 cmd_done <= 1'b1;
@@ -1828,7 +1918,13 @@ module h264_bitstream #(
                             6'd22: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
-                                sub <= 6'd10;
+                                if (!is_b_slice && (p_partition_mode == 2'd3)) begin
+                                    p8x8_sub_idx <= 3'd0;
+                                    ue_input <= {8'd0, p_sub_mb_type};
+                                    sub <= 6'd52;
+                                end else begin
+                                    sub <= 6'd10;
+                                end
                             end
 
                             // ===== Inter MB path (sub 10+) =====
@@ -1858,7 +1954,7 @@ module h264_bitstream #(
                                     if (slice_num_ref_idx_l0_active_minus1 == 2'd1) begin
                                         bit_buf <= bit_buf | ({(~mb_ref_idx_l0[0]), 95'd0} >> bit_cnt[6:0]);
                                         bit_cnt <= bit_cnt + 7'd1;
-                                        sub <= 6'd11;
+                                        sub <= (p_partition_mode != 2'd0) ? 6'd47 : 6'd11;
                                     end else begin
                                         ue_input <= {8'd0, mb_ref_idx_l0};
                                         sub <= 6'd23;
@@ -1891,6 +1987,9 @@ module h264_bitstream #(
                                 if (is_b_slice && is_b_bi_mb) begin
                                     ue_input <= mvd_x_l1_codenum_w;
                                     sub <= 6'd27;
+                                end else if (!is_b_slice && (p_partition_mode != 2'd0)) begin
+                                    ue_input <= mvd_x_l0_part1_codenum_w;
+                                    sub <= 6'd49;
                                 end else begin
                                     sub <= 6'd15;
                                 end
@@ -1917,16 +2016,20 @@ module h264_bitstream #(
                                 sub <= 6'd16;
                             end
                             6'd16: begin
-                                // qp_delta = SE(0) = '1' (only if CBP != 0)
-                                if (mb_has_residual) begin
-                                    bit_buf <= bit_buf | ({1'b1, 95'd0} >> bit_cnt[6:0]);
+                                if (transform_8x8_mode_enable && transform_size_8x8_flag) begin
+                                    bit_buf <= bit_buf | ({transform_size_8x8_flag, 95'd0} >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + 7'd1;
                                 end
-                                sub <= 6'd17;
+                                if (mb_has_residual) begin
+                                    se_input <= mb_qp_delta;
+                                    sub <= 6'd17;
+                                end else begin
+                                    sub <= 6'd18;
+                                end
                             end
                             6'd17: begin
-                                state <= S_EMIT;
-                                return_state <= S_MB_HDR;
+                                bit_buf <= bit_buf | ({se_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, se_total_bits};
                                 sub <= 6'd18;
                             end
                             6'd18: begin
@@ -1940,9 +2043,38 @@ module h264_bitstream #(
                                 if (is_b_slice) begin
                                     ue_input <= is_b_l1_mb ? mvd_x_l1_codenum_w : mvd_x_l0_codenum_w;
                                     sub <= 6'd12;
+                                end else if ((p_partition_mode != 2'd0) && slice_multi_ref_enable) begin
+                                    ue_input <= {8'd0, mb_ref_idx_l0_part1};
+                                    sub <= 6'd48;
                                 end else begin
                                     sub <= 6'd11;
                                 end
+                            end
+                            6'd47: begin
+                                bit_buf <= bit_buf | ({(~mb_ref_idx_l0_part1[0]), 95'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + 7'd1;
+                                sub <= 6'd11;
+                            end
+                            6'd48: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                sub <= 6'd11;
+                            end
+                            6'd49: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= mvd_y_l0_part1_codenum_w;
+                                sub <= 6'd50;
+                            end
+                            6'd50: begin
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
+                                sub <= 6'd51;
+                            end
+                            6'd51: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                sub <= 6'd15;
                             end
                             6'd27: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
@@ -1958,6 +2090,91 @@ module h264_bitstream #(
                             6'd29: begin
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                sub <= 6'd15;
+                            end
+                            // P_8x8 / sub-macroblock syntax. This CAVLC path forces all four
+                            // sub-macroblocks to the same sub_mb_type/ref. The datapath currently
+                            // uses one uniform luma/chroma predictor for the whole MB; to keep the
+                            // decoder's per-partition MVs equal to that predictor, emit the external
+                            // MVP delta on the first subpartition and zero MVDs for internal
+                            // subpartitions whose MVP is the previous same-MV neighbor.
+                            6'd52: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                if (p8x8_sub_idx == 3'd3) begin
+                                    if (slice_multi_ref_enable) begin
+                                        p8x8_sub_idx <= 3'd0;
+                                        ue_input <= {8'd0, mb_ref_idx_l0};
+                                        sub <= 6'd54;
+                                    end else begin
+                                        p8x8_mvd_idx <= 5'd0;
+                                        ue_input <= mvd_x_l0_codenum_w;
+                                        sub <= 6'd58;
+                                    end
+                                end else begin
+                                    p8x8_sub_idx <= p8x8_sub_idx + 3'd1;
+                                    ue_input <= {8'd0, p_sub_mb_type};
+                                    sub <= 6'd53;
+                                end
+                            end
+                            6'd53: begin
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
+                                sub <= 6'd52;
+                            end
+                            6'd54: begin
+                                if (slice_num_ref_idx_l0_active_minus1 == 2'd1) begin
+                                    bit_buf <= bit_buf | ({(~mb_ref_idx_l0[0]), 95'd0} >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + 7'd1;
+                                end else begin
+                                    bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                end
+                                if (p8x8_sub_idx == 3'd3) begin
+                                    p8x8_mvd_idx <= 5'd0;
+                                    ue_input <= mvd_x_l0_codenum_w;
+                                    sub <= 6'd58;
+                                end else begin
+                                    p8x8_sub_idx <= p8x8_sub_idx + 3'd1;
+                                    ue_input <= {8'd0, mb_ref_idx_l0};
+                                    sub <= 6'd55;
+                                end
+                            end
+                            6'd55: begin
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
+                                sub <= 6'd54;
+                            end
+                            6'd58: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                ue_input <= (p8x8_mvd_idx == 5'd0) ? mvd_y_l0_codenum_w : 10'd0;
+                                sub <= 6'd59;
+                            end
+                            6'd59: begin
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
+                                sub <= 6'd60;
+                            end
+                            6'd60: begin
+                                bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
+                                bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
+                                if (p8x8_mvd_idx == (p8x8_mvd_total_w - 5'd1)) begin
+                                    sub <= 6'd62;
+                                end else begin
+                                    p8x8_mvd_idx <= p8x8_mvd_idx + 5'd1;
+                                    ue_input <= 10'd0;
+                                    sub <= 6'd61;
+                                end
+                            end
+                            6'd61: begin
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
+                                sub <= 6'd58;
+                            end
+                            6'd62: begin
+                                state <= S_EMIT;
+                                return_state <= S_MB_HDR;
                                 sub <= 6'd15;
                             end
                             6'd25: begin
@@ -2068,8 +2285,11 @@ module h264_bitstream #(
                                 state    <= S_IDLE;
                             end
                             6'd20: begin
-                                if (cabac_bits_overflow)
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
                                     $fatal(1, "[CABAC_PSKIP] CABAC terminate(1) bit overflow");
+                                    `endif
+                                    end
                                 cabac_slice_active <= 1'b0;
                                 if (cabac_bits_valid) begin
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);

@@ -133,7 +133,7 @@ module h264_intra16_pred #(
                 else
                     abs_diff_c = {1'b0, pred_pix_c} - {1'b0, orig_pix_c};
                 if (top_avail)
-                    sad_vert_c = sad_vert_c + abs_diff_c[SAD_W-1:0];
+                    sad_vert_c = sad_vert_c + {{(SAD_W-(BD+1)){1'b0}}, abs_diff_c};
 
                 pred_pix_c = left_avail ? left_pix[row_idx] : {BD{1'b0}};
                 pred_hor_c[flat_idx*BD +: BD] = pred_pix_c;
@@ -142,7 +142,7 @@ module h264_intra16_pred #(
                 else
                     abs_diff_c = {1'b0, pred_pix_c} - {1'b0, orig_pix_c};
                 if (left_avail)
-                    sad_hor_c = sad_hor_c + abs_diff_c[SAD_W-1:0];
+                    sad_hor_c = sad_hor_c + {{(SAD_W-(BD+1)){1'b0}}, abs_diff_c};
 
                 pred_pix_c = dc_val_c;
                 pred_dc_c[flat_idx*BD +: BD] = pred_pix_c;
@@ -150,7 +150,7 @@ module h264_intra16_pred #(
                     abs_diff_c = {1'b0, orig_pix_c} - {1'b0, pred_pix_c};
                 else
                     abs_diff_c = {1'b0, pred_pix_c} - {1'b0, orig_pix_c};
-                sad_dc_c = sad_dc_c + abs_diff_c[SAD_W-1:0];
+                sad_dc_c = sad_dc_c + {{(SAD_W-(BD+1)){1'b0}}, abs_diff_c};
 
                 plane_sum_c = a_c + b_c * $signed(col_idx - 7) + c_c * $signed(row_idx - 7) + $signed(14'sd16);
                 clipped_plane_c = plane_sum_c >>> 5;
@@ -166,7 +166,7 @@ module h264_intra16_pred #(
                 else
                     abs_diff_c = {1'b0, pred_pix_c} - {1'b0, orig_pix_c};
                 if (top_avail && left_avail && top_left_avail)
-                    sad_plane_c = sad_plane_c + abs_diff_c[SAD_W-1:0];
+                    sad_plane_c = sad_plane_c + {{(SAD_W-(BD+1)){1'b0}}, abs_diff_c};
             end
         end
 
