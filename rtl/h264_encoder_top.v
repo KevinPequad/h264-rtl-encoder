@@ -2066,11 +2066,26 @@ pred_buf = {(256*BD){1'b0}};
         (nz_coeff[3]  != 5'd0), (nz_coeff[2]  != 5'd0), (nz_coeff[1] != 5'd0),  (nz_coeff[0]  != 5'd0)
     };
     reg [255:0] cabac_luma_scan_buf [0:15];
+    reg [255:0] cabac_chroma_dc_scan_buf [0:1];
+    reg [255:0] cabac_chroma_ac_scan_buf [0:31];
     wire [4095:0] cabac_luma_scan_flat_w = {
         cabac_luma_scan_buf[15], cabac_luma_scan_buf[14], cabac_luma_scan_buf[13], cabac_luma_scan_buf[12],
         cabac_luma_scan_buf[11], cabac_luma_scan_buf[10], cabac_luma_scan_buf[9],  cabac_luma_scan_buf[8],
         cabac_luma_scan_buf[7],  cabac_luma_scan_buf[6],  cabac_luma_scan_buf[5],  cabac_luma_scan_buf[4],
         cabac_luma_scan_buf[3],  cabac_luma_scan_buf[2],  cabac_luma_scan_buf[1],  cabac_luma_scan_buf[0]
+    };
+    wire [511:0] cabac_chroma_dc_scan_flat_w = {
+        cabac_chroma_dc_scan_buf[1], cabac_chroma_dc_scan_buf[0]
+    };
+    wire [8191:0] cabac_chroma_ac_scan_flat_w = {
+        cabac_chroma_ac_scan_buf[31], cabac_chroma_ac_scan_buf[30], cabac_chroma_ac_scan_buf[29], cabac_chroma_ac_scan_buf[28],
+        cabac_chroma_ac_scan_buf[27], cabac_chroma_ac_scan_buf[26], cabac_chroma_ac_scan_buf[25], cabac_chroma_ac_scan_buf[24],
+        cabac_chroma_ac_scan_buf[23], cabac_chroma_ac_scan_buf[22], cabac_chroma_ac_scan_buf[21], cabac_chroma_ac_scan_buf[20],
+        cabac_chroma_ac_scan_buf[19], cabac_chroma_ac_scan_buf[18], cabac_chroma_ac_scan_buf[17], cabac_chroma_ac_scan_buf[16],
+        cabac_chroma_ac_scan_buf[15], cabac_chroma_ac_scan_buf[14], cabac_chroma_ac_scan_buf[13], cabac_chroma_ac_scan_buf[12],
+        cabac_chroma_ac_scan_buf[11], cabac_chroma_ac_scan_buf[10], cabac_chroma_ac_scan_buf[9],  cabac_chroma_ac_scan_buf[8],
+        cabac_chroma_ac_scan_buf[7],  cabac_chroma_ac_scan_buf[6],  cabac_chroma_ac_scan_buf[5],  cabac_chroma_ac_scan_buf[4],
+        cabac_chroma_ac_scan_buf[3],  cabac_chroma_ac_scan_buf[2],  cabac_chroma_ac_scan_buf[1],  cabac_chroma_ac_scan_buf[0]
     };
     reg [4:0] left_mb_nz [0:3];
     reg [4:0] top_mb_nz [0:MB_COLS*4-1];
@@ -2225,6 +2240,8 @@ pred_buf = {(256*BD){1'b0}};
         .cabac_cbp_chroma(i16_cbp_chroma != 2'd0),
         .cabac_luma_scan_flat(cabac_luma_scan_flat_w),
         .cabac_luma_nz_mask(cabac_luma_nz_mask_w),
+        .cabac_chroma_dc_scan_flat(cabac_chroma_dc_scan_flat_w),
+        .cabac_chroma_ac_scan_flat(cabac_chroma_ac_scan_flat_w),
         .slice_num_ref_idx_l0_active_minus1(slice_num_ref_idx_l0_active_minus1),
         .hold_fifo_drain(bs_hold_fifo_drain), .is_intra16_mb(is_intra16_mb_hdr), .is_ipcm_mb(is_ipcm_mb_hdr), .intra_mb_type_code_num(intra_mb_type_code_num),
         .intra_pred_bits(intra_pred_bits_mb), .intra_pred_count(intra_pred_count_mb),
@@ -4928,6 +4945,7 @@ pred_buf = {(256*BD){1'b0}};
                                     blk_state <= BS_ZIGZAG;
                                 end
                                 BS_ZIGZAG: if (zz_done) begin
+                                    cabac_chroma_dc_scan_buf[0] <= scan_flat;
                                     if (total_coeffs != 5'd0)
                                         i16_chroma_dc_nonzero <= 1'b1;
                                     if (!bs_busy) begin
@@ -4970,6 +4988,7 @@ pred_buf = {(256*BD){1'b0}};
                                     blk_state <= BS_ZIGZAG;
                                 end
                                 BS_ZIGZAG: if (zz_done) begin
+                                    cabac_chroma_dc_scan_buf[1] <= scan_flat;
                                     if (total_coeffs != 5'd0)
                                         i16_chroma_dc_nonzero <= 1'b1;
                                     if (!bs_busy) begin
@@ -5014,6 +5033,7 @@ pred_buf = {(256*BD){1'b0}};
                                     blk_state <= BS_ZIGZAG;
                                 end
                                 BS_ZIGZAG: if (zz_done) begin
+                                    cabac_chroma_ac_scan_buf[(chr_is_cr ? CHR_BLOCKS_PER_PLANE : 0) + chr_blk] <= scan_flat;
                                     nz_coeff[chroma_sub_blk_from_idx(chr_is_cr, chr_blk)] <= total_coeffs;
                                     if (total_coeffs != 5'd0)
                                         i16_chroma_ac_nonzero <= 1'b1;

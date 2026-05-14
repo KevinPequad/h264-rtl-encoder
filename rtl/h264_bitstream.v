@@ -81,6 +81,10 @@ module h264_bitstream #(
     input  wire [1:0]  cabac_cbp_chroma,
     input  wire [4095:0] cabac_luma_scan_flat,
     input  wire [15:0] cabac_luma_nz_mask,
+    /* verilator lint_off UNUSED */
+    input  wire [511:0] cabac_chroma_dc_scan_flat,
+    input  wire [8191:0] cabac_chroma_ac_scan_flat,
+    /* verilator lint_on UNUSED */
     input  wire [1:0]  slice_num_ref_idx_l0_active_minus1,
     input  wire        hold_fifo_drain,
     input  wire        is_intra16_mb,
