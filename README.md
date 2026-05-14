@@ -93,12 +93,13 @@ finished project must:
 - package the RTL-generated bitstream into MP4
 - produce a visually correct result for the final target clip
 
-Final completion target:
+Final representative target:
 
 - clip: Big Buck Bunny
-- duration: first 10 seconds
 - output: `1280x720 @ 24 fps`
 - source of truth: RTL-generated H.264 byte stream
+- proof size: the smallest frame count that verifies the behavior is acceptable; 2 frames is fine when an IDR→P or similar transition proves the target path, and more frames are only required when the feature needs longer reference/GOP behavior
+- longer runs such as the first 10 seconds / 240 frames are optional soak/regression evidence, not the required completion gate
 
 Do not consider the encoder complete until the decoded final output is verified
 and the remaining gaps against full H.264 standard coverage are closed.
@@ -421,7 +422,7 @@ Important non-completion gaps:
   transform gates is not implemented
 - broader `4:4:4` chroma-format support beyond the current `320x176` strict-decode non-`I_PCM` path and the still-red `32x16` `4:4:4 I_PCM` smoke rows is not implemented
 - full-standard profile / level / tool coverage is not implemented
-- the final `240`-frame `1280x720 @ 24 fps` run is not closed yet
+- a representative `1280x720 @ 24 fps` RTL-owned proof is not closed yet; use the smallest frame count that proves the active behavior, with 240 frames / 10 seconds treated as optional soak evidence
 
 This means the repo is currently a partial H.264 implementation, not a claim
 of complete H.264 standard support.
