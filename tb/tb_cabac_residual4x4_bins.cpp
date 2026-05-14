@@ -100,6 +100,12 @@ int main(int argc, char** argv) {
     dut->clk = 0;
     dut->event_valid = 0;
     dut->bin_ready = 1;
+    dut->ctx_cbf_base = 85;
+    dut->ctx_sig_base = 105;
+    dut->ctx_last_base = 166;
+    dut->ctx_level_gt1 = 227;
+    dut->ctx_level_gt2 = 232;
+    dut->ctx_sig_last_max = 14;
     for (int i = 0; i < 4; ++i) tick(dut);
     dut->rst_n = 1;
     tick(dut);
@@ -140,7 +146,36 @@ int main(int argc, char** argv) {
         {0, 1, 0},
     }, "sparse_block");
 
-    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected zero and sparse blocks\n";
+    dut->ctx_cbf_base = 97;
+    dut->ctx_sig_base = 149;
+    dut->ctx_last_base = 210;
+    dut->ctx_level_gt1 = 257;
+    dut->ctx_level_gt2 = 262;
+    dut->ctx_sig_last_max = 2;
+    tick(dut);
+    auto chroma_dc = run_events(dut, {
+        {0, 1, 0, 0, 0},
+        {1, 1, 0, 0, 0},
+        {2, 0, 0, 0, 0},
+        {1, 0, 1, 0, 0},
+        {1, 1, 2, 0, 0},
+        {2, 1, 2, 0, 0},
+        {3, 1, 2, 3, 0},
+        {4, 0, 2, 3, 0},
+    });
+    expect_eq(chroma_dc, {
+        {1, 0, 97},
+        {1, 0, 149},
+        {0, 0, 210},
+        {0, 0, 150},
+        {1, 0, 151},
+        {1, 0, 212},
+        {1, 0, 257},
+        {1, 0, 262},
+        {0, 1, 0},
+    }, "chroma_dc_context_override");
+
+    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma and chroma-category blocks\n";
     delete dut;
     return 0;
 }

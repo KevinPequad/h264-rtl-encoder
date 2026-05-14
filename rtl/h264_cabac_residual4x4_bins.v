@@ -21,6 +21,17 @@ module h264_cabac_residual4x4_bins #(
     input  wire [COEFF_W-1:0] event_level_abs,
     input  wire       event_level_sign,
 
+    // Context-index bases for the residual category being emitted.
+    // The current integrated luma instance supplies frame-coded luma 4x4
+    // constants; chroma DC/AC integration overrides these with the H.264
+    // category-specific context ranges.
+    input  wire [8:0] ctx_cbf_base,
+    input  wire [8:0] ctx_sig_base,
+    input  wire [8:0] ctx_last_base,
+    input  wire [8:0] ctx_level_gt1,
+    input  wire [8:0] ctx_level_gt2,
+    input  wire [3:0] ctx_sig_last_max,
+
     output reg        bin_valid,
     input  wire       bin_ready,
     output reg        bin_value,
@@ -45,21 +56,20 @@ module h264_cabac_residual4x4_bins #(
     reg [3:0] suffix_bit_idx;
     reg [3:0] suffix_bits_total;
 
-    // Luma 4x4 context-index maps for coded/significant/last flags.
-    // These are ctxIdx values, not local storage indices.
+    // Residual context-index maps for coded/significant/last flags.
+    // These are ctxIdx values, not local storage indices. The luma default is
+    // ctx 85 / 105..119 / 166..180; chroma DC/AC selects different bases.
     function automatic [8:0] sig_ctx_idx;
         input [3:0] idx;
         begin
-            // ctxIdx 105..119 for frame-coded luma 4x4 significant_coeff_flag.
-            sig_ctx_idx = 9'd105 + ((idx < 4'd15) ? {5'd0, idx} : 9'd14);
+            sig_ctx_idx = ctx_sig_base + ((idx < ctx_sig_last_max) ? {5'd0, idx} : {5'd0, ctx_sig_last_max});
         end
     endfunction
 
     function automatic [8:0] last_ctx_idx;
         input [3:0] idx;
         begin
-            // ctxIdx 166..180 for frame-coded luma 4x4 last_significant_coeff_flag.
-            last_ctx_idx = 9'd166 + ((idx < 4'd15) ? {5'd0, idx} : 9'd14);
+            last_ctx_idx = ctx_last_base + ((idx < ctx_sig_last_max) ? {5'd0, idx} : {5'd0, ctx_sig_last_max});
         end
     endfunction
 
@@ -118,7 +128,7 @@ module h264_cabac_residual4x4_bins #(
                         if (!bin_valid && event_valid) begin
                             case (event_kind)
                                 EV_CBF: begin
-                                    emit_bin(event_value, 1'b0, 9'd85);
+                                    emit_bin(event_value, 1'b0, ctx_cbf_base);
                                     if (!event_value)
                                         done <= 1'b1;
                                 end
@@ -130,7 +140,7 @@ module h264_cabac_residual4x4_bins #(
                                 end
                                 EV_LEVEL: begin
                                     pending_abs <= event_level_abs;
-                                    emit_bin(event_level_abs > {{(COEFF_W-1){1'b0}}, 1'b1}, 1'b0, 9'd227);
+                                    emit_bin(event_level_abs > {{(COEFF_W-1){1'b0}}, 1'b1}, 1'b0, ctx_level_gt1);
                                     state <= S_LEVEL_GT1;
                                 end
                                 EV_SIGN: begin
@@ -144,7 +154,7 @@ module h264_cabac_residual4x4_bins #(
                     end
 
                     S_LEVEL_GT1: begin
-                        emit_bin(pending_abs > {{(COEFF_W-2){1'b0}}, 2'd2}, 1'b0, 9'd232);
+                        emit_bin(pending_abs > {{(COEFF_W-2){1'b0}}, 2'd2}, 1'b0, ctx_level_gt2);
                         if (pending_abs > {{(COEFF_W-2){1'b0}}, 2'd2}) begin
                             suffix_value <= pending_abs - {{(COEFF_W-2){1'b0}}, 2'd3};
                             suffix_bits_total <= suffix_len_for(pending_abs);

@@ -40,8 +40,8 @@ Current state:
 - the deblock/reconstructed-frame ownership lane is validated on canonical
   commit `dc1d47094238f8ad973cdfb5738abd4f0d2ea951` with the standalone oracle,
   public-decoder checks, and a two-frame reference-bank-consumption proof
-- CABAC `P_L0_16x16` integration is currently limited to the strict zero-CBP / zero-MVD subset;
-  the standalone CABAC residual scan-event and bin/context helpers exist, but full CABAC residual coefficient syntax is not integrated yet
+- CABAC `P_L0_16x16` integration currently covers the strict zero-MVD/single-ref zero-CBP lane and a focused luma-only residual lane; chroma residual is intentionally RED/guarded while its DC/AC coefficient syntax is being wired
+- the standalone CABAC residual scan-event helper and bin/context helper exist; the bin/context helper now supports category-specific context bases needed for chroma DC/AC bring-up
 - the repository is still not complete as a full H.264 standard encoder
 
 Completion is still blocked by major missing features including full CABAC
@@ -123,7 +123,12 @@ transform/profile/color closure, and the final long-run target.
 | `references/` | Spec PDFs and local development references |
 
 These directories are intentionally treated as local-only working areas and are
-ignored by default except for their small README files.
+ignored by default except for their small README files. Generated `.yuv`, `.h264`,
+`.json`, `.log`, Verilator `obj_dir`, and scratch `.worktrees` are disposable;
+keep validation evidence in committed scripts/docs, not in checked-in output blobs.
+When local artifact bloat accumulates, use `git clean -fdX` from the repo root
+(after verifying `git status --short` has no real source edits) to remove ignored
+outputs without deleting tracked source.
 
 ## Software Baseline
 

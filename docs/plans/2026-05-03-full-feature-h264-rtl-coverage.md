@@ -110,9 +110,11 @@ nonzero-residual subset. The residual scan-event and bin/context helpers are
 wired through persistent residual CABAC context state into the bitstream core for
 that luma subset, with `scripts/run_cabac_p16x16_residual_green_check.sh` proving
 strict FFmpeg decode. Chroma-residual CABAC remains guarded and has a dedicated RED gate
-(`scripts/run_cabac_p16x16_chroma_residual_red_check.sh`); the next CABAC step
-is extending residual-bin coverage to chroma DC/AC syntax, then `mb_qp_delta`
-variants and the remaining I/P/B bins.
+(`scripts/run_cabac_p16x16_chroma_residual_red_check.sh`). The residual bin/context
+helper now accepts category-specific context bases, with standalone coverage for the
+chroma DC context family; the next CABAC step is wiring top-level chroma DC/AC
+coefficient buffers and persistent context state into the bitstream FSM, then
+`mb_qp_delta` variants and the remaining I/P/B bins.
 
 ## Milestone 2: Broader Inter Partitions
 
