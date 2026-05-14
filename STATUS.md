@@ -40,15 +40,14 @@ Current state:
 - the deblock/reconstructed-frame ownership lane is validated on canonical
   commit `dc1d47094238f8ad973cdfb5738abd4f0d2ea951` with the standalone oracle,
   public-decoder checks, and a two-frame reference-bank-consumption proof
-- CABAC `P_L0_16x16` residual checkpoint is coefficient-driven in commit
-  `69aef76e387739ebc4b1b08d4147a6842dfc9124`; the focused luma residual quality gate
-  passed on validation worktree `t_e8e507e3` / validation report `t_df25a2fa`
+- CABAC `P_L0_16x16` integration is currently limited to the strict zero-CBP / zero-MVD subset;
+  the standalone CABAC residual scan-event helper exists, but full CABAC residual coefficient syntax is not integrated yet
 - the repository is still not complete as a full H.264 standard encoder
 
 Completion is still blocked by major missing features including full CABAC
-syntax integration beyond the current coefficient-driven `P_L0_16x16`
-checkpoint, broader `B` / `BREF` / DPB support, broader direct-mode support,
-deblock, transform/profile/color closure, and the final long-run target.
+residual coefficient syntax beyond the current zero-CBP `P_L0_16x16` subset,
+broader `B` / `BREF` / DPB support, broader direct-mode support, deblock,
+transform/profile/color closure, and the final long-run target.
 
 ## Source Inventory
 
@@ -106,7 +105,7 @@ deblock, transform/profile/color closure, and the final long-run target.
 | `scripts/run_deblock_reference_check.sh` | Public-decoder and two-frame reconstructed-reference consumption check for in-loop deblocking |
 | `scripts/run_cabac_residual4x4_scan_check.sh` | Standalone Verilator check for the CABAC residual 4x4 scan-event helper |
 | `scripts/audit_no_testbench_repair.py` | Static audit that proves RTL bitstream ownership is retained in the TB and helper repair hooks are absent |
-| `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for CABAC `P_L0_16x16` luma residual syntax; requires actual decoded luma reconstruction and serves as the checkpoint proof for the coefficient-driven residual path |
+| `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for the current CABAC `P_L0_16x16` zero-CBP subset; residual-CABAC integration still needs a separate RED/GREEN gate |
 | `docker/Dockerfile` | Containerized smoke-run environment |
 | `docker/run_one_frame.sh` | One-frame Docker smoke flow |
 | `tools/parse_422.c` | Small debug/parser utility |
@@ -308,10 +307,8 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - standalone CABAC arithmetic coder core RTL, plus a current final-path CABAC
   subset for skip-capable P slices with dual PPS emission, CABAC
   slice-header fields, CABAC-coded `mb_skip_flag`, CABAC-coded
-  `end_of_slice_flag`, an explicit single-ref / zero-CBP / zero-MVD
-  `P_L0_16x16` subset, and the validated coefficient-driven
-  `P_L0_16x16` residual checkpoint in commit
-  `69aef76e387739ebc4b1b08d4147a6842dfc9124`
+  `end_of_slice_flag`, and an explicit single-ref / zero-CBP / zero-MVD
+  `P_L0_16x16` subset. Full CABAC residual coefficient syntax is still open.
 - parameterized resolution
 - parameterized bit depth
 - parameterized chroma format
@@ -324,9 +321,8 @@ Implemented now relative to the chosen `x264` baseline:
 - in-loop deblocking and deblocked reconstructed-frame reference ownership for
   the current validated path
 - current CABAC final-path subset on skip-capable P slices, with CABAC PPS
-  selection, CABAC-coded `mb_skip_flag`, CABAC-coded `end_of_slice_flag`, an
-  explicit single-ref / zero-CBP / zero-MVD `P_L0_16x16` subset, and the
-  validated coefficient-driven `P_L0_16x16` residual checkpoint
+  selection, CABAC-coded `mb_skip_flag`, CABAC-coded `end_of_slice_flag`, and an
+  explicit single-ref / zero-CBP / zero-MVD `P_L0_16x16` subset
 - I-picture and P-picture coding
 - non-reference `B`-picture syntax on the current intra / `I_PCM` path
 - limited non-reference `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` inter
@@ -461,8 +457,8 @@ Measured validation points:
   `P_L0_16x16` zero-CBP / single-ref / zero-MVD smoke, `47,268` cycles,
   `74` bytes, `Main` profile, `output/smoke_32x16_2f_cabac_p16x16.h264`, and
   `b_mode_summary.total_cabac_p16x16 = 2`
-- `32x16_2f_cabac_p16x16_residual`: strict FFmpeg-decodable 2-frame CABAC
-  `P_L0_16x16` residual checkpoint, `ffmpeg PASS`, `total_cabac_p16x16 >= 1`
+- `32x16_2f_cabac_p16x16`: strict FFmpeg-decodable 2-frame CABAC
+  `P_L0_16x16` zero-CBP checkpoint, `ffmpeg PASS`, `total_cabac_p16x16 >= 1`
 - `32x16_1f_nonipcm_10b420_main_ncfix`: strict FFmpeg-decodable one-frame
   non-`I_PCM` `10-bit 4:2:0` probe, RTL PSNR avg `7.9009`, RTL SSIM
   `0.345989`
@@ -1060,8 +1056,8 @@ H.264 encoder yet:
 Still missing relative to the chosen `x264` software baseline:
 
 - full CABAC slice integration beyond the current standalone arithmetic core
-  and current coefficient-driven skip-capable plus explicit zero-CBP /
-  single-ref / zero-MVD `P_L0_16x16` P-slice checkpoint
+  and current skip-capable plus explicit zero-CBP / single-ref / zero-MVD
+  `P_L0_16x16` P-slice checkpoint
 - broader inter-coded `B` / `BREF` picture handling and the associated
   reference management
 - reference-picture management beyond the current four-reference P-slice subset

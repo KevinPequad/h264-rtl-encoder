@@ -735,9 +735,14 @@ module h264_encoder_top #(
         (mb_ref_idx_reg == 2'd0) &&
         (mvd_x_l0_w == 9'sd0) &&
         (mvd_y_l0_w == 9'sd0);
+    // Current integrated CABAC P16x16 path is intentionally limited to the
+    // zero-CBP / zero-MVD subset. Residual CABAC coefficient syntax is not
+    // complete yet; do not suppress the CAVLC residual FIFO for nonzero luma or
+    // chroma CBP because that creates decoder-invalid mixed syntax.
     wire        cabac_non_skip_subset_ok_w =
         cabac_zero_cbp_p16x16_eligible_w &&
-        !is_skip_mb_reg;
+        !is_skip_mb_reg &&
+        !mb_has_residual;
     wire        cabac_suppress_cavlc_payload_w =
         cabac_slice_enable_w && cabac_non_skip_subset_ok_w;
 
@@ -5236,7 +5241,7 @@ pred_buf = {(256*BD){1'b0}};
         end
     end
 
-    localparam DEBUG_TRACE = 1'b1;
+    localparam DEBUG_TRACE = 1'b0;
     localparam [7:0] DEBUG_FRAME = 8'd0;
     localparam [11:0] DEBUG_MB_START = 12'd0;
     localparam [11:0] DEBUG_MB_END = 12'd1;

@@ -718,20 +718,12 @@ module h264_bitstream #(
 
             if (do_write) begin
                 if (zero_cnt >= 2'd2 && write_byte <= 8'h03) begin
-`ifdef VERILATOR
-                    if (dbg_fifo_deq_idx >= 1470 && dbg_fifo_deq_idx <= 1495)
-                        $display("[BSWR] epb byte=03 bitcnt=%0d bytes=%0d", bit_cnt, bs_bytes_written);
-`endif
                     bs_mem_data      <= 8'h03;
                     bs_mem_wr        <= 1'b1;
                     bs_mem_addr      <= bs_bytes_written;
                     bs_bytes_written <= bs_bytes_written + 24'd1;
                     zero_cnt         <= 2'd0;
                 end else begin
-`ifdef VERILATOR
-                    if (dbg_fifo_deq_idx >= 1470 && dbg_fifo_deq_idx <= 1495)
-                        $display("[BSWR] byte=%02x bitcnt=%0d bytes=%0d", write_byte, bit_cnt, bs_bytes_written);
-`endif
                     bs_mem_data      <= write_byte;
                     bs_mem_wr        <= 1'b1;
                     bs_mem_addr      <= bs_bytes_written;
@@ -761,8 +753,6 @@ module h264_bitstream #(
                             state <= S_FLUSH; busy <= 1'b1;
                         end else if (!hold_fifo_drain && !fifo_empty) begin
 `ifdef VERILATOR
-                            if (dbg_fifo_deq_idx >= 1470 && dbg_fifo_deq_idx <= 1495)
-                                $display("[BSDQ] idx=%0d rdptr=%0d cnt=%0d bitcnt=%0d bits=%08x bytes=%0d", dbg_fifo_deq_idx, fifo_rd_ptr, fifo_rd_count, bit_cnt, fifo_rd_bits, bs_bytes_written);
                             dbg_fifo_deq_idx <= dbg_fifo_deq_idx + 1;
 `endif
                             bit_buf <= bit_buf | (({fifo_rd_bits, 64'd0} >> bit_cnt[6:0]));
@@ -2110,9 +2100,6 @@ module h264_bitstream #(
                             // MVP delta on the first subpartition and zero MVDs for internal
                             // subpartitions whose MVP is the previous same-MV neighbor.
                             6'd52: begin
-`ifndef SYNTHESIS
-                                $display("[P8X8DBG] sub52 ue_input=%0d ue_bits=%0d subidx=%0d p_sub=%0d ref=%0d mvdidx=%0d bitcnt=%0d", ue_input, ue_total_bits, p8x8_sub_idx, p_sub_mb_type, mb_ref_idx_l0, p8x8_mvd_idx, bit_cnt);
-`endif
                                 bit_buf <= bit_buf | ({ue_ue_bits, 75'd0} >> bit_cnt[6:0]);
                                 bit_cnt <= bit_cnt + {2'b0, ue_total_bits};
                                 if (p8x8_sub_idx == 3'd3) begin

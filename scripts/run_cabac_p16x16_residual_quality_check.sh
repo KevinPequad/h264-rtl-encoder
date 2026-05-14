@@ -5,11 +5,11 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 export PATH=/home/chudpc/.local/verilator-5.020/bin:$PATH
 
-INPUT="data/smoke_32x16_2f_cabac_p16x16_residual.yuv"
+INPUT="data/smoke_32x16_2f_cabac_p16x16_zero_cbp.yuv"
 python3 - <<'PY'
 from pathlib import Path
 W,H=32,16
-out=Path('data/smoke_32x16_2f_cabac_p16x16_residual.yuv')
+out=Path('data/smoke_32x16_2f_cabac_p16x16_zero_cbp.yuv')
 frames=[]
 for yval in (64, 64):
     y=bytes([yval])*(W*H)
@@ -17,7 +17,7 @@ for yval in (64, 64):
     v=bytes([128])*((W//2)*(H//2))
     frames.append(y+u+v)
 out.write_bytes(b''.join(frames))
-print(f"[INFO] residual fixture {out} size={out.stat().st_size}")
+print(f"[INFO] zero-CBP fixture {out} size={out.stat().st_size}")
 PY
 
 LABEL="cabac_p16x16_residual_quality"
@@ -47,7 +47,7 @@ if cabac_mbs < 1:
 psnr_avg=summary.get('rtl_metrics', {}).get('psnr', {}).get('average')
 print(f"[INFO] rtl_psnr_avg={psnr_avg}")
 if psnr_avg is None or float(psnr_avg) < 20.0:
-    raise SystemExit(f"[FAIL] residual CABAC decode quality below smoke threshold: psnr_avg={psnr_avg}")
+    raise SystemExit(f"[FAIL] CABAC P16x16 zero-CBP decode quality below smoke threshold: psnr_avg={psnr_avg}")
 dec=Path('output/validation_cabac_p16x16_residual_quality.dec.yuv').read_bytes()
 if len(dec) < fs*F:
     raise SystemExit(f"[FAIL] decoded output too short: {len(dec)} bytes")
@@ -55,5 +55,5 @@ for frame in range(F):
     dy=dec[frame*fs:frame*fs+W*H]
     avg=sum(dy)/len(dy)
     print(f"[INFO] frame={frame} decoded_y_avg={avg:.2f}")
-print('[PASS] CABAC P16x16 residual gate exercised residual syntax and strict-decoded')
+print('[PASS] CABAC P16x16 zero-CBP gate strict-decoded; residual CABAC is intentionally not claimed here')
 PY

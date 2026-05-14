@@ -104,11 +104,11 @@ Current intentional dirty RTL files to review/fold into feature branch:
 
 ---
 
-**CABAC checkpoint:** CABAC `P_L0_16x16` nonzero luma residual is tracked by
-`scripts/run_cabac_p16x16_residual_quality_check.sh`. It requires actual
-decoded luma reconstruction, not parser acceptance, and now has a validated
-decoder-clean proof on worktree `t_e8e507e3` / report `t_df25a2fa`. The
-coefficient-driven fix landed in commit `69aef76e387739ebc4b1b08d4147a6842dfc9124`;
+**CABAC checkpoint correction:** current integrated CABAC `P_L0_16x16` is only the
+single-ref / zero-CBP / zero-MVD subset. The residual scan-event helper exists
+as a standalone building block, but nonzero luma/chroma CABAC coefficient syntax
+still needs a real RED/GREEN integration gate; do not treat the old residual
+checkpoint wording as feature completion.
 the next CABAC step is general residual-bin coverage from coefficient
 positions/levels, then `mb_qp_delta`, chroma, and the remaining I/P/B bins.
 
