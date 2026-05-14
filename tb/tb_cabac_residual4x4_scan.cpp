@@ -85,6 +85,7 @@ int main(int argc, char** argv) {
     dut->rst_n = 0;
     dut->start = 0;
     dut->event_ready = 1;
+    dut->max_coeff_minus1 = 15;
     clear_coeffs(dut);
     for (int i = 0; i < 4; ++i) tick(dut);
     dut->rst_n = 1;
@@ -97,6 +98,7 @@ int main(int argc, char** argv) {
     }, "zero_block");
 
     clear_coeffs(dut);
+    dut->max_coeff_minus1 = 15;
     dut->coeff0 = 1;
     dut->coeff3 = static_cast<uint16_t>(-2);
     auto sparse = run_case(dut);
@@ -114,7 +116,22 @@ int main(int argc, char** argv) {
         {4, 0, 0, 1, 0}, // sign positive
     }, "sparse_block");
 
-    std::cout << "[PASS] CABAC residual4x4 scan events matched expected zero and sparse blocks\n";
+    clear_coeffs(dut);
+    dut->max_coeff_minus1 = 3;
+    dut->coeff2 = 3;
+    dut->coeff5 = static_cast<uint16_t>(-4); // outside max_coeff_minus1, must be ignored
+    auto chroma_dc_limited = run_case(dut);
+    expect_eq(chroma_dc_limited, {
+        {0, 1, 0, 0, 0}, // CBF=1
+        {1, 0, 0, 0, 0}, // coeff 0 not significant
+        {1, 0, 1, 0, 0}, // coeff 1 not significant
+        {1, 1, 2, 0, 0}, // coeff 2 significant
+        {2, 1, 2, 0, 0}, // coeff 2 last within 4-coeff chroma DC scan
+        {3, 1, 2, 3, 0}, // level abs=3
+        {4, 0, 2, 3, 0}, // sign positive
+    }, "chroma_dc_limited_scan");
+
+    std::cout << "[PASS] CABAC residual scan events matched expected luma and limited chroma-DC blocks\n";
     delete dut;
     return 0;
 }

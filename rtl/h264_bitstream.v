@@ -626,6 +626,7 @@ module h264_bitstream #(
         .coeff13(cabac_luma_coeff_at(cabac_res_block_idx, 4'd13)),
         .coeff14(cabac_luma_coeff_at(cabac_res_block_idx, 4'd14)),
         .coeff15(cabac_luma_coeff_at(cabac_res_block_idx, 4'd15)),
+        .max_coeff_minus1(4'd15),
         .event_valid(cabac_res_event_valid),
         .event_ready(cabac_res_event_ready),
         .event_kind(cabac_res_event_kind),

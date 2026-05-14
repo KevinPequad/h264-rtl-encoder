@@ -41,7 +41,7 @@ Current state:
   commit `dc1d47094238f8ad973cdfb5738abd4f0d2ea951` with the standalone oracle,
   public-decoder checks, and a two-frame reference-bank-consumption proof
 - CABAC `P_L0_16x16` integration currently covers the strict zero-MVD/single-ref zero-CBP lane and a focused luma-only residual lane; chroma residual is intentionally RED/guarded while its DC/AC coefficient syntax is being wired
-- the standalone CABAC residual scan-event helper and bin/context helper exist; the bin/context helper now supports category-specific context bases needed for chroma DC/AC bring-up
+- the standalone CABAC residual scan-event helper and bin/context helper exist; the scan helper now supports bounded active coefficient counts for chroma DC/AC categories, and the bin/context helper supports category-specific context bases needed for chroma DC/AC bring-up
 - the repository is still not complete as a full H.264 standard encoder
 
 Completion is still blocked by major missing features including full CABAC
