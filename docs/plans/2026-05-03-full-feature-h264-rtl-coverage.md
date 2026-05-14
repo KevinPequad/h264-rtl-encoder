@@ -109,9 +109,10 @@ the strict single-ref / zero-MVD lane for zero-CBP and a focused luma-only
 nonzero-residual subset. The residual scan-event and bin/context helpers are
 wired through persistent residual CABAC context state into the bitstream core for
 that luma subset, with `scripts/run_cabac_p16x16_residual_green_check.sh` proving
-strict FFmpeg decode. Chroma-residual CABAC remains guarded; the next CABAC step
-is extending residual-bin coverage to chroma syntax, then `mb_qp_delta` variants
-and the remaining I/P/B bins.
+strict FFmpeg decode. Chroma-residual CABAC remains guarded and has a dedicated RED gate
+(`scripts/run_cabac_p16x16_chroma_residual_red_check.sh`); the next CABAC step
+is extending residual-bin coverage to chroma DC/AC syntax, then `mb_qp_delta`
+variants and the remaining I/P/B bins.
 
 ## Milestone 2: Broader Inter Partitions
 
