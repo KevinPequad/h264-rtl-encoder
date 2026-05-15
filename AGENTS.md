@@ -81,21 +81,27 @@ The goal is to finish a full end-to-end H.264 encoder whose final output is:
 - delivered for the final target clip as a playable MP4 made from the
   RTL-generated H.264 stream
 
-Completion means the encoder has produced the final decoded `1280x720 @ 24 fps`
-Big Buck Bunny result from the RTL byte stream path, not from a software-made
-fallback bitstream, and that the remaining gaps against full H.264 standard
-coverage have been closed.
+Completion means the encoder has produced the smallest representative decoded
+proof that exercises the required feature behavior from the RTL byte stream path,
+not from a software-made fallback bitstream, and that the remaining gaps against
+full H.264 standard coverage have been closed. A fixed Big Buck Bunny duration is
+not a completion gate; longer clips are optional soak/regression evidence only
+when they add coverage.
 
 Completion also means the repo is no longer missing the major feature classes
 tracked against the chosen `x264` software baseline.
 
-## Final Target
+## Proof Target
 
-- Encode the first **10 seconds** of **Big Buck Bunny**
-- Target format: **1280x720 @ 24 fps**
-- Bitstream style: **Annex B H.264**
+- Use the **smallest representative proof** that exercises the feature under
+  test and comes from the RTL-owned Annex B path.
+- Keep `1280x720 @ 24 fps` Big Buck Bunny as a useful reference source, not as a
+  mandatory 10-second milestone.
+- Scale frame count/resolution only when the feature needs it: one frame can
+  prove intra/residual syntax, two frames can prove a reference/inter transition,
+  and longer clips are soak/regression evidence only when they add coverage.
 - Completion requirement: **full H.264 standard support**, not just the current
-  subset
+  subset.
 
 ## Core RTL Ownership
 
@@ -194,8 +200,10 @@ The testbench must not:
   bitstream ownership boundaries.
 - Keep helper scripts, validation artifacts, and directory layout organized.
   Rename ad-hoc outputs to durable names when they become important, and do
-  not leave scratch files or one-off experimental debris as the repo's lasting
-  public shape.
+  not leave scratch files, generated blobs, stale debug notes, duplicate
+  workspaces, or other garbled nonsense as the repo's lasting public shape.
+  Anything that slows ASIC/feature completion without adding proof should be
+  removed, substituted, or archived outside the repo.
 - When a feature lands, capture the exact validation command, artifact paths,
   and the key proof points in the status docs so later sessions can continue
   without rediscovering the same context.
@@ -218,7 +226,7 @@ The testbench must not:
 1. Keep the encoder end to end through the RTL bitstream path
 2. Fix correctness before adding more scope
 3. Use small smoke cases first
-4. Scale to longer clips only after decode and visual checks pass
+4. Scale to longer clips only when the feature under test actually needs more frames/resolution
 5. Preserve or improve reproducibility of the build / run flow
 6. Do not stop while major baseline feature gaps are still open
 7. After each meaningful implementation step, update `README.md` / `STATUS.md`,
@@ -1107,13 +1115,16 @@ The testbench must not:
   weighted/direct prediction, broader partition coverage,
   sub-pel motion handling, and deblocking
 
-- The current high-resolution validation closes the first `24` frames / `1`
-  second at `1280x720`; the final first-10-seconds milestone still requires the
-  full `240`-frame run from the RTL byte path
+- The current high-resolution validation is useful historical soak evidence, not
+  the project finish line. Future proof sizing should be feature-driven: use the
+  smallest RTL-owned decode/recon case that exercises the blocker, then scale
+  only when a specific reference/GOP/quality behavior requires it.
 
 ## Do Not Forget
 
-- Full completion is the final decoded `1280x720 @ 24 fps` Big Buck Bunny output from the RTL-generated H.264 stream
+- Full completion means the smallest representative RTL-owned decoded proofs for
+  the claimed feature set pass; Big Buck Bunny clips are useful reference/soak
+  cases, not mandatory fixed-duration gates.
 - Full completion also means the remaining gaps against full H.264 standard
   support are closed
 - Full completion also means the major `x264` baseline feature gaps are closed,

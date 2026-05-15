@@ -2,8 +2,10 @@
 //
 // CABAC residual syntax front-end helper for one luma 4x4 scan block.
 // This module does not arithmetic-code bins. It walks an already-scanned
-// 4x4 coefficient vector and emits the ordered syntax events needed by a
-// later CABAC bin/context sequencer:
+// coefficient vector and emits the ordered syntax events needed by a
+// later CABAC bin/context sequencer. The active coefficient count is supplied
+// by max_coeff_minus1 so the same helper can cover luma 4x4, chroma DC, and
+// chroma AC scans:
 //   - coded_block_flag
 //   - significant_coeff_flag / last_significant_coeff_flag scan map
 //   - coeff_abs/sign events in reverse significant-coefficient order
@@ -35,6 +37,7 @@ module h264_cabac_residual4x4_scan #(
     input  wire signed [COEFF_W-1:0] coeff13,
     input  wire signed [COEFF_W-1:0] coeff14,
     input  wire signed [COEFF_W-1:0] coeff15,
+    input  wire [3:0] max_coeff_minus1,
 
     output reg        event_valid,
     input  wire       event_ready,
@@ -126,7 +129,7 @@ module h264_cabac_residual4x4_scan #(
         begin
             any_nonzero = 1'b0;
             for (i = 0; i < 16; i = i + 1) begin
-                if (coeff_nonzero_at(i[3:0]))
+                if ((i <= max_coeff_minus1) && coeff_nonzero_at(i[3:0]))
                     any_nonzero = 1'b1;
             end
         end
@@ -137,7 +140,7 @@ module h264_cabac_residual4x4_scan #(
         begin
             find_last_nonzero = 4'd0;
             for (i = 0; i < 16; i = i + 1) begin
-                if (coeff_nonzero_at(i[3:0]))
+                if ((i <= max_coeff_minus1) && coeff_nonzero_at(i[3:0]))
                     find_last_nonzero = i[3:0];
             end
         end

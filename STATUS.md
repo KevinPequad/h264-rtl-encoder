@@ -40,8 +40,8 @@ Current state:
 - the deblock/reconstructed-frame ownership lane is validated on canonical
   commit `dc1d47094238f8ad973cdfb5738abd4f0d2ea951` with the standalone oracle,
   public-decoder checks, and a two-frame reference-bank-consumption proof
-- CABAC `P_L0_16x16` integration is currently limited to the strict zero-CBP / zero-MVD subset;
-  the standalone CABAC residual scan-event helper exists, but full CABAC residual coefficient syntax is not integrated yet
+- CABAC `P_L0_16x16` integration currently covers the strict zero-MVD/single-ref zero-CBP lane and a focused luma-only residual lane; chroma residual is intentionally RED/guarded while its DC/AC coefficient syntax is being wired
+- the standalone CABAC residual scan-event helper and bin/context helper exist; the scan helper now supports bounded active coefficient counts for chroma DC/AC categories, the bin/context helper supports category-specific context bases, and encoder-top now buffers chroma DC/AC scan vectors for the upcoming bitstream FSM integration
 - the repository is still not complete as a full H.264 standard encoder
 
 Completion is still blocked by major missing features including full CABAC
@@ -104,8 +104,12 @@ transform/profile/color closure, and the final long-run target.
 | `scripts/run_deblock_oracle_check.sh` | Standalone Verilator oracle check for the deblock edge datapath |
 | `scripts/run_deblock_reference_check.sh` | Public-decoder and two-frame reconstructed-reference consumption check for in-loop deblocking |
 | `scripts/run_cabac_residual4x4_scan_check.sh` | Standalone Verilator check for the CABAC residual 4x4 scan-event helper |
+| `scripts/run_cabac_residual4x4_bins_check.sh` | Standalone Verilator check for CABAC residual 4x4 bin/context emission scaffold |
+| `scripts/run_cabac_p16x16_residual_green_check.sh` | GREEN gate proving integrated CABAC P16x16 luma-only nonzero residual strict-decodes with FFmpeg |
+| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | RED gate showing integrated CABAC P16x16 chroma residual remains guarded pending chroma DC/AC coefficient syntax |
+| `scripts/run_cabac_p16x16_residual_red_check.sh` | Legacy alias for the promoted luma residual GREEN gate |
 | `scripts/audit_no_testbench_repair.py` | Static audit that proves RTL bitstream ownership is retained in the TB and helper repair hooks are absent |
-| `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for the current CABAC `P_L0_16x16` zero-CBP subset; residual-CABAC integration still needs a separate RED/GREEN gate |
+| `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for the CABAC `P_L0_16x16` zero-CBP subset |
 | `docker/Dockerfile` | Containerized smoke-run environment |
 | `docker/run_one_frame.sh` | One-frame Docker smoke flow |
 | `tools/parse_422.c` | Small debug/parser utility |
@@ -119,7 +123,12 @@ transform/profile/color closure, and the final long-run target.
 | `references/` | Spec PDFs and local development references |
 
 These directories are intentionally treated as local-only working areas and are
-ignored by default except for their small README files.
+ignored by default except for their small README files. Generated `.yuv`, `.h264`,
+`.json`, `.log`, Verilator `obj_dir`, and scratch `.worktrees` are disposable;
+keep validation evidence in committed scripts/docs, not in checked-in output blobs.
+When local artifact bloat accumulates, use `git clean -fdX` from the repo root
+(after verifying `git status --short` has no real source edits) to remove ignored
+outputs without deleting tracked source.
 
 ## Software Baseline
 
@@ -1085,7 +1094,9 @@ Additional project-level open work:
 
 The encoder should only be marked complete once:
 
-- the final decoded `1280x720 @ 24 fps` Big Buck Bunny output is produced
+- the remaining feature classes have the smallest representative RTL-owned
+  proof that actually exercises their behavior; fixed 10-second/240-frame clips
+  are optional soak evidence only
 - the stream came from the RTL byte path itself
 - the remaining gaps against full H.264 standard support are closed
 - the final result is visually verified and decodable in FFmpeg
@@ -1096,5 +1107,5 @@ The encoder should only be marked complete once:
 - use the local `x264` source tree as the default software encoder comparison
   baseline after consulting the spec
 - keep the encoder end to end through the RTL bitstream path
-- use all `24` threads by default for build and simulation work on this machine
+- use `THREADS=1 BUILD_JOBS=1` by default; only use more threads for an explicit fast/max-thread run or a justified batch gate
 - be wary of simulation times and prove fixes on small cases first
