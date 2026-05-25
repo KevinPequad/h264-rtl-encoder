@@ -104,7 +104,7 @@ transform/profile/color closure, and the final long-run target.
 | `scripts/run_deblock_oracle_check.sh` | Standalone Verilator oracle check for the deblock edge datapath |
 | `scripts/run_deblock_reference_check.sh` | Public-decoder and two-frame reconstructed-reference consumption check for in-loop deblocking |
 | `scripts/run_cabac_residual4x4_scan_check.sh` | Standalone Verilator check for the CABAC residual 4x4 scan-event helper |
-| `scripts/run_cabac_residual4x4_bins_check.sh` | Standalone Verilator check for CABAC residual 4x4 bin/context emission scaffold |
+| `scripts/run_cabac_residual4x4_bins_check.sh` | Standalone Verilator check for CABAC residual 4x4 bin/context emission scaffold, including chroma DC/AC zero and nonzero CBF context overrides |
 | `scripts/run_cabac_p16x16_residual_green_check.sh` | GREEN gate proving integrated CABAC P16x16 luma-only nonzero residual strict-decodes with FFmpeg |
 | `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | RED gate showing integrated CABAC P16x16 chroma residual remains guarded pending chroma DC/AC coefficient syntax |
 | `scripts/run_cabac_p16x16_residual_red_check.sh` | Legacy alias for the promoted luma residual GREEN gate |

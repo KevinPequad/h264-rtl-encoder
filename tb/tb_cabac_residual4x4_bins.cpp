@@ -153,6 +153,13 @@ int main(int argc, char** argv) {
     dut->ctx_level_gt2 = 262;
     dut->ctx_sig_last_max = 2;
     tick(dut);
+    auto chroma_dc_zero = run_events(dut, {
+        {0, 0, 0, 0, 0},
+    });
+    expect_eq(chroma_dc_zero, {
+        {0, 0, 97},
+    }, "chroma_dc_zero_cbf_context");
+
     auto chroma_dc = run_events(dut, {
         {0, 1, 0, 0, 0},
         {1, 1, 0, 0, 0},
@@ -182,6 +189,13 @@ int main(int argc, char** argv) {
     dut->ctx_level_gt2 = 277;
     dut->ctx_sig_last_max = 14;
     tick(dut);
+    auto chroma_ac_zero = run_events(dut, {
+        {0, 0, 0, 0, 0},
+    });
+    expect_eq(chroma_ac_zero, {
+        {0, 0, 101},
+    }, "chroma_ac_zero_cbf_context");
+
     auto chroma_ac = run_events(dut, {
         {0, 1, 0, 0, 0},
         {1, 1, 0, 0, 0},
@@ -233,7 +247,7 @@ int main(int argc, char** argv) {
         {1, 1, 0},
     }, "chroma_ac_multi_bit_suffix_payload");
 
-    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma, chroma-DC, chroma-AC, and multi-bit suffix category blocks\n";
+    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma, chroma-DC zero/nonzero, chroma-AC zero/nonzero, and multi-bit suffix category blocks\n";
     delete dut;
     return 0;
 }
