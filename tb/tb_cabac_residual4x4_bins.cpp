@@ -214,7 +214,26 @@ int main(int argc, char** argv) {
         {0, 1, 0},
     }, "chroma_ac_context_override");
 
-    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma, chroma-DC, and chroma-AC category blocks\n";
+    tick(dut);
+    auto chroma_ac_suffix_payload = run_events(dut, {
+        {0, 1, 0, 0, 0},
+        {1, 1, 0, 0, 0},
+        {2, 1, 0, 0, 0},
+        {3, 1, 0, 5, 1},
+        {4, 1, 0, 5, 1},
+    });
+    expect_eq(chroma_ac_suffix_payload, {
+        {1, 0, 101},
+        {1, 0, 152},
+        {1, 0, 213},
+        {1, 0, 266},
+        {1, 0, 277},
+        {1, 1, 0},
+        {0, 1, 0},
+        {1, 1, 0},
+    }, "chroma_ac_multi_bit_suffix_payload");
+
+    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma, chroma-DC, chroma-AC, and multi-bit suffix category blocks\n";
     delete dut;
     return 0;
 }
