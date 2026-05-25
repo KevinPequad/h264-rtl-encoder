@@ -964,13 +964,32 @@
       "tier": "T0-RED"
     },
     {
+      "category": "cabac_feature_green",
+      "command": [
+        "python3",
+        "scripts/regress_smoke_matrix.py",
+        "--case",
+        "smoke_8b_420_cabac_p16x16_residual"
+      ],
+      "completion_claim": "focused_luma_residual_checkpoint_not_full_cabac",
+      "config": {
+        "bit_depth": 8,
+        "chroma_format_idc": 1,
+        "enable_cabac_p16x16": 1,
+        "enable_cabac_p16x16_fullpel_only": 1,
+        "frames": 2,
+        "inter_sad_threshold": 20000,
+        "patch_y_frame": 1,
+        "patch_y_region": "8x8@4,4",
+        "require_cabac_p16x16_min": 1
+      },
       "dependencies": [
         "t_f5e1aa3e",
         "t_6c54d87f"
       ],
       "feature_lane_id": "ENT-CABAC-002",
       "id": "ENT-CABAC-002:T0-GREEN",
-      "kind": "feature_lane_placeholder",
+      "kind": "smoke_case",
       "must_cover": [
         "CBP luma data-dependent",
         "mb_qp_delta=0",
@@ -978,15 +997,18 @@
         "no CAVLC leakage in CABAC slice"
       ],
       "name": "cabac_p16x16_luma_residual_red_green",
-      "reason": "Feature lane is declared in the contract; runner support exists, but no repo-local executable fixture is registered yet.",
-      "required_gates": [
-        "expected_red_failure_before_impl",
-        "strict_decode_after_impl",
-        "static_no_repair_audit",
-        "residual_counters"
+      "pass_fail_notes": [
+        "Focused zero-MVD/full-pel CABAC P_L0_16x16 luma residual slice; nonzero CABAC MVD and chroma residual remain out of scope."
       ],
+      "required_gates": [
+        "ffmpeg_strict_decode",
+        "ffprobe_main_profile",
+        "mode_counter_cabac_p16x16",
+        "sim_summary"
+      ],
+      "runner": "regress_smoke_matrix.py",
       "runtime_tier": "T0-GREEN",
-      "status": "pending",
+      "status": "ready",
       "tier": "T0-GREEN"
     },
     {
@@ -1760,13 +1782,14 @@
         "CABAC residual bins from RTL quantized/zigzag coefficients",
         "no CAVLC leakage in CABAC slice"
       ],
+      "notes": "T0-GREEN is now registered as smoke_8b_420_cabac_p16x16_residual; full/general CABAC still requires nonzero MVD and chroma residual lanes.",
       "pass_gates": [
         "expected_red_failure_before_impl",
         "strict_decode_after_impl",
         "static_no_repair_audit",
         "residual_counters"
       ],
-      "status": "pending_required_first",
+      "status": "t0_green_focused_zero_mvd_ready",
       "tiers": [
         "T0-RED",
         "T0-GREEN",
@@ -2077,7 +2100,7 @@
       "counter_below_minimum",
       "header_trace_mismatch",
       "software_testbench_byte_repair",
-      "current_21_smokes_claimed_as_full_completion"
+      "current_22_smokes_claimed_as_full_completion"
     ],
     "forbidden_testbench_actions": [
       "author SPS/PPS/slice/macroblock/residual syntax",
@@ -2098,7 +2121,7 @@
     ]
   },
   "long_tier_release_conditions": [
-    "existing 21 smoke cases green under updated runner",
+    "existing 22 smoke cases green under updated runner",
     "CABAC residual/generalized entropy lanes green or explicitly user-approved exclusions (not acceptable for full-standard completion)",
     "CAVLC/P/B-DPB/headers/profile-color/deblock lanes have T0/T1 evidence",
     "OWN-001 no-repair audit passes independently",

@@ -19,6 +19,7 @@ module h264_encoder_top #(
     parameter INTER_SAD_THRESHOLD = 8000,
     parameter ENABLE_CABAC_PSKIP = 0,
     parameter ENABLE_CABAC_P16X16 = 0,
+    parameter ENABLE_CABAC_P16X16_FULLPEL_ONLY = 0,
     parameter WEIGHTED_PRED_ENABLE = 0,
     parameter LUMA_LOG2_WEIGHT_DENOM = 0,
     parameter integer LUMA_WEIGHT = 1,
@@ -808,7 +809,7 @@ module h264_encoder_top #(
     wire [1:0] cabac_cbp_luma_ctx0_sel_w = {!mb_top_avail, !mb_left_avail};
     wire [1:0] cabac_cbp_luma_ctx1_sel_w = {!mb_top_avail, 1'b0};
     wire [1:0] cabac_cbp_luma_ctx2_sel_w = {1'b0, !mb_left_avail};
-    wire        cabac_zero_cbp_p16x16_eligible_w =
+    wire        cabac_p16x16_supported_w =
         cabac_p16x16_enable_w &&
         is_p_frame &&
         is_inter_mb_reg &&
@@ -817,10 +818,13 @@ module h264_encoder_top #(
         (mb_ref_idx_reg == 2'd0) &&
         (mvd_x_l0_w == 9'sd0) &&
         (mvd_y_l0_w == 9'sd0);
+    wire        cabac_luma_residual_payload_ready_w =
+        (cabac_cbp_luma_reg != 4'd0) &&
+        (cabac_luma_nz_mask_reg != 16'd0);
     wire        cabac_non_skip_subset_ok_w =
-        cabac_zero_cbp_p16x16_eligible_w &&
-        !mb_has_residual &&
-        !is_skip_mb_reg;
+        cabac_p16x16_supported_w &&
+        !is_skip_mb_reg &&
+        (!mb_has_residual || cabac_luma_residual_payload_ready_w);
 
     function [BD-1:0] apply_luma_bi_weight;
         input [BD-1:0] sample0_in;
@@ -3155,6 +3159,20 @@ pred_buf = {(256*BD){1'b0}};
                             end
                         end
 
+                        // The current CABAC P_L0_16x16 subset owns zero-MVD syntax.
+                        // Keep that path on the full-pel predictor so nonzero residuals
+                        // can exercise CABAC CBP/residual bins without falling into the
+                        // still-unimplemented nonzero CABAC MVD lane.
+                        if ((ENABLE_CABAC_P16X16_FULLPEL_ONLY != 0) &&
+                            cabac_p16x16_enable_w && is_p_frame && !use_weighted_pred_w &&
+                            (slice_num_ref_idx_l0_active_minus1 == 2'd0) &&
+                            (mb_ref_idx_reg == 2'd0)) begin
+                            best_sad_i = me_fullpel_best_sad;
+                            best_dx_i = 0;
+                            best_dy_i = 0;
+                            best_pred_buf_i = inter_pred_buf;
+                        end
+
                         me_best_mvx <= (me_fullpel_mvx <<< 2) + best_dx_i;
                         me_best_mvy <= (me_fullpel_mvy <<< 2) + best_dy_i;
                         me_best_sad <= best_sad_i;
@@ -4931,13 +4949,13 @@ pred_buf = {(256*BD){1'b0}};
                                 if (skip_probe_pending) begin
                                     skip_probe_pending <= 1'b0;
                                     if (skip_chroma_exact_i) begin
-                                        is_skip_mb_reg <= cabac_zero_cbp_p16x16_eligible_w ? 1'b0 : 1'b1;
+                                        is_skip_mb_reg <= cabac_p16x16_supported_w ? 1'b0 : 1'b1;
                                         mb_has_residual <= 1'b0;
                                         recon_buf <= inter_pred_buf;
                                         luma_recon_buf <= inter_pred_buf;
                                         chr_recon_cb <= interp_cb_i;
                                         chr_recon_cr <= interp_cr_i;
-                                        top_state <= cabac_zero_cbp_p16x16_eligible_w ? TS_SKIP_CLR_FIFO :
+                                        top_state <= cabac_p16x16_supported_w ? TS_SKIP_CLR_FIFO :
                                                                                        TS_SKIP_MB_HDR;
                                     end else begin
                                         top_state <= TS_MB_HDR;
@@ -5118,7 +5136,7 @@ pred_buf = {(256*BD){1'b0}};
                                                 end
                                                 mb_has_residual <= mb_nonzero_i;
                                                 if (!mb_nonzero_i) begin
-                                                    is_skip_mb_reg <= cabac_zero_cbp_p16x16_eligible_w ? 1'b0 :
+                                                    is_skip_mb_reg <= cabac_p16x16_supported_w ? 1'b0 :
                                                                       (pskip_syntax_eligible_reg || bskip_syntax_eligible_reg);
                                                     top_state <= TS_SKIP_CLR_FIFO;
                                                 end else begin
@@ -5588,7 +5606,7 @@ pred_buf = {(256*BD){1'b0}};
                                                 end
                                                 mb_has_residual <= mb_nonzero_i;
                                                 if (!mb_nonzero_i) begin
-                                                    is_skip_mb_reg <= cabac_zero_cbp_p16x16_eligible_w ? 1'b0 :
+                                                    is_skip_mb_reg <= cabac_p16x16_supported_w ? 1'b0 :
                                                                       (pskip_syntax_eligible_reg || bskip_syntax_eligible_reg);
                                                     top_state <= TS_SKIP_CLR_FIFO;
                                                 end else begin

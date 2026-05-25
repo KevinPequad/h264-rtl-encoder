@@ -4,7 +4,7 @@ This directory contains the repo-local verification manifest created from the t_
 
 Files:
 
-- `h264_full_matrix.json` — manifest of the existing 21 smoke cases, pending feature lanes, runtime tier policy, negative tests, public-decoder gates, and RTL byte-ownership audit policy.
+- `h264_full_matrix.json` — manifest of the existing 22 smoke cases, pending feature lanes, runtime tier policy, negative tests, public-decoder gates, and RTL byte-ownership audit policy.
 - `../scripts/run_h264_verify_manifest.py` — conservative runner that selects manifest entries, refuses blocked long tiers (T2/T3), emits machine-readable JSON summaries, and runs negative/audit hooks.
 
 Safe examples:
