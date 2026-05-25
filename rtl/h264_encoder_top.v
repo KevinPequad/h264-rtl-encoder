@@ -2237,7 +2237,11 @@ pred_buf = {(256*BD){1'b0}};
         .cabac_cbp_luma_ctx1_sel(cabac_cbp_luma_ctx1_sel_w),
         .cabac_cbp_luma_ctx2_sel(cabac_cbp_luma_ctx2_sel_w),
         .cabac_cbp_luma(mb_cbp_luma_w),
-        .cabac_cbp_chroma(i16_cbp_chroma != 2'd0),
+        // Preserve the 2-bit coded_block_pattern_chroma value for the CABAC
+        // residual FSM. The current chroma residual lane is still guarded, but
+        // the bitstream writer must see the eventual DC-only (1) vs DC+AC (2)
+        // distinction instead of a collapsed nonzero predicate.
+        .cabac_cbp_chroma(i16_cbp_chroma),
         .cabac_luma_scan_flat(cabac_luma_scan_flat_w),
         .cabac_luma_nz_mask(cabac_luma_nz_mask_w),
         .cabac_chroma_dc_scan_flat(cabac_chroma_dc_scan_flat_w),
