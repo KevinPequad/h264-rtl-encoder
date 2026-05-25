@@ -67,6 +67,7 @@ class SmokeCase:
     inter_sad_threshold: int = 8000
     enable_cabac_pskip: int = 0
     enable_cabac_p16x16: int = 0
+    enable_cabac_p16x16_fullpel_only: int = 0
     idr_interval: int = 12
     force_b_slice: int = 0
     force_bref_slice: int = 0
@@ -88,6 +89,12 @@ class SmokeCase:
     force_b_direct_temporal_on_reorder_b_slot: int = 0
     reorder_b_gop: int = 0
     flat_y_frames: tuple[int, ...] | None = None
+    patch_y_frame: int | None = None
+    patch_y_x: int = 0
+    patch_y_y: int = 0
+    patch_y_w: int = 4
+    patch_y_h: int = 4
+    patch_y_value: int = 96
     require_skip_min: int = 0
     require_bi_min: int = 0
     require_direct_min: int = 0
@@ -200,6 +207,26 @@ CASES = [
         enable_cabac_p16x16=1,
         flat_y_frames=(64, 64),
         require_cabac_p16x16_min=2,
+    ),
+    SmokeCase(
+        "smoke_8b_420_cabac_p16x16_residual",
+        8,
+        1,
+        "smoke_32x16_2f_cabac_p16x16_residual.yuv",
+        "smoke_32x16_2f_cabac_p16x16_residual.h264",
+        frames=2,
+        enable_idr_ipcm=1,
+        inter_sad_threshold=20_000,
+        enable_cabac_p16x16=1,
+        enable_cabac_p16x16_fullpel_only=1,
+        flat_y_frames=(64, 64),
+        patch_y_frame=1,
+        patch_y_x=4,
+        patch_y_y=4,
+        patch_y_w=8,
+        patch_y_h=8,
+        patch_y_value=112,
+        require_cabac_p16x16_min=1,
     ),
     SmokeCase(
         "smoke_8b_420_bdirect",
@@ -474,6 +501,12 @@ def generate_smoke_input(
     bit_depth: int,
     chroma_format_idc: int,
     flat_y_frames: tuple[int, ...] | None = None,
+    patch_y_frame: int | None = None,
+    patch_y_x: int = 0,
+    patch_y_y: int = 0,
+    patch_y_w: int = 4,
+    patch_y_h: int = 4,
+    patch_y_value: int = 96,
 ) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     chroma_height = height if chroma_format_idc in (2, 3) else height // 2
@@ -486,9 +519,18 @@ def generate_smoke_input(
             if flat_y_frames is not None:
                 y_value = clamp(flat_y_frames[frame_idx], 0, (1 << bit_depth) - 1)
                 c_value = 128 if bit_depth == 8 else 512
-                for _ in range(height):
-                    for _ in range(width):
-                        write_sample(out_f, y_value, bit_depth)
+                patch_value = clamp(patch_y_value, 0, (1 << bit_depth) - 1)
+                for y in range(height):
+                    for x in range(width):
+                        if (
+                            patch_y_frame is not None
+                            and frame_idx == patch_y_frame
+                            and patch_y_x <= x < patch_y_x + patch_y_w
+                            and patch_y_y <= y < patch_y_y + patch_y_h
+                        ):
+                            write_sample(out_f, patch_value, bit_depth)
+                        else:
+                            write_sample(out_f, y_value, bit_depth)
                 for _ in range(chroma_height):
                     for _ in range(chroma_width):
                         write_sample(out_f, c_value, bit_depth)
@@ -698,6 +740,12 @@ def main() -> int:
             case.bit_depth,
             case.chroma_format_idc,
             case.flat_y_frames,
+            case.patch_y_frame,
+            case.patch_y_x,
+            case.patch_y_y,
+            case.patch_y_w,
+            case.patch_y_h,
+            case.patch_y_value,
         )
 
         workspace = stage_workspace(f"h264_{case.name}_")
@@ -713,6 +761,7 @@ def main() -> int:
             inter_sad_threshold=case.inter_sad_threshold,
             enable_cabac_pskip=case.enable_cabac_pskip,
             enable_cabac_p16x16=case.enable_cabac_p16x16,
+            enable_cabac_p16x16_fullpel_only=case.enable_cabac_p16x16_fullpel_only,
             luma_log2_weight_denom=case.luma_log2_weight_denom,
             luma_weight=case.luma_weight,
             luma_offset=case.luma_offset,

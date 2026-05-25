@@ -37,6 +37,7 @@ class BuildConfig:
     inter_sad_threshold: int = 8000
     enable_cabac_pskip: int = 0
     enable_cabac_p16x16: int = 0
+    enable_cabac_p16x16_fullpel_only: int = 0
     idr_interval: int = 12
     force_b_slice: int = 0
     force_bref_slice: int = 0
@@ -131,6 +132,7 @@ def build_sim(workspace: Path, config: BuildConfig, build_log_path: Path | None 
         f"INTER_SAD_THRESHOLD={config.inter_sad_threshold}",
         f"ENABLE_CABAC_PSKIP={config.enable_cabac_pskip}",
         f"ENABLE_CABAC_P16X16={config.enable_cabac_p16x16}",
+        f"ENABLE_CABAC_P16X16_FULLPEL_ONLY={config.enable_cabac_p16x16_fullpel_only}",
     ]
     if config.extra_verilator_args:
         cmd.append(f"EXTRA_VERILATOR_ARGS={' '.join(config.extra_verilator_args)}")

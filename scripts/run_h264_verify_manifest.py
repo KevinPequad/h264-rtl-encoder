@@ -744,8 +744,8 @@ def validate_manifest(manifest: dict[str, Any]) -> dict[str, Any]:
     if dupes:
         errors.append(f"duplicate entry ids: {dupes}")
     smoke_count = sum(1 for entry in entries if entry.get("kind") == "smoke_case")
-    if smoke_count != 21:
-        errors.append(f"expected 21 smoke_case entries, saw {smoke_count}")
+    if smoke_count != 22:
+        errors.append(f"expected 22 smoke_case entries, saw {smoke_count}")
     if len(negatives) != 10:
         errors.append(f"expected 10 negative_tests entries, saw {len(negatives)}")
     for tier in ("T2", "T3"):
