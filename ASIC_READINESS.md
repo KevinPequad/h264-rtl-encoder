@@ -60,6 +60,12 @@ Current synthesis bring-up status:
 - Fixed CABAC-core synthesis-form blockers by replacing variable-bound loops / `while` with bounded loops and moving unnamed-block local temporaries to module-scope work registers.
 - Fixed the CAVLC escape-prefix `while` by converting it to a bounded two-iteration loop.
 - Verilator smoke still passes after these synthesis-oriented changes.
+- The ASIC frontend lint path now suppresses or removes the remaining static
+  Verilator `SELRANGE` / unsigned-range noise in the default 4:2:0 top lint
+  without changing the established CABAC/decode gates. The top-level chroma DC
+  scratch storage is sized to the largest supported chroma plane so
+  parameter-gated 4:2:2 selects no longer appear as default-configuration
+  out-of-range accesses.
 
 Current next synthesis/front-end issue:
 
@@ -119,4 +125,23 @@ This phase is done when:
 `scripts/run_asic_frontend_smoke.sh` is the current lightweight ASIC-direction
 smoke. It runs Verilator lint across the deterministic RTL top and, when Yosys
 is installed, runs the Yosys frontend smoke as a second gate. Generated logs go
-under `build/asic/`, which remains local/generated artifact space.
+under `build/asic/`, which remains local/generated artifact space. On Chud PC 2,
+Yosys is currently unavailable, so this gate verifies the Verilator frontend and
+records a clean Yosys-skip log.
+
+Latest representative Chud PC 2 validation for this ASIC-lint checkpoint:
+
+```text
+scripts/run_asic_frontend_smoke.sh
+python3 scripts/regress_smoke_matrix.py \
+  --case smoke_8b_420 \
+  --case smoke_8b_422 \
+  --case smoke_8b_420_cabac_pskip \
+  --case smoke_8b_420_cabac_p16x16_residual
+```
+
+All four decode smoke cases passed; the frontend smoke passed Verilator lint and
+skipped Yosys because the executable is not installed on this host. The older
+non-fullpel `smoke_8b_420_cabac_p16x16` case still aborts on the existing
+CABAC-subset guard when ME picks an unsupported non-skip/non-inter block, so use
+the residual/fullpel CABAC gate for the current coefficient-driven checkpoint.
