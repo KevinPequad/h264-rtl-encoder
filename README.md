@@ -82,6 +82,57 @@ software encoder as the implementation baseline:
 See [STATUS.md](STATUS.md) for the detailed repository inventory, implemented
 features, validated runs, and outstanding gaps.
 
+
+## Full H.264 / ASIC Implementation Gap Checklist
+
+This is the README-level checklist for getting from the current constrained RTL
+encoder to a full H.264/AVC encoder and then to ASIC readiness. The current
+repo has real RTL-owned progress, but these items must be closed before any
+"full" or "ASIC-ready" claim.
+
+### Codec features still required for full H.264
+
+- **CABAC:** complete context initialization, binarization, significance/last/
+  level coding, `mb_qp_delta`, chroma residuals, `ref_idx`, MVD coverage, and
+  full I/P/B-slice integration beyond the current focused P-slice checkpoint.
+- **Slice and picture types:** complete IDR/non-IDR I, P, B, and BREF behavior,
+  including reordered display/decode order, MMCO/DPB behavior, POC/frame-num
+  wrap, and robust reference-list construction.
+- **Macroblock and partition modes:** all required intra/inter macroblock types,
+  P and B partitions (`16x16`, `16x8`, `8x16`, `8x8`, sub-macroblock modes),
+  skip/direct paths, and transform-size decisions without software repair.
+- **Motion estimation/compensation:** broader quarter-pel luma and chroma
+  interpolation, richer search/mode decision, multiple references, weighted
+  prediction/weighted bipred, direct spatial/temporal prediction, and validated
+  residual/MVD syntax for natural motion.
+- **Transforms/residuals:** complete 4x4 and 8x8 transform/quant/dequant/inverse
+  paths, luma/chroma DC and AC residual coverage, high-profile transform
+  signaling, and coefficient syntax across sparse/dense/natural distributions.
+- **Profiles, chroma, and bit depth:** Baseline/Main/High-family profile
+  signaling and tool behavior, 8/10-bit 4:2:0/4:2:2/4:4:4 coverage as scoped,
+  I_PCM where required, and profile/level/VUI/HRD/SEI correctness.
+- **In-loop filtering and reconstruction:** deblocking control and filtered
+  reconstructed-frame ownership for reference use, with decoded output matching
+  the RTL reconstruction path rather than a testbench substitute.
+- **Rate/quality control:** QP control, bitrate/quality modes as scoped, mode
+  decision/RD heuristics, visual/metric quality gates, and x264-based feature
+  comparisons where useful.
+- **End-to-end proof:** smallest representative RTL-owned proof for each feature
+  class, public FFmpeg decode, MP4 remux when relevant, visual/metric checks,
+  and no software-authored final syntax.
+
+### ASIC-readiness work still required after codec feature closure
+
+- lint-clean synthesizable RTL with simulation-only checks isolated;
+- ASIC-friendly memory architecture for frame buffers/reference banks/bitstream
+  FIFOs with explicit SRAM/DRAM-style interfaces;
+- hierarchy-preserving synthesis scripts and constraints for leaf, medium, and
+  full-top gates;
+- clock/reset/timing strategy, DFT/scan plan, and CDC review if needed;
+- gate-level simulation plus timing/area/power evidence on the target flow; and
+- source hygiene: no generated Verilator trees, stale worktrees, debug logs,
+  large media dumps, or proof artifacts in the Git source tree.
+
 ## Project Goal
 
 The target is a full end-to-end H.264 / AVC encoder through the RTL path. The
@@ -104,20 +155,6 @@ Final representative target:
 Do not consider the encoder complete until the decoded final output is verified
 and the remaining gaps against full H.264 standard coverage are closed.
 
-## Continuous Progress Rule
-
-Work in this repository is expected to continue past intermediate milestones.
-
-- Do not stop at a smoke pass, subset pass, decode-only pass, or doc-only pass
-- Do not treat a milestone as a stopping point if major H.264 standard gaps are
-  still open
-- After implementing meaningful feature work or correctness fixes:
-  update `README.md` and `STATUS.md` to reflect the current state, push the
-  current progress, and continue working
-- Only stop when the encoder is actually complete or there is a concrete,
-  full blocker that prevents further responsible progress
-
-This repo should be updated as progress is made, not only at the end.
 
 ## Repository Layout
 
