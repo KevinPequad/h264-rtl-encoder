@@ -132,6 +132,26 @@ int main(int argc, char** argv) {
     }, "chroma_dc_limited_scan");
 
     clear_coeffs(dut);
+    dut->max_coeff_minus1 = 7;
+    dut->coeff7 = static_cast<uint16_t>(-5);
+    dut->coeff8 = 6; // outside 4:2:2 chroma-DC max_coeff_minus1, must be ignored
+    auto chroma_dc_422_limited = run_case(dut);
+    expect_eq(chroma_dc_422_limited, {
+        {0, 1, 0, 0, 0}, // CBF=1
+        {1, 0, 0, 0, 0}, // coeff 0 not significant
+        {1, 0, 1, 0, 0}, // coeff 1 not significant
+        {1, 0, 2, 0, 0}, // coeff 2 not significant
+        {1, 0, 3, 0, 0}, // coeff 3 not significant
+        {1, 0, 4, 0, 0}, // coeff 4 not significant
+        {1, 0, 5, 0, 0}, // coeff 5 not significant
+        {1, 0, 6, 0, 0}, // coeff 6 not significant
+        {1, 1, 7, 0, 0}, // coeff 7 significant
+        {2, 1, 7, 0, 0}, // coeff 7 last within 8-coeff 4:2:2 chroma DC scan
+        {3, 1, 7, 5, 1}, // level abs=5
+        {4, 1, 7, 5, 1}, // sign negative
+    }, "chroma_dc_422_limited_scan");
+
+    clear_coeffs(dut);
     dut->max_coeff_minus1 = 14;
     dut->coeff0 = static_cast<uint16_t>(-1);
     dut->coeff14 = 2;
@@ -162,7 +182,7 @@ int main(int argc, char** argv) {
         {4, 1, 0, 1, 1},  // sign negative
     }, "chroma_ac_limited_scan");
 
-    std::cout << "[PASS] CABAC residual scan events matched expected luma, limited chroma-DC, and limited chroma-AC blocks\n";
+    std::cout << "[PASS] CABAC residual scan events matched expected luma, limited 4:2:0/4:2:2 chroma-DC, and limited chroma-AC blocks\n";
     delete dut;
     return 0;
 }
