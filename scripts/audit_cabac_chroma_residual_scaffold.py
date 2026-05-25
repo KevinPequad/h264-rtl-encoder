@@ -43,6 +43,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"i16_chroma_ac_nonzero\s*\|\|\s*\(total_coeffs\s*!=\s*5'd0\).*?i16_cbp_chroma\s*<=\s*2'd2.*?else if \(i16_chroma_dc_nonzero\).*?i16_cbp_chroma\s*<=\s*2'd1",
     ),
     (
+        "bitstream_emits_nonzero_chroma_cbp_first_bin",
+        "rtl/h264_bitstream.v",
+        r"cabac_bin_value\s*<=\s*\(\s*cabac_cbp_chroma\s*!=\s*2'd0\s*\)",
+    ),
+    (
         "bitstream_has_chroma_dc_category",
         "rtl/h264_bitstream.v",
         r"CABAC_RES_CAT_CHROMA_DC\s*=\s*2'd1",

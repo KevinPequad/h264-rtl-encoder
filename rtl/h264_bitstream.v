@@ -2215,7 +2215,12 @@ module h264_bitstream #(
                                 cabac_pending_ctx_kind <= CABAC_CTX_CBPCHROMA;
                                 cabac_pending_ctx_sel <= 2'd0;
                                 cabac_bin_valid <= 1'b1;
-                                cabac_bin_value <= 1'b0;
+                                // CABAC coded_block_pattern chroma bin 0 carries the
+                                // nonzero-chroma predicate. The integrated chroma
+                                // residual lane is still top-level guarded, but keep
+                                // the dormant writer path from collapsing cbp_chroma=1/2
+                                // to the old zero-CBP-only encoding.
+                                cabac_bin_value <= (cabac_cbp_chroma != 2'd0);
                                 cabac_bin_bypass <= 1'b0;
                                 cabac_bin_terminate <= 1'b0;
                                 sub <= 6'd45;
