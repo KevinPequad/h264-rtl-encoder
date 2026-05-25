@@ -120,6 +120,10 @@ module h264_encoder_top #(
     localparam CHR_BLOCK_ROWS       = CHR_MB_HEIGHT / 4;
     localparam CHR_BLOCK_COLS       = CHR_MB_WIDTH / 4;
     localparam CHR_BLOCKS_PER_PLANE = CHR_BLOCK_COLS * CHR_BLOCK_ROWS;
+    // Storage-sized to the largest chroma plane this RTL supports (4:4:4 => 16
+    // 4x4 blocks) so parameter-gated 4:2:2 DC paths do not leave static
+    // out-of-range selects when linting the default 4:2:0 configuration.
+    localparam CHR_BLOCKS_STORAGE   = 16;
     localparam CHR_RAW_ROWS_MAX     = (CHROMA_FORMAT_IDC == 1) ? 9 : 17;
     localparam CHR_RAW_COLS_MAX     = (CHROMA_FORMAT_IDC == 3) ? 17 : 9;
     localparam CHR_RAW_SAMPLES      = CHR_RAW_ROWS_MAX * CHR_RAW_COLS_MAX;
@@ -484,7 +488,7 @@ module h264_encoder_top #(
     reg        refbank_has_l1_ref0 [0:4];
     reg [2:0]  refbank_l1_ref0_bank [0:4];
     // Pre-computed chroma DC prediction values (one per 4x4 sub-block, per plane)
-    reg [BIT_DEPTH-1:0] chr_dc_pred [0:CHR_BLOCKS_PER_PLANE-1];
+    reg [BIT_DEPTH-1:0] chr_dc_pred [0:CHR_BLOCKS_STORAGE-1];
     // Chroma residual override: when in chroma mode, bypass h264_intra_pred
     reg        chr_pred_mode;     // 1 = use chr_dc_pred instead of h264_intra_pred
     reg [16*(BIT_DEPTH+1)-1:0] chr_resid_4x4;   // chroma residual computed directly
@@ -695,7 +699,8 @@ module h264_encoder_top #(
                                    (top_state == TS_CHROMA) &&
                                    !inter_chr_mode &&
                                    (is_cb || is_cr);
-    wire [3:0] forced_intra_pred_mode_w = intra_mode_cur[chr_blk[3:0]];
+    wire [3:0] chr_blk_idx4_w = chr_blk;
+    wire [3:0] forced_intra_pred_mode_w = intra_mode_cur[chr_blk_idx4_w];
 
     localparam BD = BIT_DEPTH;
     localparam BD1 = BIT_DEPTH + 1;
@@ -2043,14 +2048,14 @@ pred_buf = {(256*BD){1'b0}};
     reg [255:0] cb_quant_buf [0:CHR_BLOCKS_PER_PLANE-1];
     reg [255:0] cr_quant_buf [0:CHR_BLOCKS_PER_PLANE-1];
     reg signed [CW-1:0] chr_dc_buf [0:CHR_BLOCKS_PER_PLANE-1];
-    reg signed [15:0] cb_dc_q [0:CHR_BLOCKS_PER_PLANE-1];
-    reg signed [15:0] cr_dc_q [0:CHR_BLOCKS_PER_PLANE-1];
+    reg signed [15:0] cb_dc_q [0:CHR_BLOCKS_STORAGE-1];
+    reg signed [15:0] cr_dc_q [0:CHR_BLOCKS_STORAGE-1];
     // Inverse Hadamard DC values for reconstruction (replaces DC in IQ output)
-    reg signed [15:0] cb_inv_dc [0:CHR_BLOCKS_PER_PLANE-1];
-    reg signed [15:0] cr_inv_dc [0:CHR_BLOCKS_PER_PLANE-1];
+    reg signed [15:0] cb_inv_dc [0:CHR_BLOCKS_STORAGE-1];
+    reg signed [15:0] cr_inv_dc [0:CHR_BLOCKS_STORAGE-1];
     reg [CHR_BLK_W-1:0] chr_recon_blk;           // Block counter for chroma reconstruction phase
     // Saved Cb DC prediction values (since chr_dc_pred gets overwritten by Cr)
-    reg [BD-1:0] cb_dc_pred_saved [0:CHR_BLOCKS_PER_PLANE-1];
+    reg [BD-1:0] cb_dc_pred_saved [0:CHR_BLOCKS_STORAGE-1];
     reg [255:0] i16_quant_buf [0:15];
     reg signed [CW-1:0] i16_dc_buf [0:15];
     reg signed [15:0] i16_dc_q [0:15];
@@ -5199,7 +5204,7 @@ pred_buf = {(256*BD){1'b0}};
                                         begin : chr_dc_pred_calc
                                             // verilator lint_off BLKSEQ
                                             reg [CHR_MB_WIDTH*BD-1:0] top_nb;
-                                            reg [CHR_MB_HEIGHT*BD-1:0] left_nb_full;
+                                            reg [16*BD-1:0] left_nb_full;
                                             reg [BD+2:0] s0, s1, s2, s3, s4, s5, s6, s7;
                                             reg [BD+3:0] top_sum_i, left_sum_i;
                                             reg [1:0] blk_row_i, blk_col_i;
@@ -5799,8 +5804,8 @@ pred_buf = {(256*BD){1'b0}};
 
     localparam DEBUG_TRACE = 1'b1;
     localparam [7:0] DEBUG_FRAME = 8'd1;
-    localparam [11:0] DEBUG_MB_START = 12'd0;
-    localparam [11:0] DEBUG_MB_END = 12'd1;
+    localparam signed [12:0] DEBUG_MB_START = 13'sd0;
+    localparam signed [12:0] DEBUG_MB_END = 13'sd1;
 
     // Debug: frame counter and CAVLC trace
     reg [7:0] dbg_frame_cnt;
@@ -5809,7 +5814,8 @@ pred_buf = {(256*BD){1'b0}};
     /* verilator lint_off UNUSED */
     wire dbg_target_mb = DEBUG_TRACE && (dbg_frame_cnt == DEBUG_FRAME);
     wire dbg_detail_mb = DEBUG_TRACE && (dbg_frame_cnt == DEBUG_FRAME) &&
-                         (mb_count >= DEBUG_MB_START) && (mb_count <= DEBUG_MB_END);
+                         ($signed({1'b0, mb_count}) >= DEBUG_MB_START) &&
+                         ($signed({1'b0, mb_count}) <= DEBUG_MB_END);
     /* verilator lint_on UNUSED */
 
     always @(posedge clk) begin

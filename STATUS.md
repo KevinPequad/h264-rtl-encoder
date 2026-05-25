@@ -39,6 +39,9 @@ Current state:
 - CABAC `P_L0_16x16` residual checkpoint is coefficient-driven in commit
   `69aef76e387739ebc4b1b08d4147a6842dfc9124`; the focused residual quality gate
   passed on validation worktree `t_e8e507e3` / validation report `t_df25a2fa`
+- the current ASIC frontend smoke passes the Verilator top lint path without
+  emitting the previous `SELRANGE` / unsigned-range diagnostics; on Chud PC 2 the
+  Yosys half of the gate is skipped because Yosys is not installed
 - the repository is still not complete as a full H.264 standard encoder
 
 Completion is still blocked by major missing features including full CABAC
