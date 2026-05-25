@@ -11,7 +11,7 @@ Convert the RTL-owned H.264 encoder path into a credible ASIC-ready IP block. Th
 - Keep final H.264 syntax owned by RTL.
 - Do not let the testbench author, patch, or repair final H.264 bytes.
 - Prove small RTL-owned decode-compatible cases before scaling.
-- Keep Chud PC 2 available for AV1; run H.264 ASIC readiness on the main computer.
+- Current lightweight ASIC/frontend work can run on Chud PC 2; memory-heavy full-top synthesis diagnostics should run on the PowerEdge or another large-memory host.
 - Treat decoder compatibility, synthesis, and ASIC flow results as separate gates.
 
 ## Current Local Main-Computer Baseline
@@ -21,7 +21,7 @@ Convert the RTL-owned H.264 encoder path into a credible ASIC-ready IP block. Th
 - Main-computer host: `chudpc-MS-7C56`
 - Local tool setup added:
   - Verilator 5.020 installed at `/home/chudpc/.local/verilator-5.020/bin/verilator`
-  - Yosys 0.9 installed from Ubuntu packages
+  - Chud PC 2 currently has Verilator 5.020 available; Yosys may be absent, so `scripts/run_asic_frontend_smoke.sh` runs Verilator lint first and skips Yosys cleanly when unavailable.
   - FFmpeg already available
 
 Baseline RTL-owned smoke verified locally with Verilator 5.020:
@@ -113,3 +113,10 @@ This phase is done when:
 - all simulation-only constructs are isolated from synthesis
 - a documented wrapper/memory/PDK plan exists
 - remaining blockers are specific ASIC engineering tasks, not unknown repo state
+
+## Current Chud PC 2 Frontend Smoke
+
+`scripts/run_asic_frontend_smoke.sh` is the current lightweight ASIC-direction
+smoke. It runs Verilator lint across the deterministic RTL top and, when Yosys
+is installed, runs the Yosys frontend smoke as a second gate. Generated logs go
+under `build/asic/`, which remains local/generated artifact space.

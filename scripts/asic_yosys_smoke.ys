@@ -4,24 +4,33 @@
 #   yosys -s scripts/asic_yosys_smoke.ys 2>&1 | tee build/asic/yosys_smoke.log
 #
 # This is intentionally a smoke gate, not a final chip synthesis script.
-# It should be kept small and deterministic while synthesis blockers are closed.
+# It should be kept deterministic while synthesis blockers are closed.
 
 read_verilog -sv \
   rtl/h264_bitstream.v \
   rtl/h264_cabac_core.v \
   rtl/h264_cavlc.v \
   rtl/h264_chroma_dc.v \
+  rtl/h264_deblock_edge.v \
+  rtl/h264_deblock_mb.v \
+  rtl/h264_deblock_tables.v \
   rtl/h264_encoder_top.v \
   rtl/h264_fetch.v \
   rtl/h264_intra16_pred.v \
   rtl/h264_intra_pred.v \
+  rtl/h264_inverse_quant8x8.v \
   rtl/h264_inverse_quant.v \
+  rtl/h264_inverse_transform8x8.v \
   rtl/h264_inverse_transform.v \
   rtl/h264_luma_dc.v \
   rtl/h264_me.v \
+  rtl/h264_quantize8x8.v \
   rtl/h264_quantize.v \
   rtl/h264_reconstruct.v \
+  rtl/h264_transform8x8.v \
   rtl/h264_transform.v \
+  rtl/h264_zigzag8x8_cavlc.v \
+  rtl/h264_zigzag8x8.v \
   rtl/h264_zigzag.v
 
 hierarchy -check -top h264_encoder_top
