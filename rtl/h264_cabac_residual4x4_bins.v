@@ -76,17 +76,19 @@ module h264_cabac_residual4x4_bins #(
     function automatic [3:0] suffix_len_for;
         input [COEFF_W-1:0] value;
         reg [COEFF_W-1:0] tmp;
+        integer i;
         begin
             // Minimal unary-prefix + fixed binary suffix scaffold for
             // coeff_abs_level_minus1 values greater than 2. The first two bins
             // (greater-than-one and greater-than-two) are regular-context bins;
             // remaining payload is bypass. This is intentionally simple and
-            // deterministic for integration bring-up.
+            // deterministic for integration bring-up. Keep the length detector
+            // bounded/synthesis-friendly; do not use a data-dependent while loop.
             tmp = (value > {{(COEFF_W-2){1'b0}}, 2'd2}) ? (value - {{(COEFF_W-2){1'b0}}, 2'd3}) : {COEFF_W{1'b0}};
             suffix_len_for = 4'd0;
-            while (tmp != {COEFF_W{1'b0}}) begin
-                suffix_len_for = suffix_len_for + 4'd1;
-                tmp = tmp >> 1;
+            for (i = 0; i < COEFF_W; i = i + 1) begin
+                if (tmp[i])
+                    suffix_len_for = i[3:0] + 4'd1;
             end
         end
     endfunction
