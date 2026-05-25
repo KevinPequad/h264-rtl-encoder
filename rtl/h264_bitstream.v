@@ -1781,8 +1781,9 @@ module h264_bitstream #(
                                           (!mb_has_residual || ((cabac_cbp_luma != 4'd0) && (cabac_cbp_chroma == 2'd0))))) begin
                                         `ifndef SYNTHESIS
                                         $fatal(1,
-                                               "[CABAC_PSUBSET] Unsupported CABAC MB inter=%0d skip=%0d residual=%0d ref=%0d mvd=(%0d,%0d) refs=%0d",
+                                               "[CABAC_PSUBSET] Unsupported CABAC MB inter=%0d skip=%0d residual=%0d cbp_luma=%0d cbp_chroma=%0d ref=%0d mvd=(%0d,%0d) refs=%0d",
                                                is_inter_mb, is_skip_mb, mb_has_residual, mb_ref_idx_l0,
+                                               cabac_cbp_luma, cabac_cbp_chroma,
                                                $signed(mvd_x_l0), $signed(mvd_y_l0),
                                                slice_num_ref_idx_l0_active_minus1 + 2'd1);
                                         `endif

@@ -60,6 +60,11 @@ if ! grep -q '\[CABAC_PSUBSET\] Unsupported non-skip MB' "$LOG"; then
   tail -80 "$LOG"
   exit 1
 fi
+if ! grep -q 'cbp_luma=0 cbp_chroma=2' "$LOG"; then
+  echo "[FAIL] chroma residual RED did not prove a chroma-only CABAC residual CBP guard"
+  tail -80 "$LOG"
+  exit 1
+fi
 
 echo "[PASS] RED: integrated CABAC P16x16 chroma residual is still blocked by CABAC_PSUBSET guard"
 echo "[INFO] Next GREEN step: add CABAC chroma residual DC/AC coefficient-bin emission and strict FFmpeg decode."

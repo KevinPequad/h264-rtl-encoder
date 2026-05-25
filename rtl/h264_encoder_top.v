@@ -3977,9 +3977,10 @@ pred_buf = {(256*BD){1'b0}};
                     if (cabac_slice_enable_w && !is_skip_mb_reg && !cabac_non_skip_subset_ok_w) begin
                         `ifndef SYNTHESIS
                         $fatal(1,
-                               "[CABAC_PSUBSET] Unsupported non-skip MB at frame_num=%0d mb=(%0d,%0d) inter=%0d residual=%0d skip=%0d pskip_eligible=%0d bskip_eligible=%0d ref=%0d mv=(%0d,%0d) mvd=(%0d,%0d) fullpel_mv=(%0d,%0d) refs=%0d",
+                               "[CABAC_PSUBSET] Unsupported non-skip MB at frame_num=%0d mb=(%0d,%0d) inter=%0d residual=%0d skip=%0d cbp_luma=%0d cbp_chroma=%0d pskip_eligible=%0d bskip_eligible=%0d ref=%0d mv=(%0d,%0d) mvd=(%0d,%0d) fullpel_mv=(%0d,%0d) refs=%0d",
                                cur_frame_num, mb_x, mb_y,
                                is_inter_mb_reg, mb_has_residual, is_skip_mb_reg,
+                               mb_cbp_luma_w, i16_cbp_chroma,
                                pskip_syntax_eligible_reg, bskip_syntax_eligible_reg,
                                mb_ref_idx_reg, me_best_mvx_l0, me_best_mvy_l0,
                                $signed(mvd_x_l0_w), $signed(mvd_y_l0_w),
