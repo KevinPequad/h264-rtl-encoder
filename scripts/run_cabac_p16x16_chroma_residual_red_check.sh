@@ -5,6 +5,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 export PATH=/home/chudpc/.local/verilator-5.020/bin:$PATH
 
+python3 scripts/audit_cabac_chroma_residual_scaffold.py
+
 INPUT="data/smoke_16x16_2f_cabac_p16x16_chroma_residual.yuv"
 python3 - <<'PY'
 from pathlib import Path

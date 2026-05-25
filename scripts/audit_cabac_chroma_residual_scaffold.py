@@ -1,0 +1,112 @@
+#!/usr/bin/env python3
+"""Audit the integrated CABAC chroma-residual bring-up scaffold.
+
+The chroma-residual RED gate intentionally still fails before strict decode, but
+it should only be blocked by the explicit subset guard.  This audit keeps the
+pieces needed for the next GREEN step from regressing: top-level chroma DC/AC
+scan capture, full 2-bit chroma CBP handoff, category-specific CABAC residual
+context bases, and chroma DC/AC context-state dispatch in the bitstream writer.
+"""
+
+from __future__ import annotations
+
+import argparse
+import re
+from pathlib import Path
+
+
+CHECKS: tuple[tuple[str, str, str], ...] = (
+    (
+        "top_preserves_2bit_chroma_cbp",
+        "rtl/h264_encoder_top.v",
+        r"\.cabac_cbp_chroma\(\s*i16_cbp_chroma\s*\)",
+    ),
+    (
+        "top_exports_chroma_dc_scan",
+        "rtl/h264_encoder_top.v",
+        r"cabac_chroma_dc_scan_flat_w\s*=\s*\{\s*cabac_chroma_dc_scan_buf\[1\],\s*cabac_chroma_dc_scan_buf\[0\]",
+    ),
+    (
+        "top_exports_chroma_ac_scan",
+        "rtl/h264_encoder_top.v",
+        r"cabac_chroma_ac_scan_flat_w\s*=\s*\{\s*cabac_chroma_ac_scan_buf\[31\].*cabac_chroma_ac_scan_buf\[0\]",
+    ),
+    (
+        "top_chroma_residual_guard_still_explicit",
+        "rtl/h264_encoder_top.v",
+        r"CABAC_PSUBSET\] Unsupported non-skip MB.*cbp_luma=%0d cbp_chroma=%0d",
+    ),
+    (
+        "bitstream_has_chroma_dc_category",
+        "rtl/h264_bitstream.v",
+        r"CABAC_RES_CAT_CHROMA_DC\s*=\s*2'd1",
+    ),
+    (
+        "bitstream_has_chroma_ac_category",
+        "rtl/h264_bitstream.v",
+        r"CABAC_RES_CAT_CHROMA_AC\s*=\s*2'd2",
+    ),
+    (
+        "bitstream_selects_chroma_dc_scan",
+        "rtl/h264_bitstream.v",
+        r"CABAC_RES_CAT_CHROMA_DC:\s*cabac_res_coeff_at\s*=\s*cabac_chroma_dc_coeff_at",
+    ),
+    (
+        "bitstream_selects_chroma_ac_scan",
+        "rtl/h264_bitstream.v",
+        r"CABAC_RES_CAT_CHROMA_AC:\s*cabac_res_coeff_at\s*=\s*cabac_chroma_ac_coeff_at",
+    ),
+    (
+        "bitstream_chroma_dc_context_bases",
+        "rtl/h264_bitstream.v",
+        r"CABAC_RES_CAT_CHROMA_DC:\s*cabac_res_ctx_cbf_base_for\s*=\s*9'd97.*CABAC_RES_CAT_CHROMA_DC:\s*cabac_res_ctx_sig_base_for\s*=\s*9'd149.*CABAC_RES_CAT_CHROMA_DC:\s*cabac_res_ctx_last_base_for\s*=\s*9'd210.*CABAC_RES_CAT_CHROMA_DC:\s*cabac_res_ctx_level_gt1_for\s*=\s*9'd257.*CABAC_RES_CAT_CHROMA_DC:\s*cabac_res_ctx_level_gt2_for\s*=\s*9'd262",
+    ),
+    (
+        "bitstream_chroma_ac_context_bases",
+        "rtl/h264_bitstream.v",
+        r"CABAC_RES_CAT_CHROMA_AC:\s*cabac_res_ctx_cbf_base_for\s*=\s*9'd101.*CABAC_RES_CAT_CHROMA_AC:\s*cabac_res_ctx_sig_base_for\s*=\s*9'd152.*CABAC_RES_CAT_CHROMA_AC:\s*cabac_res_ctx_last_base_for\s*=\s*9'd213.*CABAC_RES_CAT_CHROMA_AC:\s*cabac_res_ctx_level_gt1_for\s*=\s*9'd266.*CABAC_RES_CAT_CHROMA_AC:\s*cabac_res_ctx_level_gt2_for\s*=\s*9'd277",
+    ),
+    (
+        "bitstream_dispatches_chroma_dc_context_state",
+        "rtl/h264_bitstream.v",
+        r"cabac_res_category\s*==\s*CABAC_RES_CAT_CHROMA_DC(?=.*?CABAC_CTX_RES_CHRDC_CBF)(?=.*?CABAC_CTX_RES_CHRDC_SIG)(?=.*?CABAC_CTX_RES_CHRDC_LAST)(?=.*?CABAC_CTX_RES_CHRDC_LEVEL).*?end else if \(cabac_res_category\s*==\s*CABAC_RES_CAT_CHROMA_AC",
+    ),
+    (
+        "bitstream_dispatches_chroma_ac_context_state",
+        "rtl/h264_bitstream.v",
+        r"cabac_res_category\s*==\s*CABAC_RES_CAT_CHROMA_AC(?=.*?CABAC_CTX_RES_CHRAC_CBF)(?=.*?CABAC_CTX_RES_CHRAC_SIG)(?=.*?CABAC_CTX_RES_CHRAC_LAST)(?=.*?CABAC_CTX_RES_CHRAC_LEVEL).*?end else begin",
+    ),
+)
+
+
+def repo_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo-root", type=Path, default=repo_root())
+    args = parser.parse_args()
+
+    root = args.repo_root.resolve()
+    failures: list[str] = []
+    for name, rel_path, pattern in CHECKS:
+        path = root / rel_path
+        text = path.read_text(encoding="utf-8")
+        if not re.search(pattern, text, flags=re.S):
+            failures.append(f"{name}: missing {rel_path} / {pattern}")
+        else:
+            print(f"[PASS] {name}")
+
+    if failures:
+        print("[FAIL] CABAC chroma residual scaffold audit failed:")
+        for failure in failures:
+            print(f"  - {failure}")
+        return 1
+
+    print("[PASS] CABAC chroma residual scaffold preserves CBP, scan, context-base, and state-dispatch wiring")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

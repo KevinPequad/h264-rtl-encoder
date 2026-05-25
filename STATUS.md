@@ -106,8 +106,9 @@ transform/profile/color closure, and the final long-run target.
 | `scripts/run_cabac_residual4x4_scan_check.sh` | Standalone Verilator check for the CABAC residual 4x4 scan-event helper |
 | `scripts/run_cabac_residual4x4_bins_check.sh` | Standalone Verilator check for CABAC residual 4x4 bin/context emission scaffold, including chroma DC/AC zero and nonzero CBF context overrides |
 | `scripts/run_cabac_p16x16_residual_green_check.sh` | GREEN gate proving integrated CABAC P16x16 luma-only nonzero residual strict-decodes with FFmpeg |
-| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | RED gate showing integrated CABAC P16x16 chroma residual remains guarded pending chroma DC/AC coefficient syntax |
+| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | RED gate showing integrated CABAC P16x16 chroma residual remains guarded pending chroma DC/AC coefficient syntax; also runs the chroma residual scaffold audit |
 | `scripts/run_cabac_p16x16_residual_red_check.sh` | Legacy alias for the promoted luma residual GREEN gate |
+| `scripts/audit_cabac_chroma_residual_scaffold.py` | Static audit that locks the CABAC chroma residual CBP, scan-buffer, context-base, and context-state dispatch scaffold while the integrated lane remains RED |
 | `scripts/audit_no_testbench_repair.py` | Static audit that proves RTL bitstream ownership is retained in the TB and helper repair hooks are absent |
 | `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for the CABAC `P_L0_16x16` zero-CBP subset |
 | `docker/Dockerfile` | Containerized smoke-run environment |
