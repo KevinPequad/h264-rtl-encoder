@@ -239,6 +239,36 @@ int main(int argc, char** argv) {
         {0, 1, 0},
     }, "chroma_dc_coeff3_context_clamp");
 
+    auto chroma_dc_coeff7_clamp = run_events(dut, {
+        {0, 1, 0, 0, 0},
+        {1, 0, 0, 0, 0},
+        {1, 0, 1, 0, 0},
+        {1, 0, 2, 0, 0},
+        {1, 0, 3, 0, 0},
+        {1, 0, 4, 0, 0},
+        {1, 0, 5, 0, 0},
+        {1, 0, 6, 0, 0},
+        {1, 1, 7, 0, 0},
+        {2, 1, 7, 0, 0},
+        {3, 1, 7, 2, 0},
+        {4, 0, 7, 2, 0},
+    });
+    expect_eq(chroma_dc_coeff7_clamp, {
+        {1, 0, 97},
+        {0, 0, 149},
+        {0, 0, 150},
+        {0, 0, 151},
+        {0, 0, 151},
+        {0, 0, 151},
+        {0, 0, 151},
+        {0, 0, 151},
+        {1, 0, 151},
+        {1, 0, 212},
+        {1, 0, 257},
+        {0, 0, 262},
+        {0, 1, 0},
+    }, "chroma_dc_coeff7_422_context_clamp");
+
     dut->ctx_cbf_base = 101;
     dut->ctx_sig_base = 152;
     dut->ctx_last_base = 213;
@@ -304,7 +334,7 @@ int main(int argc, char** argv) {
         {1, 1, 0},
     }, "chroma_ac_multi_bit_suffix_payload");
 
-    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma, chroma-DC zero/nonzero/clamped-tail, chroma-AC zero/nonzero, multi-bit suffix, and output backpressure category blocks\n";
+    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma, 4:2:0/4:2:2 chroma-DC zero/nonzero/clamped-tail, chroma-AC zero/nonzero, multi-bit suffix, and output backpressure category blocks\n";
     delete dut;
     return 0;
 }
