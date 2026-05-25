@@ -175,7 +175,46 @@ int main(int argc, char** argv) {
         {0, 1, 0},
     }, "chroma_dc_context_override");
 
-    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma and chroma-category blocks\n";
+    dut->ctx_cbf_base = 101;
+    dut->ctx_sig_base = 152;
+    dut->ctx_last_base = 213;
+    dut->ctx_level_gt1 = 266;
+    dut->ctx_level_gt2 = 277;
+    dut->ctx_sig_last_max = 14;
+    tick(dut);
+    auto chroma_ac = run_events(dut, {
+        {0, 1, 0, 0, 0},
+        {1, 1, 0, 0, 0},
+        {2, 0, 0, 0, 0},
+        {1, 0, 1, 0, 0},
+        {1, 0, 2, 0, 0},
+        {1, 0, 3, 0, 0},
+        {1, 1, 4, 0, 0},
+        {2, 1, 4, 0, 0},
+        {3, 1, 4, 4, 1},
+        {4, 1, 4, 4, 1},
+        {3, 1, 0, 1, 0},
+        {4, 0, 0, 1, 0},
+    });
+    expect_eq(chroma_ac, {
+        {1, 0, 101},
+        {1, 0, 152},
+        {0, 0, 213},
+        {0, 0, 153},
+        {0, 0, 154},
+        {0, 0, 155},
+        {1, 0, 156},
+        {1, 0, 217},
+        {1, 0, 266},
+        {1, 0, 277},
+        {1, 1, 0},
+        {1, 1, 0},
+        {0, 0, 266},
+        {0, 0, 277},
+        {0, 1, 0},
+    }, "chroma_ac_context_override");
+
+    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma, chroma-DC, and chroma-AC category blocks\n";
     delete dut;
     return 0;
 }
