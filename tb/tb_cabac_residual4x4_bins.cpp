@@ -125,6 +125,62 @@ static void check_bin_ready_backpressure(Vh264_cabac_residual4x4_bins* dut) {
     expect_int(static_cast<int>(dut->event_ready), 1, "backpressure.event_ready_released");
 }
 
+static void expect_bin_outputs(Vh264_cabac_residual4x4_bins* dut, int value, int bypass, int ctx, const std::string& name) {
+    expect_int(static_cast<int>(dut->bin_valid), 1, name + ".bin_valid");
+    expect_int(static_cast<int>(dut->bin_value), value, name + ".bin_value");
+    expect_int(static_cast<int>(dut->bin_bypass), bypass, name + ".bin_bypass");
+    expect_int(static_cast<int>(dut->bin_ctx_idx), ctx, name + ".bin_ctx");
+}
+
+static void check_level_suffix_backpressure(Vh264_cabac_residual4x4_bins* dut) {
+    dut->bin_ready = 1;
+    dut->event_kind = 3;
+    dut->event_value = 1;
+    dut->event_coeff_idx = 0;
+    dut->event_level_abs = 10;
+    dut->event_level_sign = 0;
+    dut->event_valid = 1;
+    tick(dut);
+    dut->event_valid = 0;
+    expect_bin_outputs(dut, 1, 0, 227, "suffix_backpressure.gt1");
+
+    dut->bin_ready = 0;
+    for (int held = 0; held < 3; ++held) {
+        tick(dut);
+        expect_bin_outputs(dut, 1, 0, 227, "suffix_backpressure.gt1_held");
+        expect_int(static_cast<int>(dut->event_ready), 0, "suffix_backpressure.gt1_event_ready_blocked");
+    }
+
+    dut->bin_ready = 1;
+    tick(dut);
+    expect_bin_outputs(dut, 1, 0, 232, "suffix_backpressure.gt2");
+
+    dut->bin_ready = 0;
+    for (int held = 0; held < 2; ++held) {
+        tick(dut);
+        expect_bin_outputs(dut, 1, 0, 232, "suffix_backpressure.gt2_held");
+        expect_int(static_cast<int>(dut->event_ready), 0, "suffix_backpressure.gt2_event_ready_blocked");
+    }
+
+    dut->bin_ready = 1;
+    tick(dut);
+    expect_bin_outputs(dut, 1, 1, 0, "suffix_backpressure.suffix0");
+
+    dut->bin_ready = 0;
+    tick(dut);
+    expect_bin_outputs(dut, 1, 1, 0, "suffix_backpressure.suffix0_held");
+    expect_int(static_cast<int>(dut->event_ready), 0, "suffix_backpressure.suffix0_event_ready_blocked");
+
+    dut->bin_ready = 1;
+    tick(dut);
+    expect_bin_outputs(dut, 1, 1, 0, "suffix_backpressure.suffix1");
+    tick(dut);
+    expect_bin_outputs(dut, 1, 1, 0, "suffix_backpressure.suffix2");
+    tick(dut);
+    expect_int(static_cast<int>(dut->bin_valid), 0, "suffix_backpressure.drained_bin_valid");
+    expect_int(static_cast<int>(dut->event_ready), 1, "suffix_backpressure.drained_event_ready");
+}
+
 int main(int argc, char** argv) {
     Verilated::commandArgs(argc, argv);
     Vh264_cabac_residual4x4_bins* dut = new Vh264_cabac_residual4x4_bins;
@@ -144,6 +200,7 @@ int main(int argc, char** argv) {
     tick(dut);
 
     check_bin_ready_backpressure(dut);
+    check_level_suffix_backpressure(dut);
 
     auto zero = run_events(dut, {
         {0, 0, 0, 0, 0},
