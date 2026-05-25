@@ -77,6 +77,13 @@ static std::vector<Bin> run_events(Vh264_cabac_residual4x4_bins* dut, const std:
     std::exit(1);
 }
 
+static void expect_int(int got, int want, const std::string& name) {
+    if (got != want) {
+        std::cerr << name << ": got=" << got << " want=" << want << "\n";
+        std::exit(1);
+    }
+}
+
 static void expect_eq(const std::vector<Bin>& got, const std::vector<Bin>& want, const std::string& name) {
     if (got.size() != want.size()) {
         std::cerr << name << ": bin count mismatch got=" << got.size() << " want=" << want.size() << "\n";
@@ -90,6 +97,32 @@ static void expect_eq(const std::vector<Bin>& got, const std::vector<Bin>& want,
             std::exit(1);
         }
     }
+}
+
+static void check_bin_ready_backpressure(Vh264_cabac_residual4x4_bins* dut) {
+    dut->bin_ready = 0;
+    dut->event_kind = 0;
+    dut->event_value = 1;
+    dut->event_coeff_idx = 0;
+    dut->event_level_abs = 0;
+    dut->event_level_sign = 0;
+    dut->event_valid = 1;
+    tick(dut);
+    dut->event_valid = 0;
+
+    for (int held = 0; held < 4; ++held) {
+        expect_int(static_cast<int>(dut->bin_valid), 1, "backpressure.bin_valid_held");
+        expect_int(static_cast<int>(dut->bin_value), 1, "backpressure.bin_value_held");
+        expect_int(static_cast<int>(dut->bin_bypass), 0, "backpressure.bin_bypass_held");
+        expect_int(static_cast<int>(dut->bin_ctx_idx), 85, "backpressure.bin_ctx_held");
+        expect_int(static_cast<int>(dut->event_ready), 0, "backpressure.event_ready_blocked");
+        tick(dut);
+    }
+
+    dut->bin_ready = 1;
+    tick(dut);
+    expect_int(static_cast<int>(dut->bin_valid), 0, "backpressure.bin_valid_released");
+    expect_int(static_cast<int>(dut->event_ready), 1, "backpressure.event_ready_released");
 }
 
 int main(int argc, char** argv) {
@@ -109,6 +142,8 @@ int main(int argc, char** argv) {
     for (int i = 0; i < 4; ++i) tick(dut);
     dut->rst_n = 1;
     tick(dut);
+
+    check_bin_ready_backpressure(dut);
 
     auto zero = run_events(dut, {
         {0, 0, 0, 0, 0},
@@ -247,7 +282,7 @@ int main(int argc, char** argv) {
         {1, 1, 0},
     }, "chroma_ac_multi_bit_suffix_payload");
 
-    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma, chroma-DC zero/nonzero, chroma-AC zero/nonzero, and multi-bit suffix category blocks\n";
+    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma, chroma-DC zero/nonzero, chroma-AC zero/nonzero, multi-bit suffix, and output backpressure category blocks\n";
     delete dut;
     return 0;
 }
