@@ -48,6 +48,16 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"cabac_bin_value\s*<=\s*\(\s*cabac_cbp_chroma\s*!=\s*2'd0\s*\)",
     ),
     (
+        "bitstream_emits_chroma_cbp_ac_bin",
+        "rtl/h264_bitstream.v",
+        r"cabac_cbp_chroma\s*!=\s*2'd0.*?cabac_cbp_chroma_ctx_state\[1\].*?cabac_pending_ctx_sel\s*<=\s*4'd1.*?cabac_bin_value\s*<=\s*\(\s*cabac_cbp_chroma\s*==\s*2'd2\s*\)",
+    ),
+    (
+        "bitstream_preserves_chroma_cbp_ctx1_state",
+        "rtl/h264_bitstream.v",
+        r"CABAC_CTX_CBPCHROMA:\s*cabac_cbp_chroma_ctx_state\[cabac_pending_ctx_sel\[2:0\]\]\s*<=\s*cabac_ctx_state_out.*?cabac_cbp_chroma_ctx_state\[1\]\s*<=\s*cabac_init_state\(-20,\s*94,\s*26\)",
+    ),
+    (
         "bitstream_has_chroma_dc_category",
         "rtl/h264_bitstream.v",
         r"CABAC_RES_CAT_CHROMA_DC\s*=\s*2'd1",

@@ -987,7 +987,7 @@ module h264_bitstream #(
                         endcase
                     end
                     CABAC_CTX_CBP3: cabac_cbp_luma_ctx_state_76 <= cabac_ctx_state_out;
-                    CABAC_CTX_CBPCHROMA: cabac_cbp_chroma_ctx_state[0] <= cabac_ctx_state_out;
+                    CABAC_CTX_CBPCHROMA: cabac_cbp_chroma_ctx_state[cabac_pending_ctx_sel[2:0]] <= cabac_ctx_state_out;
                     CABAC_CTX_QPDELTA: cabac_qp_delta_ctx_state_60 <= cabac_ctx_state_out;
                     CABAC_CTX_RES_CBF: cabac_res_cbf_ctx_state[cabac_pending_ctx_sel[1:0]] <= cabac_ctx_state_out;
                     CABAC_CTX_RES_SIG: cabac_res_sig_ctx_state[cabac_pending_ctx_sel] <= cabac_ctx_state_out;
@@ -1577,6 +1577,7 @@ module h264_bitstream #(
                                     cabac_cbp_luma_ctx_state_75 <= cabac_init_state(-25, 101, 26);
                                     cabac_cbp_luma_ctx_state_76 <= cabac_init_state(-23, 67, 26);
                                     cabac_cbp_chroma_ctx_state[0] <= cabac_init_state(-28, 82, 26);
+                                    cabac_cbp_chroma_ctx_state[1] <= cabac_init_state(-20, 94, 26);
                                     cabac_qp_delta_ctx_state_60 <= cabac_init_state(0, 41, 26);
                                     cabac_res_cbf_ctx_state[0] <= cabac_init_state(-7, 92, 26);
                                     cabac_res_cbf_ctx_state[1] <= cabac_init_state(-5, 89, 26);
@@ -2240,7 +2241,19 @@ module h264_bitstream #(
                                     state <= S_EMIT;
                                     return_state <= S_MB_HDR;
                                 end
-                                if (mb_has_residual && ((cabac_cbp_luma != 4'd0) || cabac_cbp_chroma)) begin
+                                if (cabac_cbp_chroma != 2'd0) begin
+                                    cabac_ctx_state_in <= cabac_cbp_chroma_ctx_state[1];
+                                    cabac_pending_ctx_kind <= CABAC_CTX_CBPCHROMA;
+                                    cabac_pending_ctx_sel <= 4'd1;
+                                    cabac_bin_valid <= 1'b1;
+                                    // The second chroma coded_block_pattern bin is only
+                                    // present when chroma DC is coded; it distinguishes
+                                    // DC-only (cbp_chroma=1) from DC+AC (cbp_chroma=2).
+                                    cabac_bin_value <= (cabac_cbp_chroma == 2'd2);
+                                    cabac_bin_bypass <= 1'b0;
+                                    cabac_bin_terminate <= 1'b0;
+                                    sub <= 7'd64;
+                                end else if (mb_has_residual && (cabac_cbp_luma != 4'd0)) begin
                                     cabac_ctx_state_in <= cabac_qp_delta_ctx_state_60;
                                     cabac_pending_ctx_kind <= CABAC_CTX_QPDELTA;
                                     cabac_pending_ctx_sel <= 2'd0;
@@ -2254,6 +2267,35 @@ module h264_bitstream #(
                                     sub <= 6'd46;
                                 end
 
+                            end
+                            7'd64: begin
+                                if (DEBUG_CABAC_P16X16)
+                                    $display("[CABACDBG] mb=%0d sub=64 cbpchroma_ac state=%0d",
+                                             cabac_mb_counter, cabac_ctx_state_in);
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC cbp_chroma_ac bit overflow");
+                                    `endif
+                                    end
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                if (mb_has_residual) begin
+                                    cabac_ctx_state_in <= cabac_qp_delta_ctx_state_60;
+                                    cabac_pending_ctx_kind <= CABAC_CTX_QPDELTA;
+                                    cabac_pending_ctx_sel <= 2'd0;
+                                    cabac_bin_valid <= 1'b1;
+                                    cabac_bin_value <= 1'b0;
+                                    cabac_bin_bypass <= 1'b0;
+                                    cabac_bin_terminate <= 1'b0;
+                                    sub <= 6'd63;
+                                end else begin
+                                    cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                    sub <= 6'd46;
+                                end
                             end
                             6'd46: begin
                                 cmd_done <= 1'b1;
