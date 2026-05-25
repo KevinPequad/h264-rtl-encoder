@@ -720,6 +720,17 @@ module h264_bitstream #(
         end
     endfunction
 
+    function automatic [3:0] cabac_res_last_block_for;
+        input [1:0] category_i;
+        begin
+            case (category_i)
+                CABAC_RES_CAT_CHROMA_DC: cabac_res_last_block_for = 4'd1;
+                CABAC_RES_CAT_CHROMA_AC: cabac_res_last_block_for = CABAC_CHROMA_AC_TOTAL_MINUS1;
+                default:                 cabac_res_last_block_for = 4'd15;
+            endcase
+        end
+    endfunction
+
     function automatic [1:0] cabac_res_cbf_ctx_sel_for;
         input [3:0] block_i;
         reg left_coded_i;
@@ -2255,6 +2266,7 @@ module h264_bitstream #(
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                 end
                                 cabac_res_block_idx <= 4'd0;
+                                cabac_res_category <= CABAC_RES_CAT_LUMA;
                                 cabac_res_scan_done_pending <= 1'b0;
                                 cabac_res_scan_start <= 1'b1;
                                 state <= S_CABAC_RES;
@@ -2712,11 +2724,25 @@ module h264_bitstream #(
                         if (cabac_res_scan_done)
                             cabac_res_scan_done_pending <= 1'b1;
                         if (cabac_res_scan_done_pending && !cabac_res_bin_valid) begin
-                            if (cabac_res_block_idx == 4'd15) begin
-                                cabac_mb_counter <= cabac_mb_counter + 12'd1;
-                                cabac_res_scan_done_pending <= 1'b0;
-                                sub <= 6'd46;
-                                state <= S_MB_HDR;
+                            if (cabac_res_block_idx == cabac_res_last_block_for(cabac_res_category)) begin
+                                if ((cabac_res_category == CABAC_RES_CAT_LUMA) && (cabac_cbp_chroma != 2'd0)) begin
+                                    cabac_res_category <= CABAC_RES_CAT_CHROMA_DC;
+                                    cabac_res_block_idx <= 4'd0;
+                                    cabac_res_scan_done_pending <= 1'b0;
+                                    sub <= 6'd0;
+                                    cabac_res_scan_start <= 1'b1;
+                                end else if ((cabac_res_category == CABAC_RES_CAT_CHROMA_DC) && (cabac_cbp_chroma == 2'd2)) begin
+                                    cabac_res_category <= CABAC_RES_CAT_CHROMA_AC;
+                                    cabac_res_block_idx <= 4'd0;
+                                    cabac_res_scan_done_pending <= 1'b0;
+                                    sub <= 6'd0;
+                                    cabac_res_scan_start <= 1'b1;
+                                end else begin
+                                    cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                    cabac_res_scan_done_pending <= 1'b0;
+                                    sub <= 6'd46;
+                                    state <= S_MB_HDR;
+                                end
                             end else begin
                                 cabac_res_block_idx <= cabac_res_block_idx + 4'd1;
                                 cabac_res_scan_done_pending <= 1'b0;

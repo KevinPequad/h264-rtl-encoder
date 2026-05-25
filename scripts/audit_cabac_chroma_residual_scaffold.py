@@ -5,7 +5,8 @@ The chroma-residual RED gate intentionally still fails before strict decode, but
 it should only be blocked by the explicit subset guard.  This audit keeps the
 pieces needed for the next GREEN step from regressing: top-level chroma DC/AC
 scan capture, full 2-bit chroma CBP handoff, category-specific CABAC residual
-context bases, and chroma DC/AC context-state dispatch in the bitstream writer.
+context bases, chroma DC/AC context-state dispatch, and the guarded residual
+FSM's luma -> chroma-DC -> chroma-AC category scheduler in the bitstream writer.
 """
 
 from __future__ import annotations
@@ -75,6 +76,21 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         "bitstream_dispatches_chroma_ac_context_state",
         "rtl/h264_bitstream.v",
         r"cabac_res_category\s*==\s*CABAC_RES_CAT_CHROMA_AC(?=.*?CABAC_CTX_RES_CHRAC_CBF)(?=.*?CABAC_CTX_RES_CHRAC_SIG)(?=.*?CABAC_CTX_RES_CHRAC_LAST)(?=.*?CABAC_CTX_RES_CHRAC_LEVEL).*?end else begin",
+    ),
+    (
+        "bitstream_bounds_chroma_residual_categories",
+        "rtl/h264_bitstream.v",
+        r"function automatic \[3:0\] cabac_res_last_block_for.*?CABAC_RES_CAT_CHROMA_DC:\s*cabac_res_last_block_for\s*=\s*4'd1.*?CABAC_RES_CAT_CHROMA_AC:\s*cabac_res_last_block_for\s*=\s*CABAC_CHROMA_AC_TOTAL_MINUS1.*?default:\s*cabac_res_last_block_for\s*=\s*4'd15",
+    ),
+    (
+        "bitstream_schedules_chroma_dc_after_luma",
+        "rtl/h264_bitstream.v",
+        r"cabac_res_block_idx\s*==\s*cabac_res_last_block_for\(cabac_res_category\).*?cabac_res_category\s*==\s*CABAC_RES_CAT_LUMA.*?cabac_cbp_chroma\s*!=\s*2'd0.*?cabac_res_category\s*<=\s*CABAC_RES_CAT_CHROMA_DC",
+    ),
+    (
+        "bitstream_schedules_chroma_ac_after_dc",
+        "rtl/h264_bitstream.v",
+        r"cabac_res_category\s*==\s*CABAC_RES_CAT_CHROMA_DC.*?cabac_cbp_chroma\s*==\s*2'd2.*?cabac_res_category\s*<=\s*CABAC_RES_CAT_CHROMA_AC",
     ),
 )
 
