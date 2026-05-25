@@ -41,7 +41,7 @@ Current state:
   commit `dc1d47094238f8ad973cdfb5738abd4f0d2ea951` with the standalone oracle,
   public-decoder checks, and a two-frame reference-bank-consumption proof
 - CABAC `P_L0_16x16` integration currently covers the strict zero-MVD/single-ref zero-CBP lane and a focused luma-only residual lane; chroma residual is intentionally RED/guarded while its DC/AC coefficient syntax is being wired
-- the standalone CABAC residual scan-event helper and bin/context helper exist; the scan helper now has explicit luma, bounded chroma-DC, and bounded chroma-AC event coverage, the bin/context helper supports category-specific chroma DC/AC context bases, and encoder-top now buffers chroma DC/AC scan vectors and preserves the 2-bit chroma CBP value for the upcoming bitstream FSM integration
+- the standalone CABAC residual scan-event helper and bin/context helper exist; the scan helper now has explicit luma, bounded chroma-DC, and bounded chroma-AC event coverage, the bin/context helper supports category-specific chroma DC/AC context bases, and encoder-top now buffers chroma DC/AC scan vectors while preserving the `cbp_chroma=1` DC-only vs `cbp_chroma=2` DC+AC distinction for the upcoming bitstream FSM integration
 - the repository is still not complete as a full H.264 standard encoder
 
 Completion is still blocked by major missing features including full CABAC
@@ -106,7 +106,7 @@ transform/profile/color closure, and the final long-run target.
 | `scripts/run_cabac_residual4x4_scan_check.sh` | Standalone Verilator check for the CABAC residual 4x4 scan-event helper |
 | `scripts/run_cabac_residual4x4_bins_check.sh` | Standalone Verilator check for CABAC residual 4x4 bin/context emission scaffold, including chroma DC/AC zero and nonzero CBF context overrides |
 | `scripts/run_cabac_p16x16_residual_green_check.sh` | GREEN gate proving integrated CABAC P16x16 luma-only nonzero residual strict-decodes with FFmpeg |
-| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | RED gate showing integrated CABAC P16x16 chroma residual remains guarded pending chroma DC/AC coefficient syntax; also runs the chroma residual scaffold audit |
+| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | RED gate showing integrated CABAC P16x16 chroma DC-only and DC+AC residuals remain guarded pending chroma coefficient syntax; also runs the chroma residual scaffold audit |
 | `scripts/run_cabac_p16x16_residual_red_check.sh` | Legacy alias for the promoted luma residual GREEN gate |
 | `scripts/audit_cabac_chroma_residual_scaffold.py` | Static audit that locks the CABAC chroma residual CBP, scan-buffer, context-base, and context-state dispatch scaffold while the integrated lane remains RED |
 | `scripts/audit_no_testbench_repair.py` | Static audit that proves RTL bitstream ownership is retained in the TB and helper repair hooks are absent |

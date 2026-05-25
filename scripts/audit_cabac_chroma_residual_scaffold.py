@@ -38,6 +38,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"CABAC_PSUBSET\] Unsupported non-skip MB.*cbp_luma=%0d cbp_chroma=%0d",
     ),
     (
+        "top_preserves_chroma_dc_only_cbp",
+        "rtl/h264_encoder_top.v",
+        r"i16_chroma_ac_nonzero\s*\|\|\s*\(total_coeffs\s*!=\s*5'd0\).*?i16_cbp_chroma\s*<=\s*2'd2.*?else if \(i16_chroma_dc_nonzero\).*?i16_cbp_chroma\s*<=\s*2'd1",
+    ),
+    (
         "bitstream_has_chroma_dc_category",
         "rtl/h264_bitstream.v",
         r"CABAC_RES_CAT_CHROMA_DC\s*=\s*2'd1",

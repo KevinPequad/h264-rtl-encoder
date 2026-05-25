@@ -5077,8 +5077,10 @@ pred_buf = {(256*BD){1'b0}};
                                                     if (nz_coeff[nz_i] != 5'd0)
                                                         mb_nonzero_i = 1'b1;
                                                 end
-                                                if (i16_chroma_dc_nonzero || i16_chroma_ac_nonzero)
+                                                if (i16_chroma_ac_nonzero || (total_coeffs != 5'd0))
                                                     i16_cbp_chroma <= 2'd2;
+                                                else if (i16_chroma_dc_nonzero)
+                                                    i16_cbp_chroma <= 2'd1;
                                                 mb_has_residual <= mb_nonzero_i;
                                                 if (!mb_nonzero_i) begin
                                                     is_skip_mb_reg <= cabac_zero_cbp_p16x16_eligible_w ? 1'b0 :
