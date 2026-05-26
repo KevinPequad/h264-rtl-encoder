@@ -100,10 +100,27 @@ run_case() {
     exit 1
   }
 
+  local raw_yuv
+  local expected_bytes
+  local actual_bytes
+  raw_yuv="$(mktemp "/tmp/h264_cabac_chroma_${name}_decode.XXXXXX.yuv")"
+  expected_bytes=$((16 * 16 * 3 / 2 * 2))
+  ffmpeg -y -v error -xerror -i "$h264" -f rawvideo -pix_fmt yuv420p "$raw_yuv" > /dev/null 2>&1 || {
+    echo "[FAIL] chroma residual ${name} failed raw FFmpeg frame extraction"
+    rm -f "$raw_yuv"
+    exit 1
+  }
+  actual_bytes="$(wc -c < "$raw_yuv")"
+  rm -f "$raw_yuv"
+  if [ "$actual_bytes" -ne "$expected_bytes" ]; then
+    echo "[FAIL] chroma residual ${name} decoded ${actual_bytes} bytes, expected ${expected_bytes} bytes for exactly two 16x16 yuv420p frames"
+    exit 1
+  fi
+
   if [ "$want_cbp_chroma" = "1" ]; then
-    echo "[PASS] CABAC P16x16 chroma DC-only residual strict-decoded"
+    echo "[PASS] CABAC P16x16 chroma DC-only residual strict-decoded with two decoded frames"
   else
-    echo "[PASS] CABAC P16x16 chroma DC+AC residual strict-decoded"
+    echo "[PASS] CABAC P16x16 chroma DC+AC residual strict-decoded with two decoded frames"
   fi
 }
 
