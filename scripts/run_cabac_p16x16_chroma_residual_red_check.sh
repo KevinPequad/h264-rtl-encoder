@@ -91,6 +91,16 @@ run_case() {
       tail -80 "$sim_log"
       exit 1
     fi
+    if [ "$name" = "cb_ac" ] && ! grep -q 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' "$sim_log"; then
+      echo "[FAIL] chroma residual ${name} did not mark the Cb-only CABAC chroma AC plane"
+      tail -80 "$sim_log"
+      exit 1
+    fi
+    if [ "$name" = "cr_ac" ] && ! grep -q 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' "$sim_log"; then
+      echo "[FAIL] chroma residual ${name} did not mark the Cr-only CABAC chroma AC plane"
+      tail -80 "$sim_log"
+      exit 1
+    fi
   fi
   if ! grep -Eq 'cavlc_suppressed_bits=[1-9][0-9]*' "$sim_log"; then
     echo "[FAIL] chroma residual ${name} did not suppress the legacy CAVLC payload"
@@ -100,6 +110,11 @@ run_case() {
 
   if ! ffmpeg -v error -xerror -i "$h264" -f null - > "$ffmpeg_log" 2>&1; then
     if [ "$expect_ffmpeg_fail" = "1" ]; then
+      if ! grep -q 'bytestream -29' "$ffmpeg_log"; then
+        echo "[FAIL] chroma residual ${name} expected the current Cr AC strict-decode miss signature"
+        tail -80 "$ffmpeg_log"
+        exit 1
+      fi
       echo "[PASS] chroma residual ${name} exercised CABAC chroma AC but remains isolated as an expected strict FFmpeg decode miss"
       tail -20 "$ffmpeg_log"
       return 0

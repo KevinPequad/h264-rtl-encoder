@@ -462,6 +462,8 @@ module h264_encoder_top #(
     reg [15:0] frame_cabac_chroma_mb_count;
     reg [15:0] frame_cabac_chroma_dc_mb_count;
     reg [15:0] frame_cabac_chroma_ac_mb_count;
+    reg [15:0] frame_cabac_chroma_cb_ac_mb_count;
+    reg [15:0] frame_cabac_chroma_cr_ac_mb_count;
     reg [31:0] frame_cabac_cavlc_suppressed_bits;
 
 
@@ -1991,6 +1993,8 @@ pred_buf = {(256*BD){1'b0}};
     reg       i16_luma_ac_nonzero;
     reg       i16_chroma_dc_nonzero;
     reg       i16_chroma_ac_nonzero;
+    reg       i16_chroma_cb_ac_nonzero;
+    reg       i16_chroma_cr_ac_nonzero;
     reg [1:0] i16_cbp_chroma;
     reg [4:0] left_mb_i16dc_nz;
     reg [4:0] top_mb_i16dc_nz [0:MB_COLS-1];
@@ -2350,7 +2354,7 @@ pred_buf = {(256*BD){1'b0}};
             intra_pred_bits_mb <= 64'd0;
             intra_pred_count_mb <= 7'd0;
             is_intra16_mb_hdr <= 1'b0; is_ipcm_mb_hdr <= 1'b0; intra_mb_type_code_num <= 6'd0;
-            i16_dc_total_coeff <= 5'd0; i16_luma_ac_nonzero <= 1'b0; i16_chroma_dc_nonzero <= 1'b0; i16_chroma_ac_nonzero <= 1'b0; i16_cbp_chroma <= 2'd0;
+            i16_dc_total_coeff <= 5'd0; i16_luma_ac_nonzero <= 1'b0; i16_chroma_dc_nonzero <= 1'b0; i16_chroma_ac_nonzero <= 1'b0; i16_chroma_cb_ac_nonzero <= 1'b0; i16_chroma_cr_ac_nonzero <= 1'b0; i16_cbp_chroma <= 2'd0;
             pskip_syntax_eligible_reg <= 1'b0;
             bskip_syntax_eligible_reg <= 1'b0;
             frame_skip_mb_count <= 16'd0;
@@ -2371,6 +2375,8 @@ pred_buf = {(256*BD){1'b0}};
             frame_cabac_chroma_mb_count <= 16'd0;
             frame_cabac_chroma_dc_mb_count <= 16'd0;
             frame_cabac_chroma_ac_mb_count <= 16'd0;
+            frame_cabac_chroma_cb_ac_mb_count <= 16'd0;
+            frame_cabac_chroma_cr_ac_mb_count <= 16'd0;
             frame_cabac_cavlc_suppressed_bits <= 32'd0;
 
             for (meta_bank_i = 0; meta_bank_i < 5; meta_bank_i = meta_bank_i + 1) begin
@@ -3626,6 +3632,8 @@ pred_buf = {(256*BD){1'b0}};
                         i16_luma_ac_nonzero <= 1'b0;
                         i16_chroma_dc_nonzero <= 1'b0;
                         i16_chroma_ac_nonzero <= 1'b0;
+                        i16_chroma_cb_ac_nonzero <= 1'b0;
+                        i16_chroma_cr_ac_nonzero <= 1'b0;
                         i16_cbp_chroma <= 2'd0;
                         bs_hold_fifo_drain <= 1'b0;
                         top_state <= TS_DEFER_MB_HDR;
@@ -3646,6 +3654,8 @@ pred_buf = {(256*BD){1'b0}};
                         i16_luma_ac_nonzero <= 1'b0;
                         i16_chroma_dc_nonzero <= 1'b0;
                         i16_chroma_ac_nonzero <= 1'b0;
+                        i16_chroma_cb_ac_nonzero <= 1'b0;
+                        i16_chroma_cr_ac_nonzero <= 1'b0;
                         i16_cbp_chroma <= 2'd0;
                         bs_hold_fifo_drain <= 1'b1;
                         top_state <= TS_ENCODE_SBLK;
@@ -4103,6 +4113,10 @@ pred_buf = {(256*BD){1'b0}};
                         frame_cabac_chroma_dc_mb_count <= frame_cabac_chroma_dc_mb_count + 16'd1;
                     if (cabac_non_skip_subset_ok_w && (i16_cbp_chroma == 2'd2))
                         frame_cabac_chroma_ac_mb_count <= frame_cabac_chroma_ac_mb_count + 16'd1;
+                    if (cabac_non_skip_subset_ok_w && i16_chroma_cb_ac_nonzero)
+                        frame_cabac_chroma_cb_ac_mb_count <= frame_cabac_chroma_cb_ac_mb_count + 16'd1;
+                    if (cabac_non_skip_subset_ok_w && i16_chroma_cr_ac_nonzero)
+                        frame_cabac_chroma_cr_ac_mb_count <= frame_cabac_chroma_cr_ac_mb_count + 16'd1;
 
                     top_is_skip[mb_x] <= is_skip_mb_reg;
                     left_is_skip <= is_skip_mb_reg;
@@ -4546,8 +4560,13 @@ pred_buf = {(256*BD){1'b0}};
                                         iq_done_latched <= 1'b1;
                                     if (zz_done) begin
                                         nz_coeff[chroma_sub_blk_from_idx(chr_is_cr, chr_blk)] <= total_coeffs;
-                                        if (total_coeffs != 5'd0)
+                                        if (total_coeffs != 5'd0) begin
                                             i16_chroma_ac_nonzero <= 1'b1;
+                                            if (chr_is_cr)
+                                                i16_chroma_cr_ac_nonzero <= 1'b1;
+                                            else
+                                                i16_chroma_cb_ac_nonzero <= 1'b1;
+                                        end
                                         blk_state <= BS_CAVLC;
                                         blk_started <= 1'b0;
                                     end
@@ -5047,8 +5066,13 @@ pred_buf = {(256*BD){1'b0}};
                                 BS_ZIGZAG: if (zz_done) begin
                                     cabac_chroma_ac_scan_buf[(chr_is_cr ? CHR_BLOCKS_PER_PLANE : 0) + chr_blk] <= scan_flat;
                                     nz_coeff[chroma_sub_blk_from_idx(chr_is_cr, chr_blk)] <= total_coeffs;
-                                    if (total_coeffs != 5'd0)
+                                    if (total_coeffs != 5'd0) begin
                                         i16_chroma_ac_nonzero <= 1'b1;
+                                        if (chr_is_cr)
+                                            i16_chroma_cr_ac_nonzero <= 1'b1;
+                                        else
+                                            i16_chroma_cb_ac_nonzero <= 1'b1;
+                                    end
                                     if (!bs_busy) begin
                                         cavlc_start <= 1'b1;
                                         blk_state <= BS_CAVLC;
@@ -5223,8 +5247,8 @@ pred_buf = {(256*BD){1'b0}};
                              done <= 1'b1;
                             $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d p_l0_refgt0_mbs=%0d p16x8_mbs=%0d p8x16_mbs=%0d p8x8_mbs=%0d p8x4_mbs=%0d p4x8_mbs=%0d p4x4_mbs=%0d",
                                      cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count, frame_p_l0_nonzero_ref_mb_count, frame_p16x8_mb_count, frame_p8x16_mb_count, frame_p8x8_mb_count, frame_p8x4_mb_count, frame_p4x8_mb_count, frame_p4x4_mb_count);
-                            $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d cabac_chroma_mbs=%0d cabac_chroma_dc_mbs=%0d cabac_chroma_ac_mbs=%0d cavlc_suppressed_bits=%0d",
-                                     cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count, frame_cabac_chroma_mb_count, frame_cabac_chroma_dc_mb_count, frame_cabac_chroma_ac_mb_count, frame_cabac_cavlc_suppressed_bits);
+                            $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d cabac_chroma_mbs=%0d cabac_chroma_dc_mbs=%0d cabac_chroma_ac_mbs=%0d cabac_chroma_cb_ac_mbs=%0d cabac_chroma_cr_ac_mbs=%0d cavlc_suppressed_bits=%0d",
+                                     cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count, frame_cabac_chroma_mb_count, frame_cabac_chroma_dc_mb_count, frame_cabac_chroma_ac_mb_count, frame_cabac_chroma_cb_ac_mb_count, frame_cabac_chroma_cr_ac_mb_count, frame_cabac_cavlc_suppressed_bits);
 
                              refbank_poc_lsb[current_write_bank] <= cur_pic_order_cnt_lsb;
                             if (is_p_frame) begin
