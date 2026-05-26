@@ -91,9 +91,9 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"input\s+wire\s+\[1:0\]\s+ctx_cbf_sel.*?emit_bin\(event_value,\s*1'b0,\s*ctx_cbf_base\s*\+\s*\{7'd0,\s*ctx_cbf_sel\}\)",
     ),
     (
-        "bitstream_keeps_reduced_chroma_cbf_base_context",
+        "bitstream_uses_plane_local_chroma_ac_cbf_context",
         "rtl/h264_bitstream.v",
-        r"Reduced integrated chroma-residual bring-up keeps coded_block_flag.*?decoder-verified context derivation.*?\.ctx_cbf_sel\(2'd0\)",
+        r"function automatic \[1:0\] cabac_res_chroma_ac_cbf_ctx_sel_for.*?plane-local.*?CABAC_CHROMA_AC_BLOCKS_PER_PLANE.*?left_coded_i = plane_block_i\[0\].*?top_coded_i = \(plane_block_i >= 3'd2\).*?cabac_res_chroma_ac_cbf_ctx_sel_for = \{top_coded_i, left_coded_i\}.*?9'd101:\s*begin\s*cabac_ctx_state_in\s*<=\s*cabac_res_chroma_ac_cbf_ctx_state\[cabac_res_chroma_ac_cbf_ctx_sel_for\(cabac_res_block_idx\)\].*?cabac_pending_ctx_sel\s*<=\s*\{2'd0,\s*cabac_res_chroma_ac_cbf_ctx_sel_for\(cabac_res_block_idx\)\}",
     ),
     (
         "bitstream_initializes_chroma_residual_contexts",
@@ -188,7 +188,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context-base/base-CBF guard, state-dispatch, category scheduling, Cr AC expected-miss coverage, sparse Cb-mirror expected-miss probe coverage, and the dense Cb AC strict-pass control")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, plane-local Cr AC CBF context selection, state-dispatch, category scheduling, Cr AC expected-miss coverage, sparse Cb-mirror expected-miss probe coverage, and the dense Cb AC strict-pass control")
     return 0
 
 

@@ -422,6 +422,7 @@ module h264_bitstream #(
     localparam [1:0] CABAC_RES_CAT_CHROMA_AC = 2'd2;
     localparam [3:0] CABAC_CHROMA_DC_MAX_COEFF_MINUS1 = (CHROMA_FORMAT_IDC == 2) ? 4'd7 : 4'd3;
     localparam [3:0] CABAC_CHROMA_AC_TOTAL_MINUS1 = (CHROMA_FORMAT_IDC == 2) ? 4'd15 : 4'd7;
+    localparam [3:0] CABAC_CHROMA_AC_BLOCKS_PER_PLANE = (CHROMA_FORMAT_IDC == 2) ? 4'd8 : 4'd4;
 
     function automatic [6:0] cabac_init_state;
         input integer m;
@@ -742,6 +743,42 @@ module h264_bitstream #(
         end
     endfunction
 
+    function automatic cabac_chroma_ac_block_nz_for;
+        input [3:0] block_i;
+        integer coeff_i;
+        reg coded_i;
+        begin
+            coded_i = 1'b0;
+            for (coeff_i = 0; coeff_i < 15; coeff_i = coeff_i + 1) begin
+                if (cabac_chroma_ac_coeff_at(block_i, coeff_i[3:0]) != 16'sd0)
+                    coded_i = 1'b1;
+            end
+            cabac_chroma_ac_block_nz_for = coded_i;
+        end
+    endfunction
+
+    function automatic [1:0] cabac_res_chroma_ac_cbf_ctx_sel_for;
+        input [3:0] block_i;
+        reg [2:0] plane_block_i;
+        reg left_coded_i;
+        reg top_coded_i;
+        begin
+            // Chroma AC coded_block_flag context derivation is plane-local.
+            // Keep the existing Cb control lane on the reduced base-context
+            // bring-up path, but derive Cr AC from prior Cr blocks so the next
+            // plane can be promoted without Cb-to-Cr context leakage.
+            if (block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE) begin
+                plane_block_i = block_i[2:0];
+                cabac_res_chroma_ac_cbf_ctx_sel_for = 2'd0;
+            end else begin
+                plane_block_i = block_i - CABAC_CHROMA_AC_BLOCKS_PER_PLANE;
+                left_coded_i = plane_block_i[0] ? cabac_chroma_ac_block_nz_for(block_i - 4'd1) : 1'b0;
+                top_coded_i = (plane_block_i >= 3'd2) ? cabac_chroma_ac_block_nz_for(block_i - 4'd2) : 1'b0;
+                cabac_res_chroma_ac_cbf_ctx_sel_for = {top_coded_i, left_coded_i};
+            end
+        end
+    endfunction
+
     wire        cabac_res_event_valid;
     wire        cabac_res_event_ready;
     wire [2:0]  cabac_res_event_kind;
@@ -797,10 +834,10 @@ module h264_bitstream #(
         .event_level_abs(cabac_res_event_level_abs),
         .event_level_sign(cabac_res_event_level_sign),
         .ctx_cbf_base(cabac_res_ctx_cbf_base_for(cabac_res_category)),
-        // Reduced integrated chroma-residual bring-up keeps coded_block_flag
-        // at the category base context. A local chroma-AC neighbor ctxInc
-        // experiment regressed the strict Cb AC smoke, so promote this only
-        // with a decoder-verified context derivation for the full residual path.
+        // Keep the emitted helper ctxIdx at the category base and select the
+        // actual context state in this wrapper. That mirrors the luma residual
+        // path and lets the Cr AC expected-miss probe exercise a plane-local
+        // CBF ctxInc without changing the standalone bin helper interface.
         .ctx_cbf_sel(2'd0),
         .ctx_sig_base(cabac_res_ctx_sig_base_for(cabac_res_category)),
         .ctx_last_base(cabac_res_ctx_last_base_for(cabac_res_category)),
@@ -2764,9 +2801,9 @@ module h264_bitstream #(
                             end else if (cabac_res_category == CABAC_RES_CAT_CHROMA_AC) begin
                                 case (cabac_res_bin_ctx_idx)
                                     9'd101: begin
-                                        cabac_ctx_state_in <= cabac_res_chroma_ac_cbf_ctx_state[0];
+                                        cabac_ctx_state_in <= cabac_res_chroma_ac_cbf_ctx_state[cabac_res_chroma_ac_cbf_ctx_sel_for(cabac_res_block_idx)];
                                         cabac_pending_ctx_kind <= CABAC_CTX_RES_CHRAC_CBF;
-                                        cabac_pending_ctx_sel <= 4'd0;
+                                        cabac_pending_ctx_sel <= {2'd0, cabac_res_chroma_ac_cbf_ctx_sel_for(cabac_res_block_idx)};
                                     end
                                     9'd266: begin
                                         cabac_ctx_state_in <= cabac_res_chroma_ac_level_ctx_state_0;
