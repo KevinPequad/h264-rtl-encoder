@@ -96,6 +96,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"function automatic \[1:0\] cabac_res_chroma_ac_cbf_ctx_sel_for.*?plane-local.*?CABAC_CHROMA_AC_BLOCKS_PER_PLANE.*?left_coded_i = plane_block_i\[0\].*?top_coded_i = \(plane_block_i >= 3'd2\).*?cabac_res_chroma_ac_cbf_ctx_sel_for = \{top_coded_i, left_coded_i\}.*?9'd101:\s*begin\s*cabac_ctx_state_in\s*<=\s*cabac_res_chroma_ac_cbf_ctx_state\[cabac_res_chroma_ac_cbf_ctx_sel_for\(cabac_res_block_idx\)\].*?cabac_pending_ctx_sel\s*<=\s*\{2'd0,\s*cabac_res_chroma_ac_cbf_ctx_sel_for\(cabac_res_block_idx\)\}",
     ),
     (
+        "bitstream_keeps_cb_chroma_ac_cbf_base_guard",
+        "rtl/h264_bitstream.v",
+        r"if \(block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE\) begin\s*plane_block_i = block_i\[2:0\];\s*cabac_res_chroma_ac_cbf_ctx_sel_for = 2'd0;\s*end else begin\s*plane_block_i = block_i - CABAC_CHROMA_AC_BLOCKS_PER_PLANE;\s*left_coded_i = plane_block_i\[0\] \? cabac_chroma_ac_block_nz_for\(block_i - 4'd1\) : 1'b0;\s*top_coded_i = \(plane_block_i >= 3'd2\) \? cabac_chroma_ac_block_nz_for\(block_i - 4'd2\) : 1'b0;\s*cabac_res_chroma_ac_cbf_ctx_sel_for = \{top_coded_i, left_coded_i\};\s*end",
+    ),
+    (
         "bitstream_initializes_chroma_residual_contexts",
         "rtl/h264_bitstream.v",
         r"cabac_res_chroma_dc_cbf_ctx_state\[0\]\s*<=\s*cabac_init_state\(5,\s*54,\s*26\).*?cabac_res_chroma_dc_sig_ctx_state\[0\]\s*<=\s*cabac_init_state\(3,\s*64,\s*26\).*?cabac_res_chroma_dc_last_ctx_state\[0\]\s*<=\s*cabac_init_state\(1,\s*67,\s*26\).*?cabac_res_chroma_dc_level_ctx_state_0\s*<=\s*cabac_init_state\(0,\s*70,\s*26\).*?cabac_res_chroma_ac_cbf_ctx_state\[0\]\s*<=\s*cabac_init_state\(-1,\s*48,\s*26\).*?cabac_res_chroma_ac_sig_ctx_state\[0\]\s*<=\s*cabac_init_state\(7,\s*50,\s*26\).*?cabac_res_chroma_ac_last_ctx_state\[0\]\s*<=\s*cabac_init_state\(16,\s*30,\s*26\).*?cabac_res_chroma_ac_level_ctx_state_0\s*<=\s*cabac_init_state\(0,\s*58,\s*26\)",
@@ -188,7 +193,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, plane-local Cr AC CBF context selection, state-dispatch, category scheduling, Cr AC expected-miss coverage, sparse Cb-mirror expected-miss probe coverage, and the dense Cb AC strict-pass control")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, the guarded Cb base CBF lane, plane-local Cr AC CBF context selection, state-dispatch, category scheduling, Cr AC expected-miss coverage, sparse Cb-mirror expected-miss probe coverage, and the dense Cb AC strict-pass control")
     return 0
 
 
