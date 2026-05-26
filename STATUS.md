@@ -106,7 +106,7 @@ transform/profile/color closure, and the final long-run target.
 | `scripts/run_cabac_residual4x4_scan_check.sh` | Standalone Verilator check for the CABAC residual 4x4 scan-event helper |
 | `scripts/run_cabac_residual4x4_bins_check.sh` | Standalone Verilator check for CABAC residual 4x4 bin/context emission scaffold, including chroma DC/AC zero and nonzero CBF context overrides |
 | `scripts/run_cabac_p16x16_residual_green_check.sh` | GREEN gate proving integrated CABAC P16x16 luma-only nonzero residual strict-decodes with FFmpeg |
-| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | Legacy-named promoted gate proving integrated CABAC P16x16 Cb DC-only, Cb DC+AC, and Cr DC-only residual smoke streams strict-decode with FFmpeg; also runs the chroma residual wiring audit and can probe the next Cr DC+AC target with `CABAC_CHROMA_INCLUDE_CR_AC=1` |
+| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | Legacy-named promoted gate proving integrated CABAC P16x16 Cb DC-only, Cb DC+AC, and Cr DC-only residual smoke streams strict-decode with FFmpeg; also runs the chroma residual wiring audit, can probe the next Cr DC+AC target with `CABAC_CHROMA_INCLUDE_CR_AC=1`, and can keep that probe isolated as a passing expected-miss diagnostic with `CABAC_CHROMA_EXPECT_CR_AC_FAIL=1` |
 | `scripts/run_cabac_p16x16_residual_red_check.sh` | Legacy alias for the promoted luma residual GREEN gate |
 | `scripts/audit_cabac_chroma_residual_scaffold.py` | Static audit that locks the CABAC chroma residual CBP, scan-buffer, context-base, context-state dispatch, and category-scheduling wiring |
 | `scripts/audit_no_testbench_repair.py` | Static audit that proves RTL bitstream ownership is retained in the TB and helper repair hooks are absent |

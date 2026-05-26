@@ -57,6 +57,7 @@ run_case() {
   local name="$1"
   local input="$2"
   local want_cbp_chroma="$3"
+  local expect_ffmpeg_fail="${4:-0}"
   local h264="output/cabac_p16x16_chroma_residual_${name}.h264"
   local sim_log="output/validation_cabac_p16x16_chroma_residual_${name}.sim.log"
   local ffmpeg_log="output/validation_cabac_p16x16_chroma_residual_${name}.ffmpeg.log"
@@ -97,11 +98,20 @@ run_case() {
     exit 1
   fi
 
-  ffmpeg -v error -xerror -i "$h264" -f null - > "$ffmpeg_log" 2>&1 || {
+  if ! ffmpeg -v error -xerror -i "$h264" -f null - > "$ffmpeg_log" 2>&1; then
+    if [ "$expect_ffmpeg_fail" = "1" ]; then
+      echo "[PASS] chroma residual ${name} exercised CABAC chroma AC but remains isolated as an expected strict FFmpeg decode miss"
+      tail -20 "$ffmpeg_log"
+      return 0
+    fi
     echo "[FAIL] chroma residual ${name} failed strict FFmpeg decode"
     tail -80 "$ffmpeg_log"
     exit 1
-  }
+  fi
+
+  if [ "$expect_ffmpeg_fail" = "1" ]; then
+    echo "[INFO] chroma residual ${name} strict-decoded; promote it into the default gate"
+  fi
 
   local raw_yuv
   local expected_bytes
@@ -131,8 +141,8 @@ run_case "cb_dc" "$INPUT_CB_DC" 1
 run_case "cb_ac" "$INPUT_CB_AC" 2
 run_case "cr_dc" "$INPUT_CR_DC" 1
 
-if [ "${CABAC_CHROMA_INCLUDE_CR_AC:-0}" = "1" ]; then
-  run_case "cr_ac" "$INPUT_CR_AC" 2
+if [ "${CABAC_CHROMA_INCLUDE_CR_AC:-0}" = "1" ] || [ "${CABAC_CHROMA_EXPECT_CR_AC_FAIL:-0}" = "1" ]; then
+  run_case "cr_ac" "$INPUT_CR_AC" 2 "${CABAC_CHROMA_EXPECT_CR_AC_FAIL:-0}"
 fi
 
 echo "[PASS] CABAC P16x16 Cb DC-only, Cb DC+AC, and Cr DC-only chroma residual smoke streams strict-decoded"
