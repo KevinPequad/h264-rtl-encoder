@@ -190,6 +190,7 @@ int main(int argc, char** argv) {
     dut->event_valid = 0;
     dut->bin_ready = 1;
     dut->ctx_cbf_base = 85;
+    dut->ctx_cbf_sel = 0;
     dut->ctx_sig_base = 105;
     dut->ctx_last_base = 166;
     dut->ctx_level_gt1 = 227;
@@ -237,6 +238,17 @@ int main(int argc, char** argv) {
         {0, 0, 232},
         {0, 1, 0},
     }, "sparse_block");
+
+    dut->ctx_cbf_sel = 3;
+    tick(dut);
+    auto cbf_ctx_sel = run_events(dut, {
+        {0, 1, 0, 0, 0},
+    });
+    expect_eq(cbf_ctx_sel, {
+        {1, 0, 88},
+    }, "coded_block_flag_context_increment");
+
+    dut->ctx_cbf_sel = 0;
 
     dut->ctx_cbf_base = 97;
     dut->ctx_sig_base = 149;

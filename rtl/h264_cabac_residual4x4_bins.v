@@ -1,6 +1,6 @@
 // h264_cabac_residual4x4_bins.v
 //
-// CABAC residual syntax bin/context front-end for one luma 4x4 block.
+// CABAC residual syntax bin/context front-end for one residual block.
 // This consumes ordered residual scan events (as produced by
 // h264_cabac_residual4x4_scan) and emits explicit CABAC bins with context ids
 // or bypass marking. It is a standalone integration scaffold: the top-level
@@ -26,6 +26,7 @@ module h264_cabac_residual4x4_bins #(
     // constants; chroma DC/AC integration overrides these with the H.264
     // category-specific context ranges.
     input  wire [8:0] ctx_cbf_base,
+    input  wire [1:0] ctx_cbf_sel,
     input  wire [8:0] ctx_sig_base,
     input  wire [8:0] ctx_last_base,
     input  wire [8:0] ctx_level_gt1,
@@ -130,7 +131,7 @@ module h264_cabac_residual4x4_bins #(
                         if (!bin_valid && event_valid) begin
                             case (event_kind)
                                 EV_CBF: begin
-                                    emit_bin(event_value, 1'b0, ctx_cbf_base);
+                                    emit_bin(event_value, 1'b0, ctx_cbf_base + {7'd0, ctx_cbf_sel});
                                     if (!event_value)
                                         done <= 1'b1;
                                 end

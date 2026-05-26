@@ -797,6 +797,7 @@ module h264_bitstream #(
         .event_level_abs(cabac_res_event_level_abs),
         .event_level_sign(cabac_res_event_level_sign),
         .ctx_cbf_base(cabac_res_ctx_cbf_base_for(cabac_res_category)),
+        .ctx_cbf_sel(2'd0),
         .ctx_sig_base(cabac_res_ctx_sig_base_for(cabac_res_category)),
         .ctx_last_base(cabac_res_ctx_last_base_for(cabac_res_category)),
         .ctx_level_gt1(cabac_res_ctx_level_gt1_for(cabac_res_category)),
@@ -2774,7 +2775,11 @@ module h264_bitstream #(
                                         cabac_pending_ctx_sel <= 4'd1;
                                     end
                                     default: begin
-                                        if ((cabac_res_bin_ctx_idx >= 9'd152) && (cabac_res_bin_ctx_idx <= 9'd166)) begin
+                                        if ((cabac_res_bin_ctx_idx >= 9'd101) && (cabac_res_bin_ctx_idx <= 9'd104)) begin
+                                            cabac_ctx_state_in <= cabac_res_chroma_ac_cbf_ctx_state[cabac_res_bin_ctx_idx - 9'd101];
+                                            cabac_pending_ctx_kind <= CABAC_CTX_RES_CHRAC_CBF;
+                                            cabac_pending_ctx_sel <= cabac_res_bin_ctx_idx - 9'd101;
+                                        end else if ((cabac_res_bin_ctx_idx >= 9'd152) && (cabac_res_bin_ctx_idx <= 9'd166)) begin
                                             cabac_ctx_state_in <= cabac_res_chroma_ac_sig_ctx_state[cabac_res_bin_ctx_idx - 9'd152];
                                             cabac_pending_ctx_kind <= CABAC_CTX_RES_CHRAC_SIG;
                                             cabac_pending_ctx_sel <= cabac_res_bin_ctx_idx - 9'd152;
@@ -2807,7 +2812,11 @@ module h264_bitstream #(
                                         cabac_pending_ctx_sel <= 4'd1;
                                     end
                                     default: begin
-                                        if ((cabac_res_bin_ctx_idx >= 9'd105) && (cabac_res_bin_ctx_idx <= 9'd119)) begin
+                                        if ((cabac_res_bin_ctx_idx >= 9'd85) && (cabac_res_bin_ctx_idx <= 9'd88)) begin
+                                            cabac_ctx_state_in <= cabac_res_cbf_ctx_state[cabac_res_bin_ctx_idx - 9'd85];
+                                            cabac_pending_ctx_kind <= CABAC_CTX_RES_CBF;
+                                            cabac_pending_ctx_sel <= cabac_res_bin_ctx_idx - 9'd85;
+                                        end else if ((cabac_res_bin_ctx_idx >= 9'd105) && (cabac_res_bin_ctx_idx <= 9'd119)) begin
                                             cabac_ctx_state_in <= cabac_res_sig_ctx_state[cabac_res_bin_ctx_idx - 9'd105];
                                             cabac_pending_ctx_kind <= CABAC_CTX_RES_SIG;
                                             cabac_pending_ctx_sel <= cabac_res_bin_ctx_idx - 9'd105;
