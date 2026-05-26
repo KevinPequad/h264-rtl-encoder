@@ -797,6 +797,10 @@ module h264_bitstream #(
         .event_level_abs(cabac_res_event_level_abs),
         .event_level_sign(cabac_res_event_level_sign),
         .ctx_cbf_base(cabac_res_ctx_cbf_base_for(cabac_res_category)),
+        // Reduced integrated chroma-residual bring-up keeps coded_block_flag
+        // at the category base context. A local chroma-AC neighbor ctxInc
+        // experiment regressed the strict Cb AC smoke, so promote this only
+        // with a decoder-verified context derivation for the full residual path.
         .ctx_cbf_sel(2'd0),
         .ctx_sig_base(cabac_res_ctx_sig_base_for(cabac_res_category)),
         .ctx_last_base(cabac_res_ctx_last_base_for(cabac_res_category)),
