@@ -14,16 +14,24 @@ W = H = 16
 y0 = bytes([64]) * (W * H)
 y1 = bytes([64]) * (W * H)
 flat_chroma = bytes([128]) * ((W // 2) * (H // 2))
+checker = bytes(136 if ((x + y) % 2) else 128 for y in range(H // 2) for x in range(W // 2))
 patterns = {
-    "checker": bytes(136 if ((x + y) % 2) else 128 for y in range(H // 2) for x in range(W // 2)),
-    "single_tl": bytes(136 if (x < 4 and y < 4 and ((x + y) % 2)) else 128 for y in range(H // 2) for x in range(W // 2)),
-    "single_br": bytes(136 if (x >= 4 and y >= 4 and ((x + y) % 2)) else 128 for y in range(H // 2) for x in range(W // 2)),
+    "checker": (flat_chroma, checker),
+    "single_tl": (
+        flat_chroma,
+        bytes(136 if (x < 4 and y < 4 and ((x + y) % 2)) else 128 for y in range(H // 2) for x in range(W // 2)),
+    ),
+    "single_br": (
+        flat_chroma,
+        bytes(136 if (x >= 4 and y >= 4 and ((x + y) % 2)) else 128 for y in range(H // 2) for x in range(W // 2)),
+    ),
+    "both_planes": (checker, checker),
 }
 out_dir = Path("data")
 out_dir.mkdir(parents=True, exist_ok=True)
-for name, cr in patterns.items():
+for name, (cb, cr) in patterns.items():
     out = out_dir / f"smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_ac_{name}.yuv"
-    out.write_bytes(y0 + flat_chroma + flat_chroma + y1 + flat_chroma + cr)
+    out.write_bytes(y0 + flat_chroma + flat_chroma + y1 + cb + cr)
     print(f"[INFO] CR_AC {name} fixture {out} size={out.stat().st_size}")
 PY
 
@@ -48,6 +56,7 @@ mkdir -p output
 run_expected_miss() {
   local name="$1"
   local expected_signature="$2"
+  local expected_counters="${3:-cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1}"
   local input="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_ac_${name}.yuv"
   local h264="output/cabac_p16x16_chroma_residual_cr_ac_${name}.h264"
   local sim_log="output/validation_cabac_p16x16_chroma_residual_cr_ac_${name}.sim.log"
@@ -65,8 +74,8 @@ run_expected_miss() {
     tail -80 "$sim_log"
     exit 1
   fi
-  if ! grep -q 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' "$sim_log"; then
-    echo "[FAIL] CR_AC ${name} did not isolate Cr-only CABAC chroma AC"
+  if ! grep -q "$expected_counters" "$sim_log"; then
+    echo "[FAIL] CR_AC ${name} did not match expected CABAC chroma AC counters: ${expected_counters}"
     tail -80 "$sim_log"
     exit 1
   fi
@@ -91,5 +100,6 @@ run_expected_miss() {
 run_expected_miss checker 'bytestream -29'
 run_expected_miss single_tl 'bytestream -5'
 run_expected_miss single_br 'bytestream -35'
+run_expected_miss both_planes 'bytestream -22' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=1'
 
-echo "[PASS] CABAC P16x16 Cr AC strict-decode blocker is reproduced across checker/single-block probes with isolated Cr-only AC counters"
+echo "[PASS] CABAC P16x16 Cr AC strict-decode blocker is reproduced across checker/single-block Cr-only probes and a both-plane AC probe"

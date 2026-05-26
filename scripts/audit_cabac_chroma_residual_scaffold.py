@@ -140,6 +140,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         "scripts/run_cabac_p16x16_chroma_residual_red_check.sh",
         r"expect_ffmpeg_fail.*?bytestream -29.*?expected strict FFmpeg decode miss",
     ),
+    (
+        "probe_locks_both_plane_ac_expected_miss",
+        "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
+        r"both_planes.*?bytestream -22.*?cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=1",
+    ),
 )
 
 
