@@ -18,6 +18,11 @@ checker = bytes(136 if ((x + y) % 2) else 128 for y in range(H // 2) for x in ra
 single_tl = bytes(136 if (x < 4 and y < 4 and ((x + y) % 2)) else 128 for y in range(H // 2) for x in range(W // 2))
 single_br = bytes(136 if (x >= 4 and y >= 4 and ((x + y) % 2)) else 128 for y in range(H // 2) for x in range(W // 2))
 patterns = {
+    # Dense Cb-only AC is the current strict-decode control: the sparse Cb
+    # mirrors below fail, while this full-plane checker still decodes. Keep the
+    # pass case in the same probe run so the blocker stays narrowed to sparse AC
+    # context/ordering behavior rather than all Cb AC emission.
+    "cb_checker": (checker, flat_chroma),
     "checker": (flat_chroma, checker),
     "single_tl": (flat_chroma, single_tl),
     "single_br": (flat_chroma, single_br),
@@ -98,6 +103,64 @@ run_expected_miss() {
   echo "[PASS] CR_AC ${name} remains isolated at expected strict FFmpeg decode miss signature ${expected_signature}"
 }
 
+run_strict_pass() {
+  local name="$1"
+  local expected_counters="$2"
+  local input="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_ac_${name}.yuv"
+  local h264="output/cabac_p16x16_chroma_residual_cr_ac_${name}.h264"
+  local sim_log="output/validation_cabac_p16x16_chroma_residual_cr_ac_${name}.sim.log"
+  local ffmpeg_log="output/validation_cabac_p16x16_chroma_residual_cr_ac_${name}.ffmpeg.log"
+
+  "$SIM" \
+    +frames=2 \
+    +timeout=5000000 \
+    +input="$ROOT/$input" \
+    +output="$ROOT/$h264" \
+    +idr_interval=12 > "$sim_log" 2>&1
+
+  if ! grep -q 'cabac_p16x16_mbs=1' "$sim_log"; then
+    echo "[FAIL] CR_AC ${name} strict-pass control did not exercise integrated CABAC P16x16"
+    tail -80 "$sim_log"
+    exit 1
+  fi
+  if ! grep -q "$expected_counters" "$sim_log"; then
+    echo "[FAIL] CR_AC ${name} strict-pass control did not match expected CABAC chroma AC counters: ${expected_counters}"
+    tail -80 "$sim_log"
+    exit 1
+  fi
+  if ! grep -Eq 'cavlc_suppressed_bits=[1-9][0-9]*' "$sim_log"; then
+    echo "[FAIL] CR_AC ${name} strict-pass control did not suppress the legacy CAVLC payload"
+    tail -80 "$sim_log"
+    exit 1
+  fi
+
+  if ! ffmpeg -v error -xerror -i "$h264" -f null - > "$ffmpeg_log" 2>&1; then
+    echo "[FAIL] CR_AC ${name} strict-pass control failed strict FFmpeg decode"
+    tail -80 "$ffmpeg_log"
+    exit 1
+  fi
+
+  local raw_yuv
+  local expected_bytes
+  local actual_bytes
+  raw_yuv="$(mktemp "/tmp/h264_cabac_cr_ac_${name}_decode.XXXXXX.yuv")"
+  expected_bytes=$((16 * 16 * 3 / 2 * 2))
+  ffmpeg -y -v error -xerror -i "$h264" -f rawvideo -pix_fmt yuv420p "$raw_yuv" > /dev/null 2>&1 || {
+    echo "[FAIL] CR_AC ${name} strict-pass control failed raw FFmpeg frame extraction"
+    rm -f "$raw_yuv"
+    exit 1
+  }
+  actual_bytes="$(wc -c < "$raw_yuv")"
+  rm -f "$raw_yuv"
+  if [ "$actual_bytes" -ne "$expected_bytes" ]; then
+    echo "[FAIL] CR_AC ${name} strict-pass control decoded ${actual_bytes} bytes, expected ${expected_bytes} bytes for two 16x16 yuv420p frames"
+    exit 1
+  fi
+
+  echo "[PASS] CR_AC ${name} strict-pass control FFmpeg-decoded with ${expected_counters}"
+}
+
+run_strict_pass cb_checker 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0'
 run_expected_miss checker 'bytestream -29'
 run_expected_miss single_tl 'bytestream -5'
 run_expected_miss single_br 'bytestream -35'
@@ -105,4 +168,4 @@ run_expected_miss both_planes 'bytestream -22' 'cabac_chroma_cb_ac_mbs=1 cabac_c
 run_expected_miss cb_mirror_single_tl 'bytestream -9' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0'
 run_expected_miss cb_mirror_single_br 'bytestream -23' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0'
 
-echo "[PASS] CABAC P16x16 sparse chroma AC strict-decode blocker is reproduced across Cr-only, both-plane, and Cb-only mirror probes"
+echo "[PASS] CABAC P16x16 sparse chroma AC strict-decode blocker is reproduced across Cr-only, both-plane, and Cb-only mirror probes with a dense Cb-only strict-pass control"
