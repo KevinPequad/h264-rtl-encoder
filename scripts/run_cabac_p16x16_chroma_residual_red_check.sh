@@ -75,6 +75,19 @@ run_case() {
     tail -80 "$sim_log"
     exit 1
   fi
+  if [ "$want_cbp_chroma" = "1" ]; then
+    if ! grep -q 'cabac_chroma_dc_mbs=1 cabac_chroma_ac_mbs=0' "$sim_log"; then
+      echo "[FAIL] chroma residual ${name} did not preserve DC-only coded_block_pattern_chroma=1"
+      tail -80 "$sim_log"
+      exit 1
+    fi
+  else
+    if ! grep -q 'cabac_chroma_dc_mbs=0 cabac_chroma_ac_mbs=1' "$sim_log"; then
+      echo "[FAIL] chroma residual ${name} did not preserve DC+AC coded_block_pattern_chroma=2"
+      tail -80 "$sim_log"
+      exit 1
+    fi
+  fi
   if ! grep -Eq 'cavlc_suppressed_bits=[1-9][0-9]*' "$sim_log"; then
     echo "[FAIL] chroma residual ${name} did not suppress the legacy CAVLC payload"
     tail -80 "$sim_log"
