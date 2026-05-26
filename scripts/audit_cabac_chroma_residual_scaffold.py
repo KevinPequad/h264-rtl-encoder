@@ -150,6 +150,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
         r"both_planes.*?bytestream -22.*?cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=1",
     ),
+    (
+        "probe_locks_cb_mirror_expected_misses",
+        "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
+        r"cb_mirror_single_tl.*?cb_mirror_single_br.*?run_expected_miss cb_mirror_single_tl 'bytestream -9' 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0'.*?run_expected_miss cb_mirror_single_br 'bytestream -23' 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0'",
+    ),
 )
 
 
@@ -178,7 +183,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context-base/base-CBF guard, state-dispatch, category scheduling, and Cr AC expected-miss coverage")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context-base/base-CBF guard, state-dispatch, category scheduling, Cr AC expected-miss coverage, and sparse Cb-mirror expected-miss probe coverage")
     return 0
 
 

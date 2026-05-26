@@ -15,17 +15,18 @@ y0 = bytes([64]) * (W * H)
 y1 = bytes([64]) * (W * H)
 flat_chroma = bytes([128]) * ((W // 2) * (H // 2))
 checker = bytes(136 if ((x + y) % 2) else 128 for y in range(H // 2) for x in range(W // 2))
+single_tl = bytes(136 if (x < 4 and y < 4 and ((x + y) % 2)) else 128 for y in range(H // 2) for x in range(W // 2))
+single_br = bytes(136 if (x >= 4 and y >= 4 and ((x + y) % 2)) else 128 for y in range(H // 2) for x in range(W // 2))
 patterns = {
     "checker": (flat_chroma, checker),
-    "single_tl": (
-        flat_chroma,
-        bytes(136 if (x < 4 and y < 4 and ((x + y) % 2)) else 128 for y in range(H // 2) for x in range(W // 2)),
-    ),
-    "single_br": (
-        flat_chroma,
-        bytes(136 if (x >= 4 and y >= 4 and ((x + y) % 2)) else 128 for y in range(H // 2) for x in range(W // 2)),
-    ),
+    "single_tl": (flat_chroma, single_tl),
+    "single_br": (flat_chroma, single_br),
     "both_planes": (checker, checker),
+    # Cb-only mirrors of the single-block Cr probes keep the blocker from being
+    # misattributed to the Cr plane alone: identical sparse AC shapes currently
+    # reproduce strict-decode misses on Cb too, with different signatures.
+    "cb_mirror_single_tl": (single_tl, flat_chroma),
+    "cb_mirror_single_br": (single_br, flat_chroma),
 }
 out_dir = Path("data")
 out_dir.mkdir(parents=True, exist_ok=True)
@@ -101,5 +102,7 @@ run_expected_miss checker 'bytestream -29'
 run_expected_miss single_tl 'bytestream -5'
 run_expected_miss single_br 'bytestream -35'
 run_expected_miss both_planes 'bytestream -22' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=1'
+run_expected_miss cb_mirror_single_tl 'bytestream -9' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0'
+run_expected_miss cb_mirror_single_br 'bytestream -23' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0'
 
-echo "[PASS] CABAC P16x16 Cr AC strict-decode blocker is reproduced across checker/single-block Cr-only probes and a both-plane AC probe"
+echo "[PASS] CABAC P16x16 sparse chroma AC strict-decode blocker is reproduced across Cr-only, both-plane, and Cb-only mirror probes"
