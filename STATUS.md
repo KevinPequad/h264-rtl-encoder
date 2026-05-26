@@ -108,7 +108,7 @@ transform/profile/color closure, and the final long-run target.
 | `scripts/run_cabac_p16x16_residual_green_check.sh` | GREEN gate proving integrated CABAC P16x16 luma-only nonzero residual strict-decodes with FFmpeg |
 | `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | Legacy-named promoted gate proving integrated CABAC P16x16 Cb DC-only, Cb DC+AC, and Cr DC-only residual smoke streams strict-decode with FFmpeg; also runs the chroma residual wiring audit and now keeps the next Cr DC+AC target covered by default as a passing expected-miss diagnostic for the current `bytestream -29` strict-decode blocker; set `CABAC_CHROMA_INCLUDE_CR_AC=1` to require strict Cr AC promotion |
 | `scripts/run_cabac_p16x16_residual_red_check.sh` | Legacy alias for the promoted luma residual GREEN gate |
-| `scripts/audit_cabac_chroma_residual_scaffold.py` | Static audit that locks the CABAC chroma residual CBP, scan-buffer, context-base, context-state dispatch, and category-scheduling wiring |
+| `scripts/audit_cabac_chroma_residual_scaffold.py` | Static audit that locks the CABAC chroma residual CBP, scan-buffer, context-base, context-state dispatch, category-scheduling wiring, and the current Cr AC expected-miss fixture/counter coverage |
 | `scripts/audit_no_testbench_repair.py` | Static audit that proves RTL bitstream ownership is retained in the TB and helper repair hooks are absent |
 | `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for the CABAC `P_L0_16x16` zero-CBP subset |
 | `docker/Dockerfile` | Containerized smoke-run environment |

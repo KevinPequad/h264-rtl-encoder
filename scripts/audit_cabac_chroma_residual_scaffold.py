@@ -125,6 +125,21 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         "rtl/h264_bitstream.v",
         r"cabac_res_category\s*==\s*CABAC_RES_CAT_CHROMA_DC.*?cabac_cbp_chroma\s*==\s*2'd2.*?cabac_res_category\s*<=\s*CABAC_RES_CAT_CHROMA_AC",
     ),
+    (
+        "gate_generates_cr_ac_expected_miss_fixture",
+        "scripts/run_cabac_p16x16_chroma_residual_red_check.sh",
+        r"INPUT_CR_AC=.*?smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_ac\.yuv.*?'cr_ac':.*?CABAC_CHROMA_INCLUDE_CR_AC",
+    ),
+    (
+        "gate_checks_cb_vs_cr_ac_plane_counters",
+        "scripts/run_cabac_p16x16_chroma_residual_red_check.sh",
+        r"cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0.*?cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1",
+    ),
+    (
+        "gate_locks_cr_ac_bytestream29_expected_miss",
+        "scripts/run_cabac_p16x16_chroma_residual_red_check.sh",
+        r"expect_ffmpeg_fail.*?bytestream -29.*?expected strict FFmpeg decode miss",
+    ),
 )
 
 
@@ -153,7 +168,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context-base, state-dispatch, and category scheduling")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context-base, state-dispatch, category scheduling, and Cr AC expected-miss coverage")
     return 0
 
 
