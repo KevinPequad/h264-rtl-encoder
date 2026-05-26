@@ -7,28 +7,29 @@ export PATH=/home/chudpc/.local/verilator-5.020/bin:$PATH
 
 python3 scripts/audit_cabac_chroma_residual_scaffold.py
 
-INPUT_DC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_dc.yuv"
-INPUT_AC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_ac.yuv"
+INPUT_CB_DC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_dc.yuv"
+INPUT_CB_AC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_ac.yuv"
+INPUT_CR_DC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_dc.yuv"
 python3 - <<'PY'
 from pathlib import Path
 W = H = 16
-# IDR flat, P frames with chroma-only residual.  These fixtures cover the first
-# strict integrated CABAC P16x16 chroma residual milestone: DC-only
-# coded_block_pattern_chroma=1 and DC+AC coded_block_pattern_chroma=2.
+# IDR flat, P frames with chroma-only residual. These fixtures cover the
+# reduced strict integrated CABAC P16x16 chroma residual milestone across Cb
+# DC-only, Cb DC+AC, and Cr DC-only. Cr AC remains the next strict-decode
+# expansion item.
 y0 = bytes([64]) * (W * H)
-u0 = bytes([128]) * ((W // 2) * (H // 2))
-v0 = bytes([128]) * ((W // 2) * (H // 2))
+flat_chroma = bytes([128]) * ((W // 2) * (H // 2))
 y1 = bytes([64]) * (W * H)
-u1_dc = bytes([136]) * ((W // 2) * (H // 2))
-u1_ac = bytes(136 if ((x ^ y) & 1) else 128 for y in range(H // 2) for x in range(W // 2))
-v1 = bytes([128]) * ((W // 2) * (H // 2))
+plane_dc = bytes([136]) * ((W // 2) * (H // 2))
+plane_ac = bytes(136 if ((x ^ y) & 1) else 128 for y in range(H // 2) for x in range(W // 2))
 fixtures = {
-    'dc': (Path('data/smoke_16x16_2f_cabac_p16x16_chroma_residual_dc.yuv'), u1_dc),
-    'ac': (Path('data/smoke_16x16_2f_cabac_p16x16_chroma_residual_ac.yuv'), u1_ac),
+    'cb_dc': (Path('data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_dc.yuv'), plane_dc, flat_chroma),
+    'cb_ac': (Path('data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_ac.yuv'), plane_ac, flat_chroma),
+    'cr_dc': (Path('data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_dc.yuv'), flat_chroma, plane_dc),
 }
-for name, (out, u1) in fixtures.items():
+for name, (out, u1, v1) in fixtures.items():
     out.parent.mkdir(parents=True, exist_ok=True)
-    out.write_bytes(y0 + u0 + v0 + y1 + u1 + v1)
+    out.write_bytes(y0 + flat_chroma + flat_chroma + y1 + u1 + v1)
     print(f"[INFO] chroma-residual {name.upper()} fixture {out} size={out.stat().st_size}")
 PY
 
@@ -124,7 +125,8 @@ run_case() {
   fi
 }
 
-run_case "dc" "$INPUT_DC" 1
-run_case "ac" "$INPUT_AC" 2
+run_case "cb_dc" "$INPUT_CB_DC" 1
+run_case "cb_ac" "$INPUT_CB_AC" 2
+run_case "cr_dc" "$INPUT_CR_DC" 1
 
-echo "[PASS] CABAC P16x16 chroma residual DC-only and DC+AC smoke streams strict-decoded"
+echo "[PASS] CABAC P16x16 Cb DC-only, Cb DC+AC, and Cr DC-only chroma residual smoke streams strict-decoded"
