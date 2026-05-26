@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Audit the integrated CABAC chroma-residual bring-up scaffold.
+"""Audit the integrated CABAC chroma-residual bring-up wiring.
 
-The chroma-residual RED gate intentionally still fails before strict decode, but
-it should only be blocked by the explicit subset guard.  This audit keeps the
-pieces needed for the next GREEN step from regressing: top-level chroma DC/AC
-scan capture, full 2-bit chroma CBP handoff, category-specific CABAC residual
-context bases, chroma DC/AC context-state dispatch, and the guarded residual
-FSM's luma -> chroma-DC -> chroma-AC category scheduler in the bitstream writer.
+The strict chroma-residual smoke gate depends on top-level chroma DC/AC scan
+capture, full 2-bit chroma CBP handoff, category-specific CABAC residual
+context bases, chroma DC/AC context-state dispatch, and the residual FSM's
+luma/chroma-DC/chroma-AC category scheduler in the bitstream writer.
 """
 
 from __future__ import annotations
@@ -33,9 +31,9 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"cabac_chroma_ac_scan_flat_w\s*=\s*\{\s*cabac_chroma_ac_scan_buf\[31\].*cabac_chroma_ac_scan_buf\[0\]",
     ),
     (
-        "top_chroma_residual_guard_still_explicit",
+        "top_allows_chroma_residual_subset",
         "rtl/h264_encoder_top.v",
-        r"CABAC_PSUBSET\] Unsupported non-skip MB.*cbp_luma=%0d cbp_chroma=%0d",
+        r"cabac_residual_p16x16_eligible_w\s*=\s*mb_has_residual\s*&&\s*\(\(mb_cbp_luma_w\s*!=\s*4'd0\)\s*\|\|\s*\(i16_cbp_chroma\s*!=\s*2'd0\)\)",
     ),
     (
         "top_preserves_chroma_dc_only_cbp",
@@ -113,6 +111,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"cabac_res_block_idx\s*==\s*cabac_res_last_block_for\(cabac_res_category\).*?cabac_res_category\s*==\s*CABAC_RES_CAT_LUMA.*?cabac_cbp_chroma\s*!=\s*2'd0.*?cabac_res_category\s*<=\s*CABAC_RES_CAT_CHROMA_DC",
     ),
     (
+        "bitstream_starts_chroma_dc_when_luma_cbp_zero",
+        "rtl/h264_bitstream.v",
+        r"cabac_res_category\s*<=\s*\(cabac_cbp_luma\s*!=\s*4'd0\)\s*\?\s*CABAC_RES_CAT_LUMA\s*:\s*CABAC_RES_CAT_CHROMA_DC",
+    ),
+    (
         "bitstream_schedules_chroma_ac_after_dc",
         "rtl/h264_bitstream.v",
         r"cabac_res_category\s*==\s*CABAC_RES_CAT_CHROMA_DC.*?cabac_cbp_chroma\s*==\s*2'd2.*?cabac_res_category\s*<=\s*CABAC_RES_CAT_CHROMA_AC",
@@ -145,7 +148,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual scaffold preserves CBP, scan, context-base, and state-dispatch wiring")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context-base, state-dispatch, and category scheduling")
     return 0
 
 

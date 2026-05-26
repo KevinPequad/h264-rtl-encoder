@@ -1846,7 +1846,7 @@ module h264_bitstream #(
                                           (slice_num_ref_idx_l0_active_minus1 == 2'd0) &&
                                           (mb_ref_idx_l0 == 2'd0) &&
                                           (mvd_x_l0 == 9'sd0) && (mvd_y_l0 == 9'sd0) &&
-                                          (!mb_has_residual || ((cabac_cbp_luma != 4'd0) && (cabac_cbp_chroma == 2'd0))))) begin
+                                          (!mb_has_residual || ((cabac_cbp_luma != 4'd0) || (cabac_cbp_chroma != 2'd0))))) begin
                                         `ifndef SYNTHESIS
                                         $fatal(1,
                                                "[CABAC_PSUBSET] Unsupported CABAC MB inter=%0d skip=%0d residual=%0d cbp_luma=%0d cbp_chroma=%0d ref=%0d mvd=(%0d,%0d) refs=%0d",
@@ -2369,7 +2369,7 @@ module h264_bitstream #(
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                 end
                                 cabac_res_block_idx <= 4'd0;
-                                cabac_res_category <= CABAC_RES_CAT_LUMA;
+                                cabac_res_category <= (cabac_cbp_luma != 4'd0) ? CABAC_RES_CAT_LUMA : CABAC_RES_CAT_CHROMA_DC;
                                 cabac_res_scan_done_pending <= 1'b0;
                                 cabac_res_scan_start <= 1'b1;
                                 state <= S_CABAC_RES;

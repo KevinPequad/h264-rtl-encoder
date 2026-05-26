@@ -736,16 +736,16 @@ module h264_encoder_top #(
         (mvd_x_l0_w == 9'sd0) &&
         (mvd_y_l0_w == 9'sd0);
     // Integrated CABAC P16x16 currently supports the strict zero-MVD/single-ref
-    // lane, plus a focused luma-only residual bring-up subset. Chroma residual
-    // CABAC stays guarded until its coefficient syntax is wired and verified.
-    wire        cabac_luma_residual_p16x16_eligible_w =
+    // lane plus residual coefficient syntax for the reduced luma/chroma 4:2:0
+    // bring-up cases.  The full inter mode/ref/MVD matrix remains guarded by
+    // cabac_zero_cbp_p16x16_eligible_w.
+    wire        cabac_residual_p16x16_eligible_w =
         mb_has_residual &&
-        (mb_cbp_luma_w != 4'd0) &&
-        (i16_cbp_chroma == 2'd0);
+        ((mb_cbp_luma_w != 4'd0) || (i16_cbp_chroma != 2'd0));
     wire        cabac_non_skip_subset_ok_w =
         cabac_zero_cbp_p16x16_eligible_w &&
         !is_skip_mb_reg &&
-        (!mb_has_residual || cabac_luma_residual_p16x16_eligible_w);
+        (!mb_has_residual || cabac_residual_p16x16_eligible_w);
     wire        cabac_suppress_cavlc_payload_w =
         cabac_slice_enable_w && cabac_non_skip_subset_ok_w;
 
@@ -2238,9 +2238,8 @@ pred_buf = {(256*BD){1'b0}};
         .cabac_cbp_luma_ctx2_sel(cabac_cbp_luma_ctx2_sel_w),
         .cabac_cbp_luma(mb_cbp_luma_w),
         // Preserve the 2-bit coded_block_pattern_chroma value for the CABAC
-        // residual FSM. The current chroma residual lane is still guarded, but
-        // the bitstream writer must see the eventual DC-only (1) vs DC+AC (2)
-        // distinction instead of a collapsed nonzero predicate.
+        // residual FSM so the reduced chroma smoke path can distinguish
+        // DC-only (1) from DC+AC (2) instead of a collapsed nonzero predicate.
         .cabac_cbp_chroma(i16_cbp_chroma),
         .cabac_luma_scan_flat(cabac_luma_scan_flat_w),
         .cabac_luma_nz_mask(cabac_luma_nz_mask_w),

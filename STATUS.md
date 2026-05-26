@@ -40,12 +40,12 @@ Current state:
 - the deblock/reconstructed-frame ownership lane is validated on canonical
   commit `dc1d47094238f8ad973cdfb5738abd4f0d2ea951` with the standalone oracle,
   public-decoder checks, and a two-frame reference-bank-consumption proof
-- CABAC `P_L0_16x16` integration currently covers the strict zero-MVD/single-ref zero-CBP lane and a focused luma-only residual lane; chroma residual is intentionally RED/guarded while its remaining CBP and DC/AC coefficient syntax is being wired
-- the standalone CABAC residual scan-event helper and bin/context helper exist; the scan helper now has explicit luma, bounded chroma-DC, and bounded chroma-AC event coverage, the bin/context helper supports category-specific chroma DC/AC context bases, and encoder-top now buffers chroma DC/AC scan vectors while preserving the `cbp_chroma=1` DC-only vs `cbp_chroma=2` DC+AC distinction; the dormant CABAC writer path now emits both coded-block-pattern chroma bins and initializes the chroma DC/AC residual CABAC context-state bank from the cabac_init_idc=0 / QP=26 table, while the integrated lane remains guarded pending strict decode
+- CABAC `P_L0_16x16` integration currently covers the strict zero-MVD/single-ref zero-CBP lane, a focused luma-only residual lane, and reduced 4:2:0 chroma-only residual smoke cases for both `cbp_chroma=1` DC-only and `cbp_chroma=2` DC+AC, all strict FFmpeg-decodable
+- the standalone CABAC residual scan-event helper and bin/context helper exist; the scan helper now has explicit luma, bounded chroma-DC, and bounded chroma-AC event coverage, the bin/context helper supports category-specific chroma DC/AC context bases, and encoder-top buffers chroma DC/AC scan vectors while preserving the `cbp_chroma=1` DC-only vs `cbp_chroma=2` DC+AC distinction; the integrated writer path now emits both coded-block-pattern chroma bins, initializes/updates the chroma DC/AC residual CABAC context-state banks, and skips luma residual category emission when a chroma-only residual macroblock has `cbp_luma=0`
 - the repository is still not complete as a full H.264 standard encoder
 
 Completion is still blocked by major missing features including full CABAC
-residual coefficient syntax beyond the current zero-CBP `P_L0_16x16` subset,
+residual coefficient syntax beyond the current reduced `P_L0_16x16` luma/chroma smoke subset,
 broader `B` / `BREF` / DPB support, broader direct-mode support, deblock,
 transform/profile/color closure, and the final long-run target.
 
@@ -106,9 +106,9 @@ transform/profile/color closure, and the final long-run target.
 | `scripts/run_cabac_residual4x4_scan_check.sh` | Standalone Verilator check for the CABAC residual 4x4 scan-event helper |
 | `scripts/run_cabac_residual4x4_bins_check.sh` | Standalone Verilator check for CABAC residual 4x4 bin/context emission scaffold, including chroma DC/AC zero and nonzero CBF context overrides |
 | `scripts/run_cabac_p16x16_residual_green_check.sh` | GREEN gate proving integrated CABAC P16x16 luma-only nonzero residual strict-decodes with FFmpeg |
-| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | RED gate showing integrated CABAC P16x16 chroma DC-only and DC+AC residuals remain guarded pending chroma coefficient syntax; also runs the chroma residual scaffold audit |
+| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | Legacy-named promoted gate proving integrated CABAC P16x16 chroma DC-only and DC+AC residual smoke streams strict-decode with FFmpeg; also runs the chroma residual wiring audit |
 | `scripts/run_cabac_p16x16_residual_red_check.sh` | Legacy alias for the promoted luma residual GREEN gate |
-| `scripts/audit_cabac_chroma_residual_scaffold.py` | Static audit that locks the CABAC chroma residual CBP, scan-buffer, context-base, and context-state dispatch scaffold while the integrated lane remains RED |
+| `scripts/audit_cabac_chroma_residual_scaffold.py` | Static audit that locks the CABAC chroma residual CBP, scan-buffer, context-base, context-state dispatch, and category-scheduling wiring |
 | `scripts/audit_no_testbench_repair.py` | Static audit that proves RTL bitstream ownership is retained in the TB and helper repair hooks are absent |
 | `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for the CABAC `P_L0_16x16` zero-CBP subset |
 | `docker/Dockerfile` | Containerized smoke-run environment |
@@ -317,8 +317,9 @@ in `rtl/h264_encoder_top.v` and bitstream writer in `rtl/h264_bitstream.v`:
 - standalone CABAC arithmetic coder core RTL, plus a current final-path CABAC
   subset for skip-capable P slices with dual PPS emission, CABAC
   slice-header fields, CABAC-coded `mb_skip_flag`, CABAC-coded
-  `end_of_slice_flag`, and an explicit single-ref / zero-CBP / zero-MVD
-  `P_L0_16x16` subset. Full CABAC residual coefficient syntax is still open.
+  `end_of_slice_flag`, an explicit single-ref / zero-CBP / zero-MVD
+  `P_L0_16x16` subset, and reduced strict-decode luma/chroma residual
+  `P_L0_16x16` smoke cases. Full CABAC residual coefficient syntax is still open.
 - parameterized resolution
 - parameterized bit depth
 - parameterized chroma format
@@ -331,8 +332,9 @@ Implemented now relative to the chosen `x264` baseline:
 - in-loop deblocking and deblocked reconstructed-frame reference ownership for
   the current validated path
 - current CABAC final-path subset on skip-capable P slices, with CABAC PPS
-  selection, CABAC-coded `mb_skip_flag`, CABAC-coded `end_of_slice_flag`, and an
-  explicit single-ref / zero-CBP / zero-MVD `P_L0_16x16` subset
+  selection, CABAC-coded `mb_skip_flag`, CABAC-coded `end_of_slice_flag`, an
+  explicit single-ref / zero-CBP / zero-MVD `P_L0_16x16` subset, and reduced
+  strict-decode luma/chroma residual `P_L0_16x16` smoke cases
 - I-picture and P-picture coding
 - non-reference `B`-picture syntax on the current intra / `I_PCM` path
 - limited non-reference `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` inter
@@ -1049,8 +1051,8 @@ Important missing features, so this does not get confused with a full-standard
 H.264 encoder yet:
 
 - CABAC context modelling, syntax binarization, and final bitstream-path
-  integration beyond the current skip-capable plus explicit zero-CBP /
-  single-ref / zero-MVD `P_L0_16x16` P-slice subset
+  integration beyond the current skip-capable plus reduced single-ref /
+  zero-MVD `P_L0_16x16` P-slice subset with luma/chroma residual smokes
 - no broader `B` / `BREF` picture support beyond the current limited
   reordered dual-list `B_L0_16x16` / `B_L1_16x16` / `B_BI_16x16` `16x16` path
 - direct prediction modes beyond the current limited
@@ -1066,8 +1068,8 @@ H.264 encoder yet:
 Still missing relative to the chosen `x264` software baseline:
 
 - full CABAC slice integration beyond the current standalone arithmetic core
-  and current skip-capable plus explicit zero-CBP / single-ref / zero-MVD
-  `P_L0_16x16` P-slice checkpoint
+  and current skip-capable plus reduced single-ref / zero-MVD `P_L0_16x16`
+  P-slice checkpoint with luma/chroma residual smokes
 - broader inter-coded `B` / `BREF` picture handling and the associated
   reference management
 - reference-picture management beyond the current four-reference P-slice subset
