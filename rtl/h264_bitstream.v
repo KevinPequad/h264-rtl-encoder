@@ -1615,6 +1615,62 @@ module h264_bitstream #(
                                     cabac_res_last_ctx_state[14] <= cabac_init_state(4, 63, 26);
                                     cabac_res_level_ctx_state_0 <= cabac_init_state(-6, 76, 26);
                                     cabac_res_level_ctx_state_1 <= cabac_init_state(-2, 59, 26);
+
+                                    // Chroma residual CABAC contexts for the dormant
+                                    // P16x16 chroma DC/AC residual lane.  Keep these
+                                    // initialized from the same cabac_init_idc=0 / QP=26
+                                    // table as the luma residual contexts so that lifting
+                                    // the top-level chroma guard does not start from reset
+                                    // state 0 for ctxIdx 97/101/149/152/210/213/257/266.
+                                    cabac_res_chroma_dc_cbf_ctx_state[0] <= cabac_init_state(5, 54, 26);
+                                    cabac_res_chroma_dc_cbf_ctx_state[1] <= cabac_init_state(6, 60, 26);
+                                    cabac_res_chroma_dc_cbf_ctx_state[2] <= cabac_init_state(6, 59, 26);
+                                    cabac_res_chroma_dc_cbf_ctx_state[3] <= cabac_init_state(6, 69, 26);
+                                    cabac_res_chroma_dc_sig_ctx_state[0] <= cabac_init_state(3, 64, 26);
+                                    cabac_res_chroma_dc_sig_ctx_state[1] <= cabac_init_state(1, 61, 26);
+                                    cabac_res_chroma_dc_sig_ctx_state[2] <= cabac_init_state(9, 63, 26);
+                                    cabac_res_chroma_dc_last_ctx_state[0] <= cabac_init_state(1, 67, 26);
+                                    cabac_res_chroma_dc_last_ctx_state[1] <= cabac_init_state(5, 59, 26);
+                                    cabac_res_chroma_dc_last_ctx_state[2] <= cabac_init_state(9, 67, 26);
+                                    cabac_res_chroma_dc_level_ctx_state_0 <= cabac_init_state(0, 70, 26);
+                                    cabac_res_chroma_dc_level_ctx_state_1 <= cabac_init_state(-2, 58, 26);
+
+                                    cabac_res_chroma_ac_cbf_ctx_state[0] <= cabac_init_state(-1, 48, 26);
+                                    cabac_res_chroma_ac_cbf_ctx_state[1] <= cabac_init_state(0, 68, 26);
+                                    cabac_res_chroma_ac_cbf_ctx_state[2] <= cabac_init_state(-4, 69, 26);
+                                    cabac_res_chroma_ac_cbf_ctx_state[3] <= cabac_init_state(-8, 88, 26);
+                                    cabac_res_chroma_ac_sig_ctx_state[0] <= cabac_init_state(7, 50, 26);
+                                    cabac_res_chroma_ac_sig_ctx_state[1] <= cabac_init_state(16, 39, 26);
+                                    cabac_res_chroma_ac_sig_ctx_state[2] <= cabac_init_state(5, 44, 26);
+                                    cabac_res_chroma_ac_sig_ctx_state[3] <= cabac_init_state(4, 52, 26);
+                                    cabac_res_chroma_ac_sig_ctx_state[4] <= cabac_init_state(11, 48, 26);
+                                    cabac_res_chroma_ac_sig_ctx_state[5] <= cabac_init_state(-5, 60, 26);
+                                    cabac_res_chroma_ac_sig_ctx_state[6] <= cabac_init_state(-1, 59, 26);
+                                    cabac_res_chroma_ac_sig_ctx_state[7] <= cabac_init_state(0, 59, 26);
+                                    cabac_res_chroma_ac_sig_ctx_state[8] <= cabac_init_state(22, 33, 26);
+                                    cabac_res_chroma_ac_sig_ctx_state[9] <= cabac_init_state(5, 44, 26);
+                                    cabac_res_chroma_ac_sig_ctx_state[10] <= cabac_init_state(14, 43, 26);
+                                    cabac_res_chroma_ac_sig_ctx_state[11] <= cabac_init_state(-1, 78, 26);
+                                    cabac_res_chroma_ac_sig_ctx_state[12] <= cabac_init_state(0, 60, 26);
+                                    cabac_res_chroma_ac_sig_ctx_state[13] <= cabac_init_state(9, 69, 26);
+                                    cabac_res_chroma_ac_sig_ctx_state[14] <= cabac_init_state(11, 28, 26);
+                                    cabac_res_chroma_ac_last_ctx_state[0] <= cabac_init_state(16, 30, 26);
+                                    cabac_res_chroma_ac_last_ctx_state[1] <= cabac_init_state(18, 32, 26);
+                                    cabac_res_chroma_ac_last_ctx_state[2] <= cabac_init_state(18, 35, 26);
+                                    cabac_res_chroma_ac_last_ctx_state[3] <= cabac_init_state(22, 29, 26);
+                                    cabac_res_chroma_ac_last_ctx_state[4] <= cabac_init_state(24, 31, 26);
+                                    cabac_res_chroma_ac_last_ctx_state[5] <= cabac_init_state(23, 38, 26);
+                                    cabac_res_chroma_ac_last_ctx_state[6] <= cabac_init_state(18, 43, 26);
+                                    cabac_res_chroma_ac_last_ctx_state[7] <= cabac_init_state(20, 41, 26);
+                                    cabac_res_chroma_ac_last_ctx_state[8] <= cabac_init_state(11, 63, 26);
+                                    cabac_res_chroma_ac_last_ctx_state[9] <= cabac_init_state(9, 59, 26);
+                                    cabac_res_chroma_ac_last_ctx_state[10] <= cabac_init_state(9, 64, 26);
+                                    cabac_res_chroma_ac_last_ctx_state[11] <= cabac_init_state(-1, 94, 26);
+                                    cabac_res_chroma_ac_last_ctx_state[12] <= cabac_init_state(-2, 89, 26);
+                                    cabac_res_chroma_ac_last_ctx_state[13] <= cabac_init_state(-9, 108, 26);
+                                    cabac_res_chroma_ac_last_ctx_state[14] <= cabac_init_state(-6, 76, 26);
+                                    cabac_res_chroma_ac_level_ctx_state_0 <= cabac_init_state(0, 58, 26);
+                                    cabac_res_chroma_ac_level_ctx_state_1 <= cabac_init_state(-13, 106, 26);
                                     cabac_start <= 1'b1;
                                 end
                                 cmd_done <= 1'b1;
