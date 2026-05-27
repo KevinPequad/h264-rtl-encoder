@@ -384,6 +384,50 @@ int main(int argc, char** argv) {
         {0, 1, 0},
     }, "chroma_ac_context_override");
 
+    auto chroma_ac_tail = run_events(dut, {
+        {0, 1, 0, 0, 0},
+        {1, 0, 0, 0, 0},
+        {1, 0, 1, 0, 0},
+        {1, 0, 2, 0, 0},
+        {1, 0, 3, 0, 0},
+        {1, 0, 4, 0, 0},
+        {1, 0, 5, 0, 0},
+        {1, 0, 6, 0, 0},
+        {1, 0, 7, 0, 0},
+        {1, 0, 8, 0, 0},
+        {1, 0, 9, 0, 0},
+        {1, 0, 10, 0, 0},
+        {1, 0, 11, 0, 0},
+        {1, 0, 12, 0, 0},
+        {1, 0, 13, 0, 0},
+        {1, 1, 14, 0, 0},
+        {2, 1, 14, 0, 0},
+        {3, 1, 14, 2, 0},
+        {4, 0, 14, 2, 0},
+    });
+    expect_eq(chroma_ac_tail, {
+        {1, 0, 101},
+        {0, 0, 152},
+        {0, 0, 153},
+        {0, 0, 154},
+        {0, 0, 155},
+        {0, 0, 156},
+        {0, 0, 157},
+        {0, 0, 158},
+        {0, 0, 159},
+        {0, 0, 160},
+        {0, 0, 161},
+        {0, 0, 162},
+        {0, 0, 163},
+        {0, 0, 164},
+        {0, 0, 165},
+        {1, 0, 166},
+        {1, 0, 227},
+        {1, 0, 266},
+        {0, 0, 277},
+        {0, 1, 0},
+    }, "chroma_ac_tail_context_clamp");
+
     tick(dut);
     auto chroma_ac_suffix_payload = run_events(dut, {
         {0, 1, 0, 0, 0},
@@ -423,7 +467,7 @@ int main(int argc, char** argv) {
         {0, 1, 0},
     }, "chroma_ac_three_bit_suffix_payload");
 
-    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma, 4:2:0/4:2:2 chroma-DC zero/nonzero/clamped-tail, chroma-AC zero/nonzero, multi/three-bit suffix, and output backpressure category blocks\n";
+    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma, 4:2:0/4:2:2 chroma-DC zero/nonzero/clamped-tail, chroma-AC zero/nonzero/tail-context, multi/three-bit suffix, and output backpressure category blocks\n";
     delete dut;
     return 0;
 }
