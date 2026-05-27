@@ -264,6 +264,19 @@ int main(int argc, char** argv) {
         {0, 0, 97},
     }, "chroma_dc_zero_cbf_context");
 
+    for (int sel = 1; sel < 4; ++sel) {
+        dut->ctx_cbf_sel = sel;
+        tick(dut);
+        auto chroma_dc_cbf_sel = run_events(dut, {
+            {0, 1, 0, 0, 0},
+        });
+        expect_eq(chroma_dc_cbf_sel, {
+            {1, 0, 97 + sel},
+        }, "chroma_dc_cbf_context_increment_" + std::to_string(sel));
+    }
+    dut->ctx_cbf_sel = 0;
+    tick(dut);
+
     auto chroma_dc = run_events(dut, {
         {0, 1, 0, 0, 0},
         {1, 1, 0, 0, 0},
@@ -351,6 +364,19 @@ int main(int argc, char** argv) {
     expect_eq(chroma_ac_zero, {
         {0, 0, 101},
     }, "chroma_ac_zero_cbf_context");
+
+    for (int sel = 1; sel < 4; ++sel) {
+        dut->ctx_cbf_sel = sel;
+        tick(dut);
+        auto chroma_ac_cbf_sel = run_events(dut, {
+            {0, 1, 0, 0, 0},
+        });
+        expect_eq(chroma_ac_cbf_sel, {
+            {1, 0, 101 + sel},
+        }, "chroma_ac_cbf_context_increment_" + std::to_string(sel));
+    }
+    dut->ctx_cbf_sel = 0;
+    tick(dut);
 
     auto chroma_ac = run_events(dut, {
         {0, 1, 0, 0, 0},
@@ -467,7 +493,7 @@ int main(int argc, char** argv) {
         {0, 1, 0},
     }, "chroma_ac_three_bit_suffix_payload");
 
-    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma, 4:2:0/4:2:2 chroma-DC zero/nonzero/clamped-tail, chroma-AC zero/nonzero/tail-context, multi/three-bit suffix, and output backpressure category blocks\n";
+    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma, 4:2:0/4:2:2 chroma-DC zero/nonzero/cbf-increment/clamped-tail, chroma-AC zero/nonzero/cbf-increment/tail-context, multi/three-bit suffix, and output backpressure category blocks\n";
     delete dut;
     return 0;
 }
