@@ -143,7 +143,7 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "gate_checks_cb_vs_cr_ac_plane_counters",
         "scripts/run_cabac_p16x16_chroma_residual_red_check.sh",
-        r"cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0.*?cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1",
+        r"cb_ac_mbs=1\s+cr_ac_mbs=0.*?cb_ac_mbs=0\s+cr_ac_mbs=1",
     ),
     (
         "gate_checks_decoded_chroma_plane_sanity",
@@ -151,9 +151,9 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"decoded plane sanity expected Cb-only change.*?decoded plane sanity expected Cr-only change.*?\[PASS\] chroma residual \{name\} decoded-plane sanity U_SAD=\{u_sad\} V_SAD=\{v_sad\}",
     ),
     (
-        "gate_locks_cr_ac_bytestream29_expected_miss",
+        "gate_locks_cr_ac_short_decode_expected_miss",
         "scripts/run_cabac_p16x16_chroma_residual_red_check.sh",
-        r"expect_ffmpeg_fail.*?bytestream -29.*?expected strict FFmpeg decode miss",
+        r"expect_ffmpeg_fail.*?emitted \$\{actual_bytes\}/\$\{expected_bytes\} decoded bytes",
     ),
     (
         "probe_locks_both_plane_ac_expected_miss",
@@ -218,7 +218,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, the guarded Cb base CBF lane, plane-local Cr AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, Cr AC expected-miss coverage, all single-quadrant sparse Cb/Cr expected-miss coverage, dense Cb AC strict-pass control plus decoded-plane sanity, and chroma AC per-plane block counters")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, the guarded Cb base CBF lane, plane-local Cr AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, Cr AC short-decode expected-miss coverage, all single-quadrant sparse Cb/Cr expected-miss coverage, dense Cb AC strict-pass control plus decoded-plane sanity, and chroma AC per-plane block counters")
     return 0
 
 

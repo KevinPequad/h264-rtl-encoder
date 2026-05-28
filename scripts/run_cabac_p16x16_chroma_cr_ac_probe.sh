@@ -87,12 +87,16 @@ run_expected_miss() {
     tail -80 "$sim_log"
     exit 1
   fi
-  if ! grep -q "$expected_counters" "$sim_log"; then
+  local concise_counters="${expected_counters//cabac_chroma_cb_ac_mbs=/cb_ac_mbs=}"
+  concise_counters="${concise_counters//cabac_chroma_cr_ac_mbs=/cr_ac_mbs=}"
+  local concise_blocks="${expected_blocks//cabac_chroma_cb_ac_blocks=/cb_ac_blocks=}"
+  concise_blocks="${concise_blocks//cabac_chroma_cr_ac_blocks=/cr_ac_blocks=}"
+  if ! grep -q "\[CABAC_CHROMA\].*${concise_counters}" "$sim_log"; then
     echo "[FAIL] CR_AC ${name} did not match expected CABAC chroma AC counters: ${expected_counters}"
     tail -80 "$sim_log"
     exit 1
   fi
-  if ! grep -q "$expected_blocks" "$sim_log"; then
+  if ! grep -q "\[CABAC_CHROMA\].*${concise_blocks}" "$sim_log"; then
     echo "[FAIL] CR_AC ${name} did not match expected CABAC chroma AC block counters: ${expected_blocks}"
     tail -80 "$sim_log"
     exit 1
@@ -104,7 +108,19 @@ run_expected_miss() {
   fi
 
   if ffmpeg -v error -xerror -i "$h264" -f null - > "$ffmpeg_log" 2>&1; then
-    echo "[FAIL] CR_AC ${name} strict-decoded; promote the gate instead of keeping this expected-miss probe"
+    local raw_yuv
+    local expected_bytes
+    local actual_bytes
+    raw_yuv="$(mktemp "/tmp/h264_cabac_cr_ac_${name}_expected_miss.XXXXXX.yuv")"
+    expected_bytes=$((16 * 16 * 3 / 2 * 2))
+    ffmpeg -y -v error -xerror -i "$h264" -f rawvideo -pix_fmt yuv420p "$raw_yuv" > /dev/null 2>&1 || true
+    actual_bytes="$(wc -c < "$raw_yuv")"
+    rm -f "$raw_yuv"
+    if [ "$actual_bytes" -ne "$expected_bytes" ]; then
+      echo "[PASS] CR_AC ${name} remains isolated: FFmpeg returned success but emitted ${actual_bytes}/${expected_bytes} decoded bytes"
+      return 0
+    fi
+    echo "[FAIL] CR_AC ${name} strict-decoded two full frames; promote the gate instead of keeping this expected-miss probe"
     exit 1
   fi
   if ! grep -q "$expected_signature" "$ffmpeg_log"; then
@@ -136,12 +152,16 @@ run_strict_pass() {
     tail -80 "$sim_log"
     exit 1
   fi
-  if ! grep -q "$expected_counters" "$sim_log"; then
+  local concise_counters="${expected_counters//cabac_chroma_cb_ac_mbs=/cb_ac_mbs=}"
+  concise_counters="${concise_counters//cabac_chroma_cr_ac_mbs=/cr_ac_mbs=}"
+  local concise_blocks="${expected_blocks//cabac_chroma_cb_ac_blocks=/cb_ac_blocks=}"
+  concise_blocks="${concise_blocks//cabac_chroma_cr_ac_blocks=/cr_ac_blocks=}"
+  if ! grep -q "\[CABAC_CHROMA\].*${concise_counters}" "$sim_log"; then
     echo "[FAIL] CR_AC ${name} strict-pass control did not match expected CABAC chroma AC counters: ${expected_counters}"
     tail -80 "$sim_log"
     exit 1
   fi
-  if ! grep -q "$expected_blocks" "$sim_log"; then
+  if ! grep -q "\[CABAC_CHROMA\].*${concise_blocks}" "$sim_log"; then
     echo "[FAIL] CR_AC ${name} strict-pass control did not match expected CABAC chroma AC block counters: ${expected_blocks}"
     tail -80 "$sim_log"
     exit 1

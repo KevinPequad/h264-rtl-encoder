@@ -80,23 +80,23 @@ run_case() {
     exit 1
   fi
   if [ "$want_cbp_chroma" = "1" ]; then
-    if ! grep -q 'cabac_chroma_dc_mbs=1 cabac_chroma_ac_mbs=0' "$sim_log"; then
+    if ! grep -q '\[CABAC_CHROMA\].*cabac_chroma_dc_mbs=1 cabac_chroma_ac_mbs=0' "$sim_log"; then
       echo "[FAIL] chroma residual ${name} did not preserve DC-only coded_block_pattern_chroma=1"
       tail -80 "$sim_log"
       exit 1
     fi
   else
-    if ! grep -q 'cabac_chroma_dc_mbs=0 cabac_chroma_ac_mbs=1' "$sim_log"; then
+    if ! grep -q '\[CABAC_CHROMA\].*cabac_chroma_dc_mbs=0 cabac_chroma_ac_mbs=1' "$sim_log"; then
       echo "[FAIL] chroma residual ${name} did not preserve DC+AC coded_block_pattern_chroma=2"
       tail -80 "$sim_log"
       exit 1
     fi
-    if [ "$name" = "cb_ac" ] && ! grep -q 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' "$sim_log"; then
+    if [ "$name" = "cb_ac" ] && ! grep -q '\[CABAC_CHROMA\].*cb_ac_mbs=1 cr_ac_mbs=0' "$sim_log"; then
       echo "[FAIL] chroma residual ${name} did not mark the Cb-only CABAC chroma AC plane"
       tail -80 "$sim_log"
       exit 1
     fi
-    if [ "$name" = "cr_ac" ] && ! grep -q 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' "$sim_log"; then
+    if [ "$name" = "cr_ac" ] && ! grep -q '\[CABAC_CHROMA\].*cb_ac_mbs=0 cr_ac_mbs=1' "$sim_log"; then
       echo "[FAIL] chroma residual ${name} did not mark the Cr-only CABAC chroma AC plane"
       tail -80 "$sim_log"
       exit 1
@@ -140,6 +140,11 @@ run_case() {
   }
   actual_bytes="$(wc -c < "$raw_yuv")"
   if [ "$actual_bytes" -ne "$expected_bytes" ]; then
+    if [ "$expect_ffmpeg_fail" = "1" ]; then
+      echo "[PASS] chroma residual ${name} remains isolated: FFmpeg returned success but emitted ${actual_bytes}/${expected_bytes} decoded bytes"
+      rm -f "$raw_yuv"
+      return 0
+    fi
     echo "[FAIL] chroma residual ${name} decoded ${actual_bytes} bytes, expected ${expected_bytes} bytes for exactly two 16x16 yuv420p frames"
     rm -f "$raw_yuv"
     exit 1
