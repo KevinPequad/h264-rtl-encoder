@@ -117,7 +117,12 @@ run_expected_miss() {
     actual_bytes="$(wc -c < "$raw_yuv")"
     rm -f "$raw_yuv"
     if [ "$actual_bytes" -ne "$expected_bytes" ]; then
-      echo "[PASS] CR_AC ${name} remains isolated: FFmpeg returned success but emitted ${actual_bytes}/${expected_bytes} decoded bytes"
+      if ! grep -q "$expected_signature" "$ffmpeg_log"; then
+        echo "[FAIL] CR_AC ${name} short raw decode did not preserve expected FFmpeg signature '$expected_signature'"
+        tail -80 "$ffmpeg_log"
+        exit 1
+      fi
+      echo "[PASS] CR_AC ${name} remains isolated: FFmpeg returned success with ${expected_signature} and emitted ${actual_bytes}/${expected_bytes} decoded bytes"
       return 0
     fi
     echo "[FAIL] CR_AC ${name} strict-decoded two full frames; promote the gate instead of keeping this expected-miss probe"
@@ -242,15 +247,15 @@ PY
 }
 
 run_strict_pass cb_checker 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=4 cabac_chroma_cr_ac_blocks=0'
-run_expected_miss checker 'bytestream -29' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=4'
-run_expected_miss single_tl 'bytestream -5' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
+run_expected_miss checker 'bytestream -21' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=4'
+run_expected_miss single_tl 'bytestream -17' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
 run_strict_pass single_tr 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
-run_expected_miss single_bl 'bytestream -15' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
+run_expected_miss single_bl 'bytestream -11' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
 run_strict_pass single_br 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
 run_strict_pass both_planes 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=4 cabac_chroma_cr_ac_blocks=4'
-run_expected_miss cb_mirror_single_tl 'bytestream -9' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
-run_expected_miss cb_mirror_single_tr 'bytestream -15' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
-run_expected_miss cb_mirror_single_bl 'bytestream -15' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
+run_expected_miss cb_mirror_single_tl 'bytestream -13' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
+run_expected_miss cb_mirror_single_tr 'bytestream -29' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
+run_expected_miss cb_mirror_single_bl 'bytestream -11' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
 run_strict_pass cb_mirror_single_br 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
 
-echo "[PASS] CABAC P16x16 sparse chroma AC strict-decode blocker is narrowed: Cr single_tr/single_br, dense both-plane AC, and Cb mirror single_br strict-decode, while left-column sparse Cb/Cr and dense Cr remain expected misses"
+echo "[PASS] CABAC P16x16 sparse chroma AC strict-decode blocker is narrowed: Cr single_tr/single_br, dense both-plane AC, and Cb mirror single_br strict-decode, while left-column sparse Cb/Cr and dense Cr remain signature-locked expected misses"

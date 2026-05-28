@@ -13,9 +13,9 @@ Current strict-decode pass set after inferred-final coefficient fix:
 
 Current expected-miss set remains decoder-success with short 384/768 raw output:
 
-- Cr dense checker.
-- Cr sparse left column: `single_tl`, `single_bl`.
-- Cb sparse mirrors except bottom-right: `cb_mirror_single_tl`, `cb_mirror_single_tr`, `cb_mirror_single_bl`.
+- Cr dense checker: `bytestream -21`, short 384/768 raw output.
+- Cr sparse left column: `single_tl` (`bytestream -17`) and `single_bl` (`bytestream -11`), short 384/768 raw output.
+- Cb sparse mirrors except bottom-right: `cb_mirror_single_tl` (`bytestream -13`), `cb_mirror_single_tr` (`bytestream -29`), and `cb_mirror_single_bl` (`bytestream -11`), short 384/768 raw output.
 
 Rejected context experiments:
 
