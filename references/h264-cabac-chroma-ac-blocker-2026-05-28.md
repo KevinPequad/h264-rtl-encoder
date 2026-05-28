@@ -17,13 +17,23 @@ Current expected-miss set remains decoder-success with short 384/768 raw output:
 - Both-plane dense checker.
 - Cb sparse mirrors except bottom-right: `cb_mirror_single_tl`, `cb_mirror_single_tr`, `cb_mirror_single_bl`.
 
-Rejected context experiment in this run:
+Rejected context experiments:
 
 - Tried changing `cabac_res_chroma_ac_cbf_ctx_sel_for` so unavailable 4:2:0 chroma AC left/top neighbors enter the CBF ctxInc as not-coded (`1'b0`) instead of the current coded default (`1'b1`).
-- That immediately regressed the existing Cb dense strict-pass control: `CR_AC cb_checker strict-pass control decoded 384 bytes, expected 768 bytes`.
-- The change was reverted; the canonical gate then passed again with the existing pass/miss set above.
+- The all-zero-edge variant (`left_edge=0 top_edge=0`) immediately regressed the existing strict-pass controls to short output, including dense Cb checker and the right-quadrant sparse passes.
+- A mixed-edge sweep shows no global unavailable-neighbor default fixes the sparse AC blocker without regressing existing passes. Decoded raw byte counts for two 16x16 yuv420p frames, where `768` is strict full decode and `384` is the current short-output miss:
+
+  | unavailable CBF defaults | cb_checker | Cr checker | Cr TL | Cr TR | Cr BL | Cr BR | both planes | Cb TL | Cb TR | Cb BL | Cb BR |
+  | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+  | `left=1 top=1` baseline | 768 | 384 | 384 | 768 | 384 | 768 | 384 | 384 | 384 | 384 | 768 |
+  | `left=0 top=0` | 384 | 384 | 384 | 384 | 384 | 384 | 384 | 384 | 384 | 384 | 384 |
+  | `left=1 top=0` | 768 | 384 | 384 | 384 | 768 | 384 | 384 | 384 | 384 | 384 | 384 |
+  | `left=0 top=1` | 768 | 384 | 384 | 384 | 384 | 384 | 384 | 384 | 384 | 384 | 384 |
+
+- The change was reverted after each probe; the canonical gate then passed again with the existing pass/miss set above.
+- The mixed results point away from a simple edge-default bug and toward context-state history from the zero chroma-AC coded_block_flag bins emitted before the first nonzero sparse block.
 
 Next useful probe:
 
 - Keep the coded-edge CBF behavior as the baseline for now.
-- Instrument or isolate the first Cr/Cb sparse-left mismatch after CBF emission: compare per-block chroma AC significant/last/level context state progression for `single_tl` vs strict-pass `single_tr`/`single_br`, rather than flipping unavailable-edge CBF defaults globally.
+- Instrument or isolate the first Cr/Cb sparse-left mismatch after the zero-block CBF emissions: compare block0/block1 zero CBF context-state updates plus the following significant/last/level context state progression for failing `single_tl`/`single_bl` versus strict-pass `single_tr`/`single_br`, rather than flipping unavailable-edge CBF defaults globally.
