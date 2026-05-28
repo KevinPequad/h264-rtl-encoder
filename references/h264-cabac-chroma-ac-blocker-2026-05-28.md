@@ -37,3 +37,13 @@ Next useful probe:
 
 - Keep the coded-edge CBF behavior as the baseline for now.
 - Enable the plumbed `DEBUG_CABAC_P16X16=1` trace for the first Cr/Cb sparse-left mismatch after the zero-block CBF emissions: compare block0/block1 zero CBF context-state updates plus the following significant/last/level context state progression for failing `single_tl`/`single_bl` versus strict-pass `single_tr`/`single_br`, while preserving the inferred-final coefficient behavior that promoted dense both-plane AC.
+
+## Debug trace checkpoint
+
+- `scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` now builds with `DEBUG_CABAC_P16X16=1` and locks four diagnostic fixtures:
+  - Cr `single_tl`: first coded chroma-AC block `4`, expected short `384/768` decode.
+  - Cr `single_tr`: first coded chroma-AC block `5`, strict `768/768` decode.
+  - Cb mirror `single_tl`: first coded chroma-AC block `0`, expected short `384/768` decode.
+  - Cb mirror `single_br`: first coded chroma-AC block `3`, strict `768/768` decode.
+- `rtl/h264_bitstream.v` now emits `[CABACCTX]` context-state update lines under `DEBUG_CABAC_P16X16`, alongside `[CABACRES]` residual-bin lines. This makes the sparse-left miss vs right-column pass comparison reproducible without VCD dumping.
+- Next repair target: use the locked `CABACRES`/`CABACCTX` pairs to test a narrow chroma-AC context-state/ordering fix, then promote the affected expected-miss rows only when FFmpeg emits the full `768/768` raw output.

@@ -991,6 +991,15 @@ module h264_bitstream #(
             cabac_res_scan_start <= 1'b0;
 
             if (cabac_ctx_state_wr) begin
+                if (DEBUG_CABAC_P16X16 &&
+                    ((cabac_pending_ctx_kind == CABAC_CTX_RES_CHRAC_CBF) ||
+                     (cabac_pending_ctx_kind == CABAC_CTX_RES_CHRAC_SIG) ||
+                     (cabac_pending_ctx_kind == CABAC_CTX_RES_CHRAC_LAST) ||
+                     (cabac_pending_ctx_kind == CABAC_CTX_RES_CHRAC_LEVEL)))
+                    $display("[CABACCTX] mb=%0d cat=%0d blk=%0d kind=%0d sel=%0d in=%0d out=%0d",
+                             cabac_mb_counter, cabac_res_category, cabac_res_block_idx,
+                             cabac_pending_ctx_kind, cabac_pending_ctx_sel,
+                             cabac_ctx_state_in, cabac_ctx_state_out);
                 case (cabac_pending_ctx_kind)
                     CABAC_CTX_SKIP: begin
                         case (cabac_pending_ctx_sel)
@@ -2760,10 +2769,11 @@ module h264_bitstream #(
                         end
                         if (cabac_res_bin_valid) begin
                             if (DEBUG_CABAC_P16X16 && (cabac_res_category != CABAC_RES_CAT_LUMA))
-                                $display("[CABACRES] mb=%0d cat=%0d blk=%0d ctx=%0d val=%0d bypass=%0d coeff=%0d",
+                                $display("[CABACRES] mb=%0d cat=%0d blk=%0d ctx=%0d val=%0d bypass=%0d coeff=%0d state_in=%0d pending_kind=%0d pending_sel=%0d",
                                          cabac_mb_counter, cabac_res_category, cabac_res_block_idx,
                                          cabac_res_bin_ctx_idx, cabac_res_bin_value,
-                                         cabac_res_bin_bypass, cabac_res_event_coeff_idx);
+                                         cabac_res_bin_bypass, cabac_res_event_coeff_idx,
+                                         cabac_ctx_state_in, cabac_pending_ctx_kind, cabac_pending_ctx_sel);
                             cabac_bin_valid <= 1'b1;
                             cabac_bin_value <= cabac_res_bin_value;
                             cabac_bin_bypass <= cabac_res_bin_bypass;
