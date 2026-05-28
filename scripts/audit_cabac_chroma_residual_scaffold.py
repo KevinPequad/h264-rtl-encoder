@@ -96,9 +96,9 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"function automatic \[1:0\] cabac_res_chroma_ac_cbf_ctx_sel_for.*?plane-local.*?CABAC_CHROMA_AC_BLOCKS_PER_PLANE.*?left_coded_i = plane_block_i\[0\].*?top_coded_i = \(plane_block_i >= 3'd2\).*?cabac_res_chroma_ac_cbf_ctx_sel_for = \{top_coded_i, left_coded_i\}.*?9'd101:\s*begin\s*cabac_ctx_state_in\s*<=\s*cabac_res_chroma_ac_cbf_ctx_state\[cabac_res_chroma_ac_cbf_ctx_sel_for\(cabac_res_block_idx\)\].*?cabac_pending_ctx_sel\s*<=\s*\{2'd0,\s*cabac_res_chroma_ac_cbf_ctx_sel_for\(cabac_res_block_idx\)\}",
     ),
     (
-        "bitstream_keeps_cb_chroma_ac_cbf_base_guard",
+        "bitstream_defaults_chroma_ac_cbf_edges_coded",
         "rtl/h264_bitstream.v",
-        r"if \(block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE\) begin\s*plane_block_i = block_i\[2:0\];\s*cabac_res_chroma_ac_cbf_ctx_sel_for = 2'd0;\s*end else begin\s*plane_block_i = block_i - CABAC_CHROMA_AC_BLOCKS_PER_PLANE;\s*left_coded_i = plane_block_i\[0\] \? cabac_chroma_ac_block_nz_for\(block_i - 4'd1\) : 1'b0;\s*top_coded_i = \(plane_block_i >= 3'd2\) \? cabac_chroma_ac_block_nz_for\(block_i - 4'd2\) : 1'b0;\s*cabac_res_chroma_ac_cbf_ctx_sel_for = \{top_coded_i, left_coded_i\};\s*end",
+        r"if \(block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE\)\s*plane_block_i = block_i\[2:0\];\s*else\s*plane_block_i = block_i - CABAC_CHROMA_AC_BLOCKS_PER_PLANE;\s*left_coded_i = plane_block_i\[0\] \? cabac_chroma_ac_block_nz_for\(block_i - 4'd1\) : 1'b1;\s*top_coded_i = \(plane_block_i >= 3'd2\) \? cabac_chroma_ac_block_nz_for\(block_i - 4'd2\) : 1'b1;\s*cabac_res_chroma_ac_cbf_ctx_sel_for = \{top_coded_i, left_coded_i\}",
     ),
     (
         "bitstream_initializes_chroma_residual_contexts",
@@ -161,19 +161,19 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"both_planes.*?bytestream -22.*?cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=1",
     ),
     (
-        "probe_locks_cb_mirror_expected_misses",
+        "probe_promotes_cb_mirror_right_sparse_pass",
         "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
-        r"cb_mirror_single_tl.*?cb_mirror_single_br.*?run_expected_miss cb_mirror_single_tl 'bytestream -9' 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'.*?run_expected_miss cb_mirror_single_br 'bytestream -23' 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'",
+        r"cb_mirror_single_tl.*?cb_mirror_single_br.*?run_expected_miss cb_mirror_single_tl 'bytestream -9' 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'.*?run_strict_pass cb_mirror_single_br 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'",
     ),
     (
-        "probe_locks_all_single_quadrant_expected_misses",
+        "probe_promotes_right_quadrant_sparse_passes",
         "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
-        r"single_tr.*?single_bl.*?cb_mirror_single_tr.*?cb_mirror_single_bl.*?run_expected_miss single_tl 'bytestream -5'.*?run_expected_miss single_tr 'bytestream -11'.*?run_expected_miss single_bl 'bytestream -15'.*?run_expected_miss single_br 'bytestream -35'.*?run_expected_miss cb_mirror_single_tl 'bytestream -9'.*?run_expected_miss cb_mirror_single_tr 'bytestream -15'.*?run_expected_miss cb_mirror_single_bl 'bytestream -15'.*?run_expected_miss cb_mirror_single_br 'bytestream -23'",
+        r"single_tr.*?single_bl.*?cb_mirror_single_tr.*?cb_mirror_single_bl.*?run_expected_miss single_tl 'bytestream -5'.*?run_strict_pass single_tr 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1'.*?run_expected_miss single_bl 'bytestream -15'.*?run_strict_pass single_br 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1'.*?run_expected_miss cb_mirror_single_tl 'bytestream -9'.*?run_expected_miss cb_mirror_single_tr 'bytestream -15'.*?run_expected_miss cb_mirror_single_bl 'bytestream -15'.*?run_strict_pass cb_mirror_single_br 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'",
     ),
     (
         "probe_locks_dense_cb_ac_pass_control",
         "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
-        r"cb_checker.*?run_strict_pass cb_checker 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=4\s+cabac_chroma_cr_ac_blocks=0'.*?dense Cb-only strict-pass control",
+        r"cb_checker.*?run_strict_pass cb_checker 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=4\s+cabac_chroma_cr_ac_blocks=0'",
     ),
     (
         "probe_checks_dense_cb_ac_decoded_plane_sanity",
@@ -218,7 +218,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, the guarded Cb base CBF lane, plane-local Cr AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, Cr AC short-decode expected-miss coverage, all single-quadrant sparse Cb/Cr expected-miss coverage, dense Cb AC strict-pass control plus decoded-plane sanity, and chroma AC per-plane block counters")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, remaining Cr AC short-decode expected-miss coverage, right-quadrant sparse Cb/Cr strict-pass promotion, dense Cb AC strict-pass control plus decoded-plane sanity, and chroma AC per-plane block counters")
     return 0
 
 

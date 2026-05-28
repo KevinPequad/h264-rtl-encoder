@@ -764,18 +764,16 @@ module h264_bitstream #(
         reg top_coded_i;
         begin
             // Chroma AC coded_block_flag context derivation is plane-local.
-            // Keep the existing Cb control lane on the reduced base-context
-            // bring-up path, but derive Cr AC from prior Cr blocks so the next
-            // plane can be promoted without Cb-to-Cr context leakage.
-            if (block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE) begin
+            // For 4:2:0 edge blocks, unavailable left/top neighbors enter the
+            // ctxInc derivation as coded. That promotes the right-column sparse
+            // Cb/Cr probes without leaking Cb history into the Cr plane.
+            if (block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE)
                 plane_block_i = block_i[2:0];
-                cabac_res_chroma_ac_cbf_ctx_sel_for = 2'd0;
-            end else begin
+            else
                 plane_block_i = block_i - CABAC_CHROMA_AC_BLOCKS_PER_PLANE;
-                left_coded_i = plane_block_i[0] ? cabac_chroma_ac_block_nz_for(block_i - 4'd1) : 1'b0;
-                top_coded_i = (plane_block_i >= 3'd2) ? cabac_chroma_ac_block_nz_for(block_i - 4'd2) : 1'b0;
-                cabac_res_chroma_ac_cbf_ctx_sel_for = {top_coded_i, left_coded_i};
-            end
+            left_coded_i = plane_block_i[0] ? cabac_chroma_ac_block_nz_for(block_i - 4'd1) : 1'b1;
+            top_coded_i = (plane_block_i >= 3'd2) ? cabac_chroma_ac_block_nz_for(block_i - 4'd2) : 1'b1;
+            cabac_res_chroma_ac_cbf_ctx_sel_for = {top_coded_i, left_coded_i};
         end
     endfunction
 

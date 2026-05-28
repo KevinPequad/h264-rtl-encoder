@@ -221,7 +221,7 @@ if name.startswith("cb_"):
         raise SystemExit(
             f"[FAIL] CR_AC {name} strict-pass decoded plane sanity expected Cb-only change, got U_SAD={u_sad} V_SAD={v_sad}"
         )
-elif name.startswith("cr_"):
+elif name.startswith("cr_") or name in {"single_tr", "single_br"}:
     if v_sad == 0 or u_sad != 0:
         raise SystemExit(
             f"[FAIL] CR_AC {name} strict-pass decoded plane sanity expected Cr-only change, got U_SAD={u_sad} V_SAD={v_sad}"
@@ -239,13 +239,13 @@ PY
 run_strict_pass cb_checker 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=4 cabac_chroma_cr_ac_blocks=0'
 run_expected_miss checker 'bytestream -29' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=4'
 run_expected_miss single_tl 'bytestream -5' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
-run_expected_miss single_tr 'bytestream -11' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
+run_strict_pass single_tr 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
 run_expected_miss single_bl 'bytestream -15' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
-run_expected_miss single_br 'bytestream -35' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
+run_strict_pass single_br 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
 run_expected_miss both_planes 'bytestream -22' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=4 cabac_chroma_cr_ac_blocks=4'
 run_expected_miss cb_mirror_single_tl 'bytestream -9' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
 run_expected_miss cb_mirror_single_tr 'bytestream -15' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
 run_expected_miss cb_mirror_single_bl 'bytestream -15' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
-run_expected_miss cb_mirror_single_br 'bytestream -23' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
+run_strict_pass cb_mirror_single_br 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
 
-echo "[PASS] CABAC P16x16 sparse chroma AC strict-decode blocker is reproduced across all single-block Cr-only quadrants, both-plane, and all single-block Cb-only mirror probes with a dense Cb-only strict-pass control"
+echo "[PASS] CABAC P16x16 sparse chroma AC strict-decode blocker is narrowed: Cr single_tr/single_br and Cb mirror single_br strict-decode, while left-column sparse Cb/Cr, dense Cr, and both-plane probes remain expected misses"
