@@ -176,6 +176,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"cb_checker.*?run_strict_pass cb_checker 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=4\s+cabac_chroma_cr_ac_blocks=0'.*?dense Cb-only strict-pass control",
     ),
     (
+        "probe_checks_dense_cb_ac_decoded_plane_sanity",
+        "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
+        r"strict-pass decoded plane sanity expected Cb-only change.*?strict-pass decoded-plane sanity U_SAD=\{u_sad\} V_SAD=\{v_sad\}",
+    ),
+    (
         "probe_locks_chroma_ac_block_counters",
         "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
         r"expected_blocks=.*?cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=4.*?run_expected_miss single_tl 'bytestream -5'.*?cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1.*?run_expected_miss both_planes 'bytestream -22'.*?cabac_chroma_cb_ac_blocks=4\s+cabac_chroma_cr_ac_blocks=4",
@@ -213,7 +218,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, the guarded Cb base CBF lane, plane-local Cr AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, Cr AC expected-miss coverage, all single-quadrant sparse Cb/Cr expected-miss coverage, dense Cb AC strict-pass control, and chroma AC per-plane block counters")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, the guarded Cb base CBF lane, plane-local Cr AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, Cr AC expected-miss coverage, all single-quadrant sparse Cb/Cr expected-miss coverage, dense Cb AC strict-pass control plus decoded-plane sanity, and chroma AC per-plane block counters")
     return 0
 
 

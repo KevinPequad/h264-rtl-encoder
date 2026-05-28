@@ -169,11 +169,49 @@ run_strict_pass() {
     exit 1
   }
   actual_bytes="$(wc -c < "$raw_yuv")"
-  rm -f "$raw_yuv"
   if [ "$actual_bytes" -ne "$expected_bytes" ]; then
     echo "[FAIL] CR_AC ${name} strict-pass control decoded ${actual_bytes} bytes, expected ${expected_bytes} bytes for two 16x16 yuv420p frames"
+    rm -f "$raw_yuv"
     exit 1
   fi
+
+  python3 - "$name" "$input" "$raw_yuv" <<'PY'
+import sys
+from pathlib import Path
+
+name, input_path, decoded_path = sys.argv[1:4]
+width = height = 16
+frame_size = width * height * 3 // 2
+luma_size = width * height
+chroma_size = width * height // 4
+src = Path(input_path).read_bytes()
+dec = Path(decoded_path).read_bytes()
+
+if dec[:frame_size] != src[:frame_size]:
+    raise SystemExit(f"[FAIL] CR_AC {name} strict-pass control changed the IDR reference frame")
+
+frame1 = frame_size
+u0 = frame1 + luma_size
+v0 = u0 + chroma_size
+u_sad = sum(abs(dec[u0 + i] - src[u0 + i]) for i in range(chroma_size))
+v_sad = sum(abs(dec[v0 + i] - src[v0 + i]) for i in range(chroma_size))
+
+if name.startswith("cb_"):
+    if u_sad == 0 or v_sad != 0:
+        raise SystemExit(
+            f"[FAIL] CR_AC {name} strict-pass decoded plane sanity expected Cb-only change, got U_SAD={u_sad} V_SAD={v_sad}"
+        )
+elif name.startswith("cr_"):
+    if v_sad == 0 or u_sad != 0:
+        raise SystemExit(
+            f"[FAIL] CR_AC {name} strict-pass decoded plane sanity expected Cr-only change, got U_SAD={u_sad} V_SAD={v_sad}"
+        )
+else:
+    raise SystemExit(f"[FAIL] CR_AC {name} strict-pass control has no decoded-plane sanity expectation")
+
+print(f"[PASS] CR_AC {name} strict-pass decoded-plane sanity U_SAD={u_sad} V_SAD={v_sad}")
+PY
+  rm -f "$raw_yuv"
 
   echo "[PASS] CR_AC ${name} strict-pass control FFmpeg-decoded with ${expected_counters} and ${expected_blocks}"
 }
