@@ -156,9 +156,9 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"expect_ffmpeg_fail.*?emitted \$\{actual_bytes\}/\$\{expected_bytes\} decoded bytes",
     ),
     (
-        "probe_locks_both_plane_ac_expected_miss",
+        "probe_promotes_both_plane_ac_strict_pass",
         "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
-        r"both_planes.*?bytestream -22.*?cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=1",
+        r"run_strict_pass both_planes 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=4\s+cabac_chroma_cr_ac_blocks=4'",
     ),
     (
         "probe_promotes_cb_mirror_right_sparse_pass",
@@ -183,7 +183,7 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "probe_locks_chroma_ac_block_counters",
         "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
-        r"expected_blocks=.*?cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=4.*?run_expected_miss single_tl 'bytestream -5'.*?cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1.*?run_expected_miss both_planes 'bytestream -22'.*?cabac_chroma_cb_ac_blocks=4\s+cabac_chroma_cr_ac_blocks=4",
+        r"expected_blocks=.*?cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=4.*?run_expected_miss single_tl 'bytestream -5'.*?cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1.*?run_strict_pass both_planes 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=4\s+cabac_chroma_cr_ac_blocks=4'",
     ),
     (
         "top_reports_chroma_ac_block_counters",
@@ -218,7 +218,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, remaining Cr AC short-decode expected-miss coverage, right-quadrant sparse Cb/Cr strict-pass promotion, dense Cb AC strict-pass control plus decoded-plane sanity, and chroma AC per-plane block counters")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, remaining Cr AC short-decode expected-miss coverage, right-quadrant sparse Cb/Cr strict-pass promotion, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, and chroma AC per-plane block counters")
     return 0
 
 

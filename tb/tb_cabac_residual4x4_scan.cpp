@@ -253,8 +253,7 @@ int main(int argc, char** argv) {
         {1, 0, 4, 0, 0}, // coeff 4 not significant
         {1, 0, 5, 0, 0}, // coeff 5 not significant
         {1, 0, 6, 0, 0}, // coeff 6 not significant
-        {1, 1, 7, 0, 0}, // coeff 7 significant
-        {2, 1, 7, 0, 0}, // coeff 7 last within 8-coeff 4:2:2 chroma DC scan
+        // coeff 7 is inferred significant/last at max_coeff_minus1; no sig/last bins are emitted.
         {3, 1, 7, 5, 1}, // level abs=5
         {4, 1, 7, 5, 1}, // sign negative
     }, "chroma_dc_422_limited_scan");
@@ -282,15 +281,14 @@ int main(int argc, char** argv) {
         {1, 0, 11, 0, 0}, // coeff 11 not significant
         {1, 0, 12, 0, 0}, // coeff 12 not significant
         {1, 0, 13, 0, 0}, // coeff 13 not significant
-        {1, 1, 14, 0, 0}, // coeff 14 significant
-        {2, 1, 14, 0, 0}, // coeff 14 last within 15-coeff chroma AC scan
+        // coeff 14 is inferred significant/last at max_coeff_minus1; no sig/last bins are emitted.
         {3, 1, 14, 2, 0}, // level abs=2, emitted reverse-scan first
         {4, 0, 14, 2, 0}, // sign positive
         {3, 1, 0, 1, 1},  // level abs=1
         {4, 1, 0, 1, 1},  // sign negative
     }, "chroma_ac_limited_scan");
 
-    std::cout << "[PASS] CABAC residual scan events matched expected luma, first/middle-event backpressure hold, limited 4:2:0/4:2:2 chroma-DC, and limited chroma-AC blocks\n";
+    std::cout << "[PASS] CABAC residual scan events matched expected luma, first/middle-event backpressure hold, limited 4:2:0/4:2:2 chroma-DC, inferred-final-coefficient, and limited chroma-AC blocks\n";
     delete dut;
     return 0;
 }

@@ -209,13 +209,20 @@ module h264_cabac_residual4x4_scan #(
                     end
 
                     S_SIG: begin
-                        emit_event(EV_SIG, coeff_nonzero_at(scan_idx), scan_idx);
-                        if (coeff_nonzero_at(scan_idx))
-                            state <= S_LAST;
-                        else if (scan_idx == last_idx)
+                        // H.264 CABAC infers the final coefficient position as
+                        // significant when coded_block_flag is set; sig/last
+                        // flags are only emitted before max_coeff_minus1.
+                        if (scan_idx == max_coeff_minus1) begin
                             state <= S_LEVEL_FIND;
-                        else
-                            scan_idx <= scan_idx + 4'd1;
+                        end else begin
+                            emit_event(EV_SIG, coeff_nonzero_at(scan_idx), scan_idx);
+                            if (coeff_nonzero_at(scan_idx))
+                                state <= S_LAST;
+                            else if (scan_idx == last_idx)
+                                state <= S_LEVEL_FIND;
+                            else
+                                scan_idx <= scan_idx + 4'd1;
+                        end
                     end
 
                     S_LAST: begin
