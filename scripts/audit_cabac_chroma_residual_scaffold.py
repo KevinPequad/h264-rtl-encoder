@@ -146,6 +146,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0.*?cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1",
     ),
     (
+        "gate_checks_decoded_chroma_plane_sanity",
+        "scripts/run_cabac_p16x16_chroma_residual_red_check.sh",
+        r"decoded plane sanity expected Cb-only change.*?decoded plane sanity expected Cr-only change.*?\[PASS\] chroma residual \{name\} decoded-plane sanity U_SAD=\{u_sad\} V_SAD=\{v_sad\}",
+    ),
+    (
         "gate_locks_cr_ac_bytestream29_expected_miss",
         "scripts/run_cabac_p16x16_chroma_residual_red_check.sh",
         r"expect_ffmpeg_fail.*?bytestream -29.*?expected strict FFmpeg decode miss",
@@ -193,7 +198,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, the guarded Cb base CBF lane, plane-local Cr AC CBF context selection, state-dispatch, category scheduling, Cr AC expected-miss coverage, sparse Cb-mirror expected-miss probe coverage, and the dense Cb AC strict-pass control")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, the guarded Cb base CBF lane, plane-local Cr AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, Cr AC expected-miss coverage, sparse Cb-mirror expected-miss coverage, and the dense Cb AC strict-pass control")
     return 0
 
 
