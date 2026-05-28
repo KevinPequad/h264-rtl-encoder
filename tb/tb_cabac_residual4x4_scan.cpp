@@ -90,15 +90,17 @@ static void expect_same_event(const Event& got, const Event& want, const std::st
     }
 }
 
-static std::vector<Event> run_case_with_first_event_stall(Vh264_cabac_residual4x4_scan* dut) {
+static std::vector<Event> run_case_with_indexed_event_stall(Vh264_cabac_residual4x4_scan* dut,
+                                                              size_t stall_event_index,
+                                                              int stall_cycles,
+                                                              const std::string& name) {
     std::vector<Event> events;
-    bool stalled_first_event = false;
     dut->event_ready = 1;
     dut->start = 1;
     tick(dut);
     dut->start = 0;
 
-    for (int cyc = 0; cyc < 220; ++cyc) {
+    for (int cyc = 0; cyc < 260; ++cyc) {
         if (dut->event_valid) {
             Event current{
                 static_cast<int>(dut->event_kind),
@@ -108,27 +110,29 @@ static std::vector<Event> run_case_with_first_event_stall(Vh264_cabac_residual4x
                 static_cast<int>(dut->event_level_sign),
             };
 
-            if (!stalled_first_event) {
+            if (events.size() == stall_event_index) {
                 dut->event_ready = 0;
-                tick(dut);
-                if (!dut->event_valid) {
-                    std::cerr << "first_event_stall: event_valid dropped while event_ready was low\n";
-                    std::exit(1);
+                Event held = current;
+                for (int held_cycle = 0; held_cycle < stall_cycles; ++held_cycle) {
+                    tick(dut);
+                    if (!dut->event_valid) {
+                        std::cerr << name << ": event_valid dropped while event_ready was low\n";
+                        std::exit(1);
+                    }
+                    held = Event{
+                        static_cast<int>(dut->event_kind),
+                        static_cast<int>(dut->event_value),
+                        static_cast<int>(dut->event_coeff_idx),
+                        static_cast<int>(dut->event_level_abs),
+                        static_cast<int>(dut->event_level_sign),
+                    };
+                    expect_same_event(held, current, name);
                 }
-                Event held{
-                    static_cast<int>(dut->event_kind),
-                    static_cast<int>(dut->event_value),
-                    static_cast<int>(dut->event_coeff_idx),
-                    static_cast<int>(dut->event_level_abs),
-                    static_cast<int>(dut->event_level_sign),
-                };
-                expect_same_event(held, current, "first_event_stall");
                 dut->event_ready = 1;
                 events.push_back(held);
             } else {
                 events.push_back(current);
             }
-            stalled_first_event = true;
         }
         if (dut->done) {
             tick(dut);
@@ -136,8 +140,12 @@ static std::vector<Event> run_case_with_first_event_stall(Vh264_cabac_residual4x
         }
         tick(dut);
     }
-    std::cerr << "Timed out waiting for residual scan done with first-event stall\n";
+    std::cerr << "Timed out waiting for residual scan done with indexed event stall: " << name << "\n";
     std::exit(1);
+}
+
+static std::vector<Event> run_case_with_first_event_stall(Vh264_cabac_residual4x4_scan* dut) {
+    return run_case_with_indexed_event_stall(dut, 0, 1, "first_event_stall");
 }
 
 int main(int argc, char** argv) {
@@ -196,6 +204,25 @@ int main(int argc, char** argv) {
         {3, 1, 0, 1, 0}, // level abs=1
         {4, 0, 0, 1, 0}, // sign positive
     }, "sparse_block_first_event_stall");
+
+    clear_coeffs(dut);
+    dut->max_coeff_minus1 = 15;
+    dut->coeff0 = 1;
+    dut->coeff3 = static_cast<uint16_t>(-2);
+    auto sparse_with_middle_stall = run_case_with_indexed_event_stall(dut, 6, 2, "sparse_block_middle_event_stall");
+    expect_eq(sparse_with_middle_stall, {
+        {0, 1, 0, 0, 0}, // CBF=1
+        {1, 1, 0, 0, 0}, // significant coeff 0
+        {2, 0, 0, 0, 0}, // not last
+        {1, 0, 1, 0, 0}, // coeff 1 not significant
+        {1, 0, 2, 0, 0}, // coeff 2 not significant
+        {1, 1, 3, 0, 0}, // significant coeff 3
+        {2, 1, 3, 0, 0}, // last significant coeff held stable for two cycles
+        {3, 1, 3, 2, 1}, // level abs=2, emitted reverse-scan first
+        {4, 1, 3, 2, 1}, // sign negative
+        {3, 1, 0, 1, 0}, // level abs=1
+        {4, 0, 0, 1, 0}, // sign positive
+    }, "sparse_block_middle_event_stall");
 
     clear_coeffs(dut);
     dut->max_coeff_minus1 = 3;
@@ -263,7 +290,7 @@ int main(int argc, char** argv) {
         {4, 1, 0, 1, 1},  // sign negative
     }, "chroma_ac_limited_scan");
 
-    std::cout << "[PASS] CABAC residual scan events matched expected luma, first-event backpressure hold, limited 4:2:0/4:2:2 chroma-DC, and limited chroma-AC blocks\n";
+    std::cout << "[PASS] CABAC residual scan events matched expected luma, first/middle-event backpressure hold, limited 4:2:0/4:2:2 chroma-DC, and limited chroma-AC blocks\n";
     delete dut;
     return 0;
 }
