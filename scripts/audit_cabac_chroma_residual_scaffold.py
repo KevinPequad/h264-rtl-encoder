@@ -163,12 +163,22 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "probe_locks_cb_mirror_expected_misses",
         "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
-        r"cb_mirror_single_tl.*?cb_mirror_single_br.*?run_expected_miss cb_mirror_single_tl 'bytestream -9' 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0'.*?run_expected_miss cb_mirror_single_br 'bytestream -23' 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0'",
+        r"cb_mirror_single_tl.*?cb_mirror_single_br.*?run_expected_miss cb_mirror_single_tl 'bytestream -9' 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'.*?run_expected_miss cb_mirror_single_br 'bytestream -23' 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'",
     ),
     (
         "probe_locks_dense_cb_ac_pass_control",
         "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
-        r"cb_checker.*?run_strict_pass cb_checker 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0'.*?dense Cb-only strict-pass control",
+        r"cb_checker.*?run_strict_pass cb_checker 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=4\s+cabac_chroma_cr_ac_blocks=0'.*?dense Cb-only strict-pass control",
+    ),
+    (
+        "probe_locks_chroma_ac_block_counters",
+        "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
+        r"expected_blocks=.*?cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=4.*?run_expected_miss single_tl 'bytestream -5'.*?cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1.*?run_expected_miss both_planes 'bytestream -22'.*?cabac_chroma_cb_ac_blocks=4\s+cabac_chroma_cr_ac_blocks=4",
+    ),
+    (
+        "top_reports_chroma_ac_block_counters",
+        "rtl/h264_encoder_top.v",
+        r"frame_cabac_chroma_cb_ac_block_count.*?frame_cabac_chroma_cr_ac_block_count.*?cabac_chroma_cb_ac_blocks=%0d\s+cabac_chroma_cr_ac_blocks=%0d",
     ),
 )
 
@@ -198,7 +208,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, the guarded Cb base CBF lane, plane-local Cr AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, Cr AC expected-miss coverage, sparse Cb-mirror expected-miss coverage, and the dense Cb AC strict-pass control")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, the guarded Cb base CBF lane, plane-local Cr AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, Cr AC expected-miss coverage, sparse Cb-mirror expected-miss coverage, dense Cb AC strict-pass control, and chroma AC per-plane block counters")
     return 0
 
 

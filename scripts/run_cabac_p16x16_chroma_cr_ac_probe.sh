@@ -63,6 +63,7 @@ run_expected_miss() {
   local name="$1"
   local expected_signature="$2"
   local expected_counters="${3:-cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1}"
+  local expected_blocks="${4:-cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=4}"
   local input="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_ac_${name}.yuv"
   local h264="output/cabac_p16x16_chroma_residual_cr_ac_${name}.h264"
   local sim_log="output/validation_cabac_p16x16_chroma_residual_cr_ac_${name}.sim.log"
@@ -82,6 +83,11 @@ run_expected_miss() {
   fi
   if ! grep -q "$expected_counters" "$sim_log"; then
     echo "[FAIL] CR_AC ${name} did not match expected CABAC chroma AC counters: ${expected_counters}"
+    tail -80 "$sim_log"
+    exit 1
+  fi
+  if ! grep -q "$expected_blocks" "$sim_log"; then
+    echo "[FAIL] CR_AC ${name} did not match expected CABAC chroma AC block counters: ${expected_blocks}"
     tail -80 "$sim_log"
     exit 1
   fi
@@ -106,6 +112,7 @@ run_expected_miss() {
 run_strict_pass() {
   local name="$1"
   local expected_counters="$2"
+  local expected_blocks="$3"
   local input="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_ac_${name}.yuv"
   local h264="output/cabac_p16x16_chroma_residual_cr_ac_${name}.h264"
   local sim_log="output/validation_cabac_p16x16_chroma_residual_cr_ac_${name}.sim.log"
@@ -125,6 +132,11 @@ run_strict_pass() {
   fi
   if ! grep -q "$expected_counters" "$sim_log"; then
     echo "[FAIL] CR_AC ${name} strict-pass control did not match expected CABAC chroma AC counters: ${expected_counters}"
+    tail -80 "$sim_log"
+    exit 1
+  fi
+  if ! grep -q "$expected_blocks" "$sim_log"; then
+    echo "[FAIL] CR_AC ${name} strict-pass control did not match expected CABAC chroma AC block counters: ${expected_blocks}"
     tail -80 "$sim_log"
     exit 1
   fi
@@ -157,15 +169,15 @@ run_strict_pass() {
     exit 1
   fi
 
-  echo "[PASS] CR_AC ${name} strict-pass control FFmpeg-decoded with ${expected_counters}"
+  echo "[PASS] CR_AC ${name} strict-pass control FFmpeg-decoded with ${expected_counters} and ${expected_blocks}"
 }
 
-run_strict_pass cb_checker 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0'
-run_expected_miss checker 'bytestream -29'
-run_expected_miss single_tl 'bytestream -5'
-run_expected_miss single_br 'bytestream -35'
-run_expected_miss both_planes 'bytestream -22' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=1'
-run_expected_miss cb_mirror_single_tl 'bytestream -9' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0'
-run_expected_miss cb_mirror_single_br 'bytestream -23' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0'
+run_strict_pass cb_checker 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=4 cabac_chroma_cr_ac_blocks=0'
+run_expected_miss checker 'bytestream -29' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=4'
+run_expected_miss single_tl 'bytestream -5' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
+run_expected_miss single_br 'bytestream -35' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
+run_expected_miss both_planes 'bytestream -22' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=4 cabac_chroma_cr_ac_blocks=4'
+run_expected_miss cb_mirror_single_tl 'bytestream -9' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
+run_expected_miss cb_mirror_single_br 'bytestream -23' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
 
 echo "[PASS] CABAC P16x16 sparse chroma AC strict-decode blocker is reproduced across Cr-only, both-plane, and Cb-only mirror probes with a dense Cb-only strict-pass control"
