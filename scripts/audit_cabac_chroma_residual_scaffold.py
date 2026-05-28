@@ -166,6 +166,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"cb_mirror_single_tl.*?cb_mirror_single_br.*?run_expected_miss cb_mirror_single_tl 'bytestream -9' 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'.*?run_expected_miss cb_mirror_single_br 'bytestream -23' 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'",
     ),
     (
+        "probe_locks_all_single_quadrant_expected_misses",
+        "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
+        r"single_tr.*?single_bl.*?cb_mirror_single_tr.*?cb_mirror_single_bl.*?run_expected_miss single_tl 'bytestream -5'.*?run_expected_miss single_tr 'bytestream -11'.*?run_expected_miss single_bl 'bytestream -15'.*?run_expected_miss single_br 'bytestream -35'.*?run_expected_miss cb_mirror_single_tl 'bytestream -9'.*?run_expected_miss cb_mirror_single_tr 'bytestream -15'.*?run_expected_miss cb_mirror_single_bl 'bytestream -15'.*?run_expected_miss cb_mirror_single_br 'bytestream -23'",
+    ),
+    (
         "probe_locks_dense_cb_ac_pass_control",
         "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
         r"cb_checker.*?run_strict_pass cb_checker 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=4\s+cabac_chroma_cr_ac_blocks=0'.*?dense Cb-only strict-pass control",
@@ -208,7 +213,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, the guarded Cb base CBF lane, plane-local Cr AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, Cr AC expected-miss coverage, sparse Cb-mirror expected-miss coverage, dense Cb AC strict-pass control, and chroma AC per-plane block counters")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, the guarded Cb base CBF lane, plane-local Cr AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, Cr AC expected-miss coverage, all single-quadrant sparse Cb/Cr expected-miss coverage, dense Cb AC strict-pass control, and chroma AC per-plane block counters")
     return 0
 
 
