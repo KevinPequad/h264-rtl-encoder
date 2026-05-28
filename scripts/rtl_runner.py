@@ -37,6 +37,7 @@ class BuildConfig:
     inter_sad_threshold: int = 8000
     enable_cabac_pskip: int = 0
     enable_cabac_p16x16: int = 0
+    debug_cabac_p16x16: int = 0
     enable_cavlc_luma_8x8: int = 0
     base_qp: int = 26
     mb_qp_delta: int = 0
@@ -140,6 +141,7 @@ def build_sim(workspace: Path, config: BuildConfig, build_log_path: Path | None 
         f"INTER_SAD_THRESHOLD={config.inter_sad_threshold}",
         f"ENABLE_CABAC_PSKIP={config.enable_cabac_pskip}",
         f"ENABLE_CABAC_P16X16={config.enable_cabac_p16x16}",
+        f"DEBUG_CABAC_P16X16={config.debug_cabac_p16x16}",
         f"ENABLE_CAVLC_LUMA_8X8={config.enable_cavlc_luma_8x8}",
         f"BASE_QP={config.base_qp}",
         f"MB_QP_DELTA={config.mb_qp_delta}",

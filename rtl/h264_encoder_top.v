@@ -19,6 +19,7 @@ module h264_encoder_top #(
     parameter INTER_SAD_THRESHOLD = 8000,
     parameter ENABLE_CABAC_PSKIP = 0,
     parameter ENABLE_CABAC_P16X16 = 0,
+    parameter DEBUG_CABAC_P16X16 = 0,
     parameter WEIGHTED_PRED_ENABLE = 0,
     parameter LUMA_LOG2_WEIGHT_DENOM = 0,
     parameter integer LUMA_WEIGHT = 1,
@@ -2213,7 +2214,8 @@ pred_buf = {(256*BD){1'b0}};
         .MB_ROWS(MB_ROWS),
         .BIT_DEPTH(BIT_DEPTH),
         .CHROMA_FORMAT_IDC(CHROMA_FORMAT_IDC),
-        .FRAME_RATE(24)
+        .FRAME_RATE(24),
+        .DEBUG_CABAC_P16X16(DEBUG_CABAC_P16X16)
     ) u_bitstream (
         .clk(clk), .rst_n(rst_n), .cmd_write_sps(bs_cmd_sps), .cmd_write_pps(bs_cmd_pps), .cmd_write_slice_hdr(bs_cmd_slice),
         .cmd_write_mb_header(bs_cmd_mb_hdr), .cmd_write_trailing(bs_cmd_trailing), .cmd_flush(bs_cmd_flush),

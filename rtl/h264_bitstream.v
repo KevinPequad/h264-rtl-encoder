@@ -14,7 +14,8 @@ module h264_bitstream #(
     parameter CHROMA_FORMAT_IDC = 1,
     parameter FRAME_RATE = 24,
     parameter DEBLOCK_ENABLE = 1,
-    parameter DISABLE_DEBLOCKING_FILTER_IDC = 0
+    parameter DISABLE_DEBLOCKING_FILTER_IDC = 0,
+    parameter DEBUG_CABAC_P16X16 = 1'b0
 ) (
     input  wire        clk,
     input  wire        rst_n,
@@ -388,7 +389,6 @@ module h264_bitstream #(
     wire       cabac_done;
     wire       cabac_active;
 
-    localparam DEBUG_CABAC_P16X16 = 1'b0;
 
     localparam [4:0] CABAC_CTX_NONE      = 5'd0;
     localparam [4:0] CABAC_CTX_SKIP      = 5'd1;
@@ -2759,6 +2759,11 @@ module h264_bitstream #(
                             bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                         end
                         if (cabac_res_bin_valid) begin
+                            if (DEBUG_CABAC_P16X16 && (cabac_res_category != CABAC_RES_CAT_LUMA))
+                                $display("[CABACRES] mb=%0d cat=%0d blk=%0d ctx=%0d val=%0d bypass=%0d coeff=%0d",
+                                         cabac_mb_counter, cabac_res_category, cabac_res_block_idx,
+                                         cabac_res_bin_ctx_idx, cabac_res_bin_value,
+                                         cabac_res_bin_bypass, cabac_res_event_coeff_idx);
                             cabac_bin_valid <= 1'b1;
                             cabac_bin_value <= cabac_res_bin_value;
                             cabac_bin_bypass <= cabac_res_bin_bypass;
