@@ -59,15 +59,13 @@ module h264_chroma_dc #(
         input signed [CW:0] val;
         reg [CW:0] abs_val;
         reg sign;
-        reg [CW+16:0] product;
+        reg [CW+32:0] product;
         reg [15:0] level;
         begin
             sign = val[CW];
             abs_val = sign ? (~val[CW:0] + {{CW{1'b0}}, 1'b1}) : val[CW:0];
-            product = ({{16{1'b0}}, abs_val} * MF_00) + {{(CW-15){1'b0}}, F2_INTRA};
-            /* verilator lint_off SELRANGE */
+            product = (abs_val * MF_00) + F2_INTRA;
             level = product[QBITS_PLUS1 +: 16];
-            /* verilator lint_on SELRANGE */
             fwd_quant = sign ? (~level + 16'd1) : level;
         end
     endfunction
