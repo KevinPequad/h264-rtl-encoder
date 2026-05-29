@@ -87,42 +87,49 @@ expected = {
         "decode_bytes": 768,
         "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 122), (2, 1, 119, 123), (3, 0, 92, 90), (4, 4, 92, 100), (5, 7, 105, 109), (6, 7, 109, 113), (7, 4, 100, 98)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
+        "order_probe": [("cbf", 0, 0), ("cbf", 1, 0), ("cbf", 2, 0), ("cbf", 3, 0), ("cbf", 4, 1), ("payload", 4), ("cbf", 5, 0), ("cbf", 6, 0), ("cbf", 7, 0)],
     },
     "single_tr": {
         "first_coded": 5,
         "decode_bytes": 768,
         "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 122), (2, 1, 119, 123), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 126), (6, 5, 119, 123), (7, 6, 126, 124)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
+        "order_probe": [("cbf", 0, 0), ("cbf", 1, 0), ("cbf", 2, 0), ("cbf", 3, 0), ("cbf", 4, 0), ("cbf", 5, 1), ("payload", 5), ("cbf", 6, 0), ("cbf", 7, 0)],
     },
     "single_bl": {
         "first_coded": 6,
         "decode_bytes": 768,
         "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 122), (2, 1, 119, 123), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 117), (7, 5, 117, 119)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
+        "order_probe": [("cbf", 0, 0), ("cbf", 1, 0), ("cbf", 2, 0), ("cbf", 3, 0), ("cbf", 4, 0), ("cbf", 5, 0), ("cbf", 6, 1), ("payload", 6), ("cbf", 7, 0)],
     },
     "cb_mirror_single_tl": {
         "first_coded": 0,
         "decode_bytes": 384,
         "cbf_ctx_updates": [(0, 1, 119, 117), (1, 1, 117, 119), (2, 3, 105, 109), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
+        "order_probe": [("cbf", 0, 1), ("payload", 0), ("cbf", 1, 0), ("cbf", 2, 0), ("cbf", 3, 0), ("cbf", 4, 0), ("cbf", 5, 0), ("cbf", 6, 0), ("cbf", 7, 0)],
     },
     "cb_mirror_single_tr": {
         "first_coded": 1,
         "decode_bytes": 384,
         "cbf_ctx_updates": [(0, 1, 119, 123), (1, 1, 123, 121), (2, 3, 105, 109), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
+        "order_probe": [("cbf", 0, 0), ("cbf", 1, 1), ("payload", 1), ("cbf", 2, 0), ("cbf", 3, 0), ("cbf", 4, 0), ("cbf", 5, 0), ("cbf", 6, 0), ("cbf", 7, 0)],
     },
     "cb_mirror_single_bl": {
         "first_coded": 2,
         "decode_bytes": 768,
         "cbf_ctx_updates": [(0, 1, 119, 123), (1, 1, 123, 125), (2, 3, 105, 103), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
+        "order_probe": [("cbf", 0, 0), ("cbf", 1, 0), ("cbf", 2, 1), ("payload", 2), ("cbf", 3, 0), ("cbf", 4, 0), ("cbf", 5, 0), ("cbf", 6, 0), ("cbf", 7, 0)],
     },
     "cb_mirror_single_br": {
         "first_coded": 3,
         "decode_bytes": 768,
         "cbf_ctx_updates": [(0, 1, 119, 123), (1, 1, 123, 125), (2, 3, 105, 109), (3, 0, 92, 100), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
+        "order_probe": [("cbf", 0, 0), ("cbf", 1, 0), ("cbf", 2, 0), ("cbf", 3, 1), ("payload", 3), ("cbf", 4, 0), ("cbf", 5, 0), ("cbf", 6, 0), ("cbf", 7, 0)],
     },
 }
 root = Path("output/cabac_chroma_ac_debug")
@@ -132,15 +139,26 @@ for name, exp in expected.items():
     lines = sim_log.read_text(encoding="utf-8", errors="replace").splitlines()
     res = []
     ctx = []
+    order_probe = []
+    payload_seen_for_order = set()
     for line in lines:
         if "[CABACRES]" in line:
             m = re.search(r"cat=(\d+) blk=(\d+) ctx=(\d+) val=(\d+) bypass=(\d+) coeff=(\d+).*state_in=(\d+)", line)
             if m and m.group(1) == "2":
-                res.append(tuple(map(int, m.groups()[1:])))
+                row = tuple(map(int, m.groups()[1:]))
+                res.append(row)
+                blk, ctx_idx, val, bypass, coeff_idx, _state_in = row
+                if (101 <= ctx_idx <= 104) and (bypass == 0) and (coeff_idx == 0):
+                    order_probe.append(("cbf", blk, val))
         elif "[CABACCTX]" in line:
             m = re.search(r"cat=(\d+) blk=(\d+) kind=(\d+) sel=(\d+) in=(\d+) out=(\d+)", line)
             if m and m.group(1) == "2":
-                ctx.append(tuple(map(int, m.groups()[1:])))
+                row = tuple(map(int, m.groups()[1:]))
+                ctx.append(row)
+                blk, kind, _sel, _state_in, _state_out = row
+                if kind == 22 and blk not in payload_seen_for_order:
+                    order_probe.append(("payload", blk))
+                    payload_seen_for_order.add(blk)
     coded = [row for row in res if row[1] == 101 and row[2] == 1 and row[3] == 0]
     if not coded:
         raise SystemExit(f"[FAIL] {name}: no coded chroma AC CBF bin found in debug trace")
@@ -164,6 +182,11 @@ for name, exp in expected.items():
         raise SystemExit(
             f"[FAIL] {name}: coded chroma AC payload context trail "
             f"{coded_payload_ctx_updates}, expected {exp['coded_payload_ctx_updates']}"
+        )
+    if order_probe != exp["order_probe"]:
+        raise SystemExit(
+            f"[FAIL] {name}: chroma AC CBF/payload order probe {order_probe}, "
+            f"expected {exp['order_probe']}"
         )
     debug_text = sim_log.read_text(encoding="utf-8", errors="replace")
     if "[CABACRES]" not in debug_text or "[CABACCTX]" not in debug_text:
@@ -192,8 +215,8 @@ for name, exp in expected.items():
         raise SystemExit(f"[FAIL] {name}: decoded {got_bytes} bytes, expected {exp['decode_bytes']}")
     print(
         f"[PASS] {name}: first coded chroma-AC block {first_blk}, decoded {got_bytes}/768 bytes, "
-        f"CABACRES/CABACCTX trace present, CHRAC_CBF and coded-payload trails locked"
+        f"CABACRES/CABACCTX trace present, CHRAC_CBF, coded-payload, and CBF/payload ordering trails locked"
     )
 
-print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks promoted Cr top/left strict passes, the remaining sparse Cb top-row miss trace set plus bottom-row strict passes, true pending-block CHRAC_CBF selector/state trails, and identical coded-block payload context trails")
+print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks promoted Cr top/left strict passes, the remaining sparse Cb top-row miss trace set plus bottom-row strict passes, true pending-block CHRAC_CBF selector/state trails, identical coded-block payload context trails, and the current CBF-before-payload ordering around sparse top-row Cb misses")
 PY

@@ -125,3 +125,9 @@ Next useful probe:
 - Newly rejected top-row pairs `[0,1]`, `[1,0]`, `[0,3]`, `[3,0]`, `[2,3]`, `[3,2]`, `[0,2]`, and `[2,0]`: none promoted `cb_mirror_single_tl` or `cb_mirror_single_tr` to strict `768/768`; most also regressed one or both bottom-row sparse-Cb controls.
 - Together with the earlier rejected `[0,0]`, `[1,2]`, `[2,1]`, `[2,2]`, `[1,3]`, `[3,1]`, and `[3,3]` probes plus the baseline `[1,1]`, this exhausts the 4x4 static selector space for Cb blocks 0/1 under the current `[block2=3, block3=0]` bottom-row mapping.
 - Next useful target is no longer another static Cb top-row selector remap; probe the residual scheduler/CABAC state ordering around Cb top-row coded AC before later same-plane zero CBFs, or capture an independent decoder-side trace of the expected Cb TL/TR coded_block_flag decisions.
+
+## 2026-05-29 sparse-Cb CBF/payload ordering lock
+
+- Extended `scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` to lock the ordered sequence of chroma-AC CBF bins and the first coded payload context update for each sparse Cb/Cr fixture.
+- The remaining sparse Cb top-row misses now explicitly capture the coded-before-zero shape: `cb_mirror_single_tl` emits `CBF0=1`, then the block-0 payload, then zero CBFs for blocks 1..7; `cb_mirror_single_tr` emits `CBF0=0`, `CBF1=1`, then the block-1 payload before later zero CBFs. The bottom-row sparse-Cb strict-pass controls remain locked as zero CBFs before the block-2/block-3 payload.
+- `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` passed with this additional ordering check. No new strict-decode promotion was made; the immediate repair target remains the top-row Cb coded-before-later-zero CBF ordering/context-state interaction or an independent decoder-side CABAC CBF decision trace.
