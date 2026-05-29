@@ -93,3 +93,14 @@ Next useful probe:
 - Extended `scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` to lock the first coded chroma-AC block's significant-map and level context update trail for each sparse Cb/Cr fixture.
 - The coded payload context trail is identical for Cb TL/TR/BL short-output misses, the Cb BR strict-pass control, and the promoted Cr sparse controls; no CHRAC_LAST update is emitted for these inferred-final reduced blocks.
 - This keeps the immediate repair target on CHRAC_CBF selector/state history for the first four Cb AC blocks rather than significant/last/level payload emission.
+
+## 2026-05-29 sparse-Cb top-row CBF selector sweep
+
+- Rejected a narrow Cb-only top-row selector sweep while preserving the landed bottom-row sparse-Cb mapping as the baseline (`plane_block` selectors `[1,1,3,0]` for Cb blocks 0..3).
+- `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` showed these temporary mappings do not promote the remaining Cb top-row misses:
+  - `[3,3,3,0]`: Cb TL/TR/BL/BR all short-decode `384/768`, regressing the bottom-row controls.
+  - `[1,2,3,0]`: Cb TL/TR/BL short-decode `384/768`; only Cb BR stays strict.
+  - `[2,1,3,0]`: Cb TL/TR/BL/BR all short-decode `384/768`, regressing the bottom-row controls.
+- `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh` also rejected `[0,0,3,0]` and `[2,2,3,0]`: both kept the top-row Cb mirrors short and only changed locked FFmpeg bytestream signatures (`TL -9` for `[0,0,3,0]`; `TR -23` for `[2,2,3,0]`).
+- The source was restored after each probe. This narrows the next repair away from a static per-block Cb CBF selector remap; the next useful target is the ordering/state interaction when a sparse Cb top-row coded block is emitted before the later Cb/Cr zero-CBF walk.
+
