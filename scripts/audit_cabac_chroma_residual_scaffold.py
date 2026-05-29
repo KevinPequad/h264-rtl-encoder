@@ -96,6 +96,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"function automatic \[1:0\] cabac_res_chroma_ac_cbf_ctx_sel_for.*?plane-local.*?CABAC_CHROMA_AC_BLOCKS_PER_PLANE.*?left_coded_i = plane_block_i\[0\].*?top_coded_i = \(plane_block_i >= 3'd2\).*?cabac_res_chroma_ac_cbf_ctx_sel_for = \{top_coded_i, left_coded_i\}.*?cabac_res_chroma_ac_cr_cbf_ctx_state.*?9'd101:\s*begin\s*if \(cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE\).*?cabac_res_chroma_ac_cr_cbf_ctx_state\[cabac_res_chroma_ac_cbf_ctx_sel_for\(cabac_res_block_idx\)\].*?else\s*cabac_ctx_state_in\s*<=\s*cabac_res_chroma_ac_cbf_ctx_state\[cabac_res_chroma_ac_cbf_ctx_sel_for\(cabac_res_block_idx\)\].*?cabac_pending_ctx_sel\s*<=\s*\{1'b0,\s*\(cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE\),\s*cabac_res_chroma_ac_cbf_ctx_sel_for\(cabac_res_block_idx\)\}",
     ),
     (
+        "bitstream_dispatches_plane_specific_chroma_ac_cbf_contexts",
+        "rtl/h264_bitstream.v",
+        r"if \(\(cabac_res_bin_ctx_idx >= 9'd101\) && \(cabac_res_bin_ctx_idx <= 9'd104\)\) begin\s*if \(cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE\)\s*cabac_ctx_state_in\s*<=\s*cabac_res_chroma_ac_cr_cbf_ctx_state\[cabac_res_bin_ctx_idx\[1:0\] - 2'd1\];\s*else\s*cabac_ctx_state_in\s*<=\s*cabac_res_chroma_ac_cbf_ctx_state\[cabac_res_bin_ctx_idx\[1:0\] - 2'd1\];\s*cabac_pending_ctx_kind\s*<=\s*CABAC_CTX_RES_CHRAC_CBF;\s*cabac_pending_ctx_sel\s*<=\s*\{1'b0,\s*\(cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE\),\s*\(cabac_res_bin_ctx_idx\[1:0\] - 2'd1\)\}",
+    ),
+    (
         "bitstream_handles_cr_top_left_chroma_ac_cbf_context",
         "rtl/h264_bitstream.v",
         r"if \(block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE\)\s*plane_block_i = block_i\[2:0\];\s*else\s*plane_block_i = block_i - CABAC_CHROMA_AC_BLOCKS_PER_PLANE;\s*if \(\(block_i >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE\) && \(plane_block_i == 3'd0\) && cabac_chroma_ac_block_nz_for\(block_i\)\)\s*begin\s*left_coded_i = 1'b0;\s*top_coded_i = 1'b0;\s*end else begin\s*left_coded_i = plane_block_i\[0\] \? cabac_chroma_ac_block_nz_for\(block_i - 4'd1\) : 1'b1;\s*top_coded_i = \(plane_block_i >= 3'd2\) \? cabac_chroma_ac_block_nz_for\(block_i - 4'd2\) : 1'b1;\s*end\s*cabac_res_chroma_ac_cbf_ctx_sel_for = \{top_coded_i, left_coded_i\}",

@@ -2853,9 +2853,12 @@ module h264_bitstream #(
                                     end
                                     default: begin
                                         if ((cabac_res_bin_ctx_idx >= 9'd101) && (cabac_res_bin_ctx_idx <= 9'd104)) begin
-                                            cabac_ctx_state_in <= cabac_res_chroma_ac_cbf_ctx_state[cabac_res_bin_ctx_idx - 9'd101];
+                                            if (cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE)
+                                                cabac_ctx_state_in <= cabac_res_chroma_ac_cr_cbf_ctx_state[cabac_res_bin_ctx_idx[1:0] - 2'd1];
+                                            else
+                                                cabac_ctx_state_in <= cabac_res_chroma_ac_cbf_ctx_state[cabac_res_bin_ctx_idx[1:0] - 2'd1];
                                             cabac_pending_ctx_kind <= CABAC_CTX_RES_CHRAC_CBF;
-                                            cabac_pending_ctx_sel <= cabac_res_bin_ctx_idx - 9'd101;
+                                            cabac_pending_ctx_sel <= {1'b0, (cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE), (cabac_res_bin_ctx_idx[1:0] - 2'd1)};
                                         end else if ((cabac_res_bin_ctx_idx >= 9'd152) && (cabac_res_bin_ctx_idx <= 9'd166)) begin
                                             cabac_ctx_state_in <= cabac_res_chroma_ac_sig_ctx_state[cabac_res_bin_ctx_idx - 9'd152];
                                             cabac_pending_ctx_kind <= CABAC_CTX_RES_CHRAC_SIG;
