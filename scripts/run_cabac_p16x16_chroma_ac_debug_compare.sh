@@ -103,25 +103,25 @@ expected = {
     "cb_mirror_single_tl": {
         "first_coded": 0,
         "decode_bytes": 384,
-        "cbf_ctx_updates": [(0, 3, 105, 103), (1, 3, 103, 109), (2, 3, 109, 113), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
+        "cbf_ctx_updates": [(0, 1, 119, 117), (1, 1, 117, 119), (2, 3, 105, 109), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
     },
     "cb_mirror_single_tr": {
         "first_coded": 1,
         "decode_bytes": 384,
-        "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 126), (2, 1, 119, 123), (3, 2, 126, 124), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
+        "cbf_ctx_updates": [(0, 1, 119, 123), (1, 1, 123, 121), (2, 3, 105, 109), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
     },
     "cb_mirror_single_bl": {
         "first_coded": 2,
-        "decode_bytes": 384,
-        "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 122), (2, 1, 119, 117), (3, 1, 117, 119), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
+        "decode_bytes": 768,
+        "cbf_ctx_updates": [(0, 1, 119, 123), (1, 1, 123, 125), (2, 3, 105, 103), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
     },
     "cb_mirror_single_br": {
         "first_coded": 3,
         "decode_bytes": 768,
-        "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 122), (2, 1, 119, 123), (3, 0, 92, 100), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
+        "cbf_ctx_updates": [(0, 1, 119, 123), (1, 1, 123, 125), (2, 3, 105, 109), (3, 0, 92, 100), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
     },
 }
@@ -195,5 +195,5 @@ for name, exp in expected.items():
         f"CABACRES/CABACCTX trace present, CHRAC_CBF and coded-payload trails locked"
     )
 
-print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks promoted Cr top/left strict passes, the remaining sparse Cb top/left miss trace set, true pending-block CHRAC_CBF selector/state trails, and identical coded-block payload context trails")
+print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks promoted Cr top/left strict passes, the remaining sparse Cb top-row miss trace set plus bottom-row strict passes, true pending-block CHRAC_CBF selector/state trails, and identical coded-block payload context trails")
 PY

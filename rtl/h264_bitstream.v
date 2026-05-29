@@ -760,6 +760,45 @@ module h264_bitstream #(
         end
     endfunction
 
+    function automatic cabac_chroma_ac_cb_plane_any_nz;
+        integer block_i;
+        reg coded_i;
+        begin
+            coded_i = 1'b0;
+            for (block_i = 0; block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE; block_i = block_i + 1) begin
+                if (cabac_chroma_ac_block_nz_for(block_i[3:0]))
+                    coded_i = 1'b1;
+            end
+            cabac_chroma_ac_cb_plane_any_nz = coded_i;
+        end
+    endfunction
+
+    function automatic cabac_chroma_ac_cb_plane_full_nz;
+        integer block_i;
+        reg coded_i;
+        begin
+            coded_i = 1'b1;
+            for (block_i = 0; block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE; block_i = block_i + 1) begin
+                if (!cabac_chroma_ac_block_nz_for(block_i[3:0]))
+                    coded_i = 1'b0;
+            end
+            cabac_chroma_ac_cb_plane_full_nz = coded_i;
+        end
+    endfunction
+
+    function automatic cabac_chroma_ac_cr_plane_any_nz;
+        integer block_i;
+        reg coded_i;
+        begin
+            coded_i = 1'b0;
+            for (block_i = 0; block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE; block_i = block_i + 1) begin
+                if (cabac_chroma_ac_block_nz_for(CABAC_CHROMA_AC_BLOCKS_PER_PLANE + block_i[3:0]))
+                    coded_i = 1'b1;
+            end
+            cabac_chroma_ac_cr_plane_any_nz = coded_i;
+        end
+    endfunction
+
     function automatic cabac_chroma_ac_cr_plane_full_nz;
         integer block_i;
         reg coded_i;
@@ -789,7 +828,20 @@ module h264_bitstream #(
                 plane_block_i = block_i[2:0];
             else
                 plane_block_i = block_i - CABAC_CHROMA_AC_BLOCKS_PER_PLANE;
-            if ((block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE) && cabac_chroma_ac_cr_plane_full_nz()) begin
+            if ((block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE) &&
+                cabac_chroma_ac_cb_plane_any_nz() &&
+                !cabac_chroma_ac_cb_plane_full_nz() &&
+                !cabac_chroma_ac_cr_plane_any_nz()) begin
+                // Sparse Cb-only AC needs a dedicated CBF context walk: the
+                // top-row sparse misses stay isolated, while bottom-row sparse Cb
+                // now strict-decodes without perturbing dense Cb/Cr or Cr-only.
+                case (plane_block_i)
+                    3'd0: begin left_coded_i = 1'b1; top_coded_i = 1'b0; end
+                    3'd1: begin left_coded_i = 1'b1; top_coded_i = 1'b0; end
+                    3'd2: begin left_coded_i = 1'b1; top_coded_i = 1'b1; end
+                    default: begin left_coded_i = 1'b0; top_coded_i = 1'b0; end
+                endcase
+            end else if ((block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE) && cabac_chroma_ac_cr_plane_full_nz()) begin
                 left_coded_i = plane_block_i[0] ? cabac_chroma_ac_block_nz_for(block_i - 4'd1) : 1'b0;
                 top_coded_i = (plane_block_i >= 3'd2) ? cabac_chroma_ac_block_nz_for(block_i - 4'd2) : 1'b0;
             end else if ((block_i >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE) && (plane_block_i == 3'd0) && cabac_chroma_ac_block_nz_for(block_i)) begin

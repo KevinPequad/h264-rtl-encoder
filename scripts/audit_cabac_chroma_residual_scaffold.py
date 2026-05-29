@@ -101,9 +101,9 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"if \(\(cabac_res_bin_ctx_idx >= 9'd101\) && \(cabac_res_bin_ctx_idx <= 9'd104\)\) begin\s*if \(cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE\)\s*cabac_ctx_state_in\s*<=\s*cabac_res_chroma_ac_cr_cbf_ctx_state\[cabac_res_bin_ctx_idx\[1:0\] - 2'd1\];\s*else\s*cabac_ctx_state_in\s*<=\s*cabac_res_chroma_ac_cbf_ctx_state\[cabac_res_bin_ctx_idx\[1:0\] - 2'd1\];\s*cabac_pending_ctx_kind\s*<=\s*CABAC_CTX_RES_CHRAC_CBF;\s*cabac_pending_ctx_sel\s*<=\s*\{1'b0,\s*\(cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE\),\s*\(cabac_res_bin_ctx_idx\[1:0\] - 2'd1\)\}",
     ),
     (
-        "bitstream_handles_dense_cr_chroma_ac_cbf_preroll",
+        "bitstream_handles_sparse_cb_chroma_ac_cbf_walk",
         "rtl/h264_bitstream.v",
-        r"cabac_chroma_ac_cr_plane_full_nz.*?for \(block_i = 0; block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE; block_i = block_i \+ 1\).*?if \(\(block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE\) && cabac_chroma_ac_cr_plane_full_nz\(\)\).*?left_coded_i = plane_block_i\[0\] \? cabac_chroma_ac_block_nz_for\(block_i - 4'd1\) : 1'b0;.*?top_coded_i = \(plane_block_i >= 3'd2\) \? cabac_chroma_ac_block_nz_for\(block_i - 4'd2\) : 1'b0;.*?else if \(\(block_i >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE\) && \(plane_block_i == 3'd0\) && cabac_chroma_ac_block_nz_for\(block_i\)\).*?cabac_res_chroma_ac_cbf_ctx_sel_for = \{top_coded_i, left_coded_i\}",
+        r"cabac_chroma_ac_cb_plane_any_nz.*?cabac_chroma_ac_cb_plane_full_nz.*?cabac_chroma_ac_cr_plane_any_nz.*?cabac_chroma_ac_cr_plane_full_nz.*?cabac_chroma_ac_cb_plane_any_nz\(\) &&\s*!cabac_chroma_ac_cb_plane_full_nz\(\) &&\s*!cabac_chroma_ac_cr_plane_any_nz\(\).*?bottom-row sparse Cb.*?3'd2: begin left_coded_i = 1'b1; top_coded_i = 1'b1; end.*?default: begin left_coded_i = 1'b0; top_coded_i = 1'b0; end.*?cabac_chroma_ac_cr_plane_full_nz\(\).*?cabac_res_chroma_ac_cbf_ctx_sel_for = \{top_coded_i, left_coded_i\}",
     ),
     (
         "bitstream_initializes_chroma_residual_contexts",
@@ -166,14 +166,14 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"run_strict_pass both_planes 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=4\s+cabac_chroma_cr_ac_blocks=4'",
     ),
     (
-        "probe_promotes_cb_mirror_right_sparse_pass",
+        "probe_promotes_bottom_row_cb_mirror_sparse_passes",
         "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
-        r"cb_mirror_single_tl.*?cb_mirror_single_br.*?run_expected_miss cb_mirror_single_tl 'bytestream -13' 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'.*?run_strict_pass cb_mirror_single_br 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'",
+        r"cb_mirror_single_tl.*?cb_mirror_single_br.*?run_expected_miss cb_mirror_single_tl 'bytestream -19' 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'.*?run_expected_miss cb_mirror_single_tr 'bytestream -21' 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'.*?run_strict_pass cb_mirror_single_bl 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'.*?run_strict_pass cb_mirror_single_br 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'",
     ),
     (
         "probe_promotes_right_quadrant_sparse_passes",
         "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
-        r"single_tl.*?single_tr.*?single_bl.*?cb_mirror_single_tr.*?cb_mirror_single_bl.*?run_strict_pass single_tl 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1'.*?run_strict_pass single_tr 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1'.*?run_strict_pass single_bl 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1'.*?run_strict_pass single_br 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1'.*?run_expected_miss cb_mirror_single_tl 'bytestream -13'.*?run_expected_miss cb_mirror_single_tr 'bytestream -29'.*?run_expected_miss cb_mirror_single_bl 'bytestream -11'.*?run_strict_pass cb_mirror_single_br 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'",
+        r"single_tl.*?single_tr.*?single_bl.*?cb_mirror_single_tr.*?cb_mirror_single_bl.*?run_strict_pass single_tl 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1'.*?run_strict_pass single_tr 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1'.*?run_strict_pass single_bl 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1'.*?run_strict_pass single_br 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1'.*?run_expected_miss cb_mirror_single_tl 'bytestream -19'.*?run_expected_miss cb_mirror_single_tr 'bytestream -21'.*?run_strict_pass cb_mirror_single_bl 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0'.*?run_strict_pass cb_mirror_single_br 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'",
     ),
     (
         "probe_promotes_dense_cb_cr_ac_pass_controls",
