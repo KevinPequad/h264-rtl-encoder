@@ -199,10 +199,6 @@ run_case "cb_dc" "$INPUT_CB_DC" 1
 run_case "cb_ac" "$INPUT_CB_AC" 2
 run_case "cr_dc" "$INPUT_CR_DC" 1
 
-if [ "${CABAC_CHROMA_INCLUDE_CR_AC:-0}" = "1" ]; then
-  run_case "cr_ac" "$INPUT_CR_AC" 2 "${CABAC_CHROMA_EXPECT_CR_AC_FAIL:-0}"
-else
-  run_case "cr_ac" "$INPUT_CR_AC" 2 1
-fi
+run_case "cr_ac" "$INPUT_CR_AC" 2
 
-echo "[PASS] CABAC P16x16 Cb DC-only, Cb DC+AC, and Cr DC-only chroma residual smoke streams strict-decoded; Cr DC+AC remains covered as an expected strict-decode miss diagnostic"
+echo "[PASS] CABAC P16x16 Cb/Cr DC-only and DC+AC chroma residual smoke streams strict-decoded"

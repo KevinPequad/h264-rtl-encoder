@@ -101,9 +101,9 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"if \(\(cabac_res_bin_ctx_idx >= 9'd101\) && \(cabac_res_bin_ctx_idx <= 9'd104\)\) begin\s*if \(cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE\)\s*cabac_ctx_state_in\s*<=\s*cabac_res_chroma_ac_cr_cbf_ctx_state\[cabac_res_bin_ctx_idx\[1:0\] - 2'd1\];\s*else\s*cabac_ctx_state_in\s*<=\s*cabac_res_chroma_ac_cbf_ctx_state\[cabac_res_bin_ctx_idx\[1:0\] - 2'd1\];\s*cabac_pending_ctx_kind\s*<=\s*CABAC_CTX_RES_CHRAC_CBF;\s*cabac_pending_ctx_sel\s*<=\s*\{1'b0,\s*\(cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE\),\s*\(cabac_res_bin_ctx_idx\[1:0\] - 2'd1\)\}",
     ),
     (
-        "bitstream_handles_cr_top_left_chroma_ac_cbf_context",
+        "bitstream_handles_dense_cr_chroma_ac_cbf_preroll",
         "rtl/h264_bitstream.v",
-        r"if \(block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE\)\s*plane_block_i = block_i\[2:0\];\s*else\s*plane_block_i = block_i - CABAC_CHROMA_AC_BLOCKS_PER_PLANE;\s*if \(\(block_i >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE\) && \(plane_block_i == 3'd0\) && cabac_chroma_ac_block_nz_for\(block_i\)\)\s*begin\s*left_coded_i = 1'b0;\s*top_coded_i = 1'b0;\s*end else begin\s*left_coded_i = plane_block_i\[0\] \? cabac_chroma_ac_block_nz_for\(block_i - 4'd1\) : 1'b1;\s*top_coded_i = \(plane_block_i >= 3'd2\) \? cabac_chroma_ac_block_nz_for\(block_i - 4'd2\) : 1'b1;\s*end\s*cabac_res_chroma_ac_cbf_ctx_sel_for = \{top_coded_i, left_coded_i\}",
+        r"cabac_chroma_ac_cr_plane_full_nz.*?for \(block_i = 0; block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE; block_i = block_i \+ 1\).*?if \(\(block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE\) && cabac_chroma_ac_cr_plane_full_nz\(\)\).*?left_coded_i = plane_block_i\[0\] \? cabac_chroma_ac_block_nz_for\(block_i - 4'd1\) : 1'b0;.*?top_coded_i = \(plane_block_i >= 3'd2\) \? cabac_chroma_ac_block_nz_for\(block_i - 4'd2\) : 1'b0;.*?else if \(\(block_i >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE\) && \(plane_block_i == 3'd0\) && cabac_chroma_ac_block_nz_for\(block_i\)\).*?cabac_res_chroma_ac_cbf_ctx_sel_for = \{top_coded_i, left_coded_i\}",
     ),
     (
         "bitstream_initializes_chroma_residual_contexts",
@@ -141,9 +141,9 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"cabac_res_category\s*==\s*CABAC_RES_CAT_CHROMA_DC.*?cabac_cbp_chroma\s*==\s*2'd2.*?cabac_res_category\s*<=\s*CABAC_RES_CAT_CHROMA_AC",
     ),
     (
-        "gate_generates_cr_ac_expected_miss_fixture",
+        "gate_generates_cr_ac_strict_fixture",
         "scripts/run_cabac_p16x16_chroma_residual_red_check.sh",
-        r"INPUT_CR_AC=.*?smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_ac\.yuv.*?'cr_ac':.*?CABAC_CHROMA_INCLUDE_CR_AC",
+        r"INPUT_CR_AC=.*?smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_ac\.yuv.*?'cr_ac':.*?run_case \"cr_ac\" \"\$INPUT_CR_AC\" 2",
     ),
     (
         "gate_checks_cb_vs_cr_ac_plane_counters",
@@ -156,9 +156,9 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"decoded plane sanity expected Cb-only change.*?decoded plane sanity expected Cr-only change.*?\[PASS\] chroma residual \{name\} decoded-plane sanity U_SAD=\{u_sad\} V_SAD=\{v_sad\}",
     ),
     (
-        "gate_locks_cr_ac_short_decode_expected_miss",
+        "gate_promotes_cr_ac_strict_decode",
         "scripts/run_cabac_p16x16_chroma_residual_red_check.sh",
-        r"expect_ffmpeg_fail.*?emitted \$\{actual_bytes\}/\$\{expected_bytes\} decoded bytes",
+        r"run_case \"cr_ac\" \"\$INPUT_CR_AC\" 2\s+echo \"\[PASS\] CABAC P16x16 Cb/Cr DC-only and DC\+AC chroma residual smoke streams strict-decoded\"",
     ),
     (
         "probe_promotes_both_plane_ac_strict_pass",
@@ -176,14 +176,14 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"single_tl.*?single_tr.*?single_bl.*?cb_mirror_single_tr.*?cb_mirror_single_bl.*?run_strict_pass single_tl 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1'.*?run_strict_pass single_tr 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1'.*?run_strict_pass single_bl 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1'.*?run_strict_pass single_br 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1'.*?run_expected_miss cb_mirror_single_tl 'bytestream -13'.*?run_expected_miss cb_mirror_single_tr 'bytestream -29'.*?run_expected_miss cb_mirror_single_bl 'bytestream -11'.*?run_strict_pass cb_mirror_single_br 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1\s+cabac_chroma_cr_ac_blocks=0'",
     ),
     (
-        "probe_locks_dense_cb_ac_pass_control",
+        "probe_promotes_dense_cb_cr_ac_pass_controls",
         "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
-        r"cb_checker.*?run_strict_pass cb_checker 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=4\s+cabac_chroma_cr_ac_blocks=0'",
+        r"cb_checker.*?checker.*?run_strict_pass cb_checker 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=4\s+cabac_chroma_cr_ac_blocks=0'.*?run_strict_pass checker 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=4'",
     ),
     (
         "probe_checks_dense_cb_ac_decoded_plane_sanity",
         "scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh",
-        r"strict-pass decoded plane sanity expected Cb-only change.*?strict-pass decoded-plane sanity U_SAD=\{u_sad\} V_SAD=\{v_sad\}",
+        r"strict-pass decoded plane sanity expected Cb-only change.*?strict-pass decoded plane sanity expected Cr-only change.*?strict-pass decoded-plane sanity U_SAD=\{u_sad\} V_SAD=\{v_sad\}",
     ),
     (
         "probe_locks_chroma_ac_block_counters",
@@ -223,7 +223,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, remaining dense Cr signature-locked short-decode expected-miss coverage, Cr sparse strict-pass promotion, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, and chroma AC per-plane block counters")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, and chroma AC per-plane block counters")
     return 0
 
 
