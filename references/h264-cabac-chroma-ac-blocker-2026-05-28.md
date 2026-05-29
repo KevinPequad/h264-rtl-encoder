@@ -59,3 +59,11 @@ Next useful probe:
 - Tested generalizing the special coded top-left chroma-AC CBF path from Cr-only to both planes, i.e. making a coded plane-local top-left block use `ctxInc=0` (`left_coded=0`, `top_coded=0`) while preserving the edge-coded fallback for uncoded top-left blocks.
 - Result: rejected. The focused gate still strict-decoded the existing Cr single-block and dense controls, but Cb `cb_mirror_single_tl` did not promote to full `768/768`; it changed the locked short-output FFmpeg signature from `bytestream -13` to `bytestream -9` and remained invalid.
 - The source/audit experiment was reverted. This narrows the remaining Cb sparse-left blocker away from simply mirroring the coded Cr top-left CBF ctxInc special case; next useful probe is per-plane significant/last/level context history around the first Cb coded block versus the passing Cb bottom-right control.
+
+## 2026-05-28 coeff_abs_level_gt2 emission probe
+
+- Tested a local source experiment in `rtl/h264_cabac_residual4x4_bins.v` that suppressed the `coeff_abs_level_greater2_flag` bin when `absLevel == 1`, with the standalone residual-bin expectation updated accordingly.
+- Standalone gate result for the experiment: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_residual4x4_bins_check.sh` passed after removing the second-level bin from the absLevel-1 luma/chroma-AC expectations.
+- Integrated result: rejected for now. `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh` changed dense Cr checker from the locked `bytestream -25` short-output signature to `bytestream -20` and did not strict-decode it. `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` then regressed Cr `single_bl` from strict `768/768` output to short `384/768` output.
+- The source/test experiment was reverted. Keep the current emission behavior until the remaining chroma-AC ordering/context issue is isolated; this probe suggests the absLevel-1 bin cleanup is entangled with later CBF/significant/last context progression and cannot be landed as a standalone blocker fix.
+
