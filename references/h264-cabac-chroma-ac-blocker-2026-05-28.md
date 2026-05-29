@@ -137,3 +137,10 @@ Next useful probe:
 - Extended `scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` to lock the FFmpeg stderr signatures alongside decoded-byte counts: the remaining Cb top-left/top-right misses are now tied to `bytestream -19` and `bytestream -21`, while the Cr sparse controls and Cb bottom-row controls must keep clean strict-pass logs.
 - Rejected a temporary source probe that routed sparse Cb top-row CHRAC_CBF state through the Cr CBF bank. It preserved Cr sparse strict passes but kept Cb TL/TR at `384/768` and regressed the already-green Cb bottom-left mirror to short output, so the blocker is not just the Cb-vs-Cr CBF state bank choice.
 - Next useful repair target remains the same-plane sparse-Cb top-row coded-before-zero ordering/context transition, now with the decoder error signatures locked by the diagnostic gate.
+
+## 2026-05-29 sparse-Cb dynamic coded-selector probe
+
+- Rejected a dynamic variant of the sparse Cb-only CBF selector that changed the selector only for the actually coded top-row Cb block while leaving zero-CBF top-row blocks at the current baseline and preserving bottom-row selectors `[3,0]`.
+- Swept coded selector pairs `[0,0]`, `[2,2]`, `[3,3]`, `[0,2]`, `[2,0]`, `[3,0]`, `[0,3]`, `[3,2]`, and `[2,3]` for Cb blocks 0/1 with `THREADS=1 BUILD_JOBS=1` using a temporary `/tmp/h264_dynamic_probe.py` source rewrite that restored `rtl/h264_bitstream.v` afterward.
+- None promoted `cb_mirror_single_tl` or `cb_mirror_single_tr` to full `768/768` strict FFmpeg output; both remained short `384/768` with only bytestream-signature changes (`TL` in `-9/-13/-19`, `TR` in `-5/-9/-25`). Bottom-row sparse-Cb mirrors stayed strict `768/768` in all swept dynamic-coded variants.
+- This rules out the remaining simple dynamic-coded top-row CBF selector split. The next useful target is lower than static/dynamic CBF selector choice: trace arithmetic-state/renormalization around the first Cb top-row AC payload immediately following chroma DC, or compare the produced CABAC bit decisions against an independent decoder/instrumented-reference trace.
