@@ -13,11 +13,15 @@ y1 = bytes([64]) * (W * H)
 flat = bytes([128]) * ((W // 2) * (H // 2))
 single_tl = bytes(136 if (x < 4 and y < 4 and ((x + y) % 2)) else 128 for y in range(H // 2) for x in range(W // 2))
 single_tr = bytes(136 if (x >= 4 and y < 4 and ((x + y) % 2)) else 128 for y in range(H // 2) for x in range(W // 2))
+single_bl = bytes(136 if (x < 4 and y >= 4 and ((x + y) % 2)) else 128 for y in range(H // 2) for x in range(W // 2))
 single_br = bytes(136 if (x >= 4 and y >= 4 and ((x + y) % 2)) else 128 for y in range(H // 2) for x in range(W // 2))
 patterns = {
     "single_tl": (flat, single_tl),
     "single_tr": (flat, single_tr),
+    "single_bl": (flat, single_bl),
     "cb_mirror_single_tl": (single_tl, flat),
+    "cb_mirror_single_tr": (single_tr, flat),
+    "cb_mirror_single_bl": (single_bl, flat),
     "cb_mirror_single_br": (single_br, flat),
 }
 out_dir = Path("data")
@@ -47,7 +51,7 @@ PY
 SIM="$(tail -1 "$BUILD_OUT")"
 mkdir -p output/cabac_chroma_ac_debug
 
-for name in single_tl single_tr cb_mirror_single_tl cb_mirror_single_br; do
+for name in single_tl single_tr single_bl cb_mirror_single_tl cb_mirror_single_tr cb_mirror_single_bl cb_mirror_single_br; do
   "$SIM" \
     +frames=2 \
     +timeout=5000000 \
@@ -71,7 +75,10 @@ import re
 expected = {
     "single_tl": {"first_coded": 4, "decode_bytes": 768},
     "single_tr": {"first_coded": 5, "decode_bytes": 768},
+    "single_bl": {"first_coded": 6, "decode_bytes": 768},
     "cb_mirror_single_tl": {"first_coded": 0, "decode_bytes": 384},
+    "cb_mirror_single_tr": {"first_coded": 1, "decode_bytes": 384},
+    "cb_mirror_single_bl": {"first_coded": 2, "decode_bytes": 384},
     "cb_mirror_single_br": {"first_coded": 3, "decode_bytes": 768},
 }
 root = Path("output/cabac_chroma_ac_debug")
@@ -125,5 +132,5 @@ for name, exp in expected.items():
         raise SystemExit(f"[FAIL] {name}: decoded {got_bytes} bytes, expected {exp['decode_bytes']}")
     print(f"[PASS] {name}: first coded chroma-AC block {first_blk}, decoded {got_bytes}/768 bytes, CABACRES/CABACCTX trace present")
 
-print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks promoted Cr top-left strict pass and remaining Cb top-left fail/pass trace pairs")
+print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks promoted Cr top/left strict passes and the full remaining sparse Cb top/left miss trace set")
 PY
