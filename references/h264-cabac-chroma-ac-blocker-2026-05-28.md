@@ -104,3 +104,9 @@ Next useful probe:
 - `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh` also rejected `[0,0,3,0]` and `[2,2,3,0]`: both kept the top-row Cb mirrors short and only changed locked FFmpeg bytestream signatures (`TL -9` for `[0,0,3,0]`; `TR -23` for `[2,2,3,0]`).
 - The source was restored after each probe. This narrows the next repair away from a static per-block Cb CBF selector remap; the next useful target is the ordering/state interaction when a sparse Cb top-row coded block is emitted before the later Cb/Cr zero-CBF walk.
 
+## 2026-05-29 Cb-only Cr-zero shared-state probe
+
+- Re-ran the focused debug compare on current `goal/h264-cabac-chroma-contexts`: Cr sparse `single_tl`/`single_tr`/`single_bl` and Cb sparse bottom-row mirrors now strict-decode `768/768`; the remaining sparse-Cb misses are top-row only (`cb_mirror_single_tl` and `cb_mirror_single_tr`, both `384/768`).
+- Rejected a narrow experiment that made the Cr-plane zero-CBF walk reuse the Cb CHRAC_CBF context-state bank when the fixture was Cb-only AC (`cb_any && !cr_any`). It did not promote Cb TL/TR and regressed the already-green Cb bottom-left mirror to short `384/768` output.
+- The rejected trail changed the post-Cb Cr-zero selectors from split-plane `sel=7/6/5/4` to shared-bank `sel=3/2/1/0`, confirming the remaining top-row Cb blocker is not fixed by simply sharing Cb CBF state into the all-zero Cr plane.
+- Next useful repair target: preserve the current split Cb/Cr state banks and probe the Cb top-row coded-block ordering/context transition before the later same-plane zero CBF(s), especially the repeated `sel=1` update for `cb_mirror_single_tl`/`cb_mirror_single_tr` versus the passing bottom-row `sel=3`/`sel=0` coded updates.
