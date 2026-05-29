@@ -67,3 +67,12 @@ Next useful probe:
 - Integrated result: rejected for now. `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh` changed dense Cr checker from the locked `bytestream -25` short-output signature to `bytestream -20` and did not strict-decode it. `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` then regressed Cr `single_bl` from strict `768/768` output to short `384/768` output.
 - The source/test experiment was reverted. Keep the current emission behavior until the remaining chroma-AC ordering/context issue is isolated; this probe suggests the absLevel-1 bin cleanup is entangled with later CBF/significant/last context progression and cannot be landed as a standalone blocker fix.
 
+## 2026-05-29 sparse-Cb CBF trail lock
+
+- Extended `scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` to lock the CHRAC_CBF selector/state-update trail for each sparse Cb/Cr fixture, not just first coded block and decoded byte count.
+- The remaining failing Cb top/left mirrors are now distinguished from the passing Cb bottom-right control by exact CBF state history:
+  - Cb TL short-decodes after `[(0,3,105,103),(2,3,103,109),(3,3,109,113),...]`.
+  - Cb TR short-decodes after `[(1,3,105,109),(1,2,124,126),(3,1,119,123),...]`.
+  - Cb BL short-decodes after `[(1,3,105,109),(2,2,124,122),(2,1,119,117),...]`.
+  - Cb BR strict-decodes with `[(1,3,105,109),(2,2,124,122),(3,1,119,123),(3,0,92,100),...]`.
+- This narrows the next repair to the Cb-plane sparse-left CBF context-state/ordering transition after the first coded block; do not promote any Cb TL/TR/BL row until FFmpeg emits the full `768/768` raw output.
