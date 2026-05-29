@@ -117,3 +117,11 @@ Next useful probe:
 - Temporary `[1,3,3,0]` kept Cb TL short at the locked `bytestream -19` one-frame output and changed Cb TR only to a different short-output signature (`bytestream -25` instead of the locked `-21`); no strict full `768/768` top-row decode.
 - Temporary `[3,1,3,0]` immediately changed Cb TL away from the locked short signature without producing a full two-frame decode, so it is also not a repair.
 - The source was restored after each probe. This further narrows the blocker away from a simple adjacent top-row CBF selector swap; next useful probe is the actual same-plane top-row coded-before-zero ordering/state interaction, or an independent decoder-side trace of the CABAC CBF decisions for `cb_mirror_single_tl`/`cb_mirror_single_tr`.
+
+
+## 2026-05-29 exhaustive sparse-Cb top-row selector sweep
+
+- Completed the remaining Cb-only top-row static CBF selector sweep for sparse Cb AC, keeping bottom-row selectors at the current green baseline (`[*,*,3,0]` for Cb blocks 0..3) and restoring source after each probe.
+- Newly rejected top-row pairs `[0,1]`, `[1,0]`, `[0,3]`, `[3,0]`, `[2,3]`, `[3,2]`, `[0,2]`, and `[2,0]`: none promoted `cb_mirror_single_tl` or `cb_mirror_single_tr` to strict `768/768`; most also regressed one or both bottom-row sparse-Cb controls.
+- Together with the earlier rejected `[0,0]`, `[1,2]`, `[2,1]`, `[2,2]`, `[1,3]`, `[3,1]`, and `[3,3]` probes plus the baseline `[1,1]`, this exhausts the 4x4 static selector space for Cb blocks 0/1 under the current `[block2=3, block3=0]` bottom-row mapping.
+- Next useful target is no longer another static Cb top-row selector remap; probe the residual scheduler/CABAC state ordering around Cb top-row coded AC before later same-plane zero CBFs, or capture an independent decoder-side trace of the expected Cb TL/TR coded_block_flag decisions.
