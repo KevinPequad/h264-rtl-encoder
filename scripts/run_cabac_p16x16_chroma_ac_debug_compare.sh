@@ -76,37 +76,37 @@ expected = {
     "single_tl": {
         "first_coded": 4,
         "decode_bytes": 768,
-        "cbf_ctx_updates": [(1, 3, 105, 109), (2, 2, 124, 122), (3, 1, 119, 123), (4, 0, 92, 90), (4, 4, 92, 100), (6, 7, 105, 109), (7, 7, 109, 113), (7, 4, 100, 98)],
+        "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 122), (2, 1, 119, 123), (3, 0, 92, 90), (4, 4, 92, 100), (5, 7, 105, 109), (6, 7, 109, 113), (7, 4, 100, 98)],
     },
     "single_tr": {
         "first_coded": 5,
         "decode_bytes": 768,
-        "cbf_ctx_updates": [(1, 3, 105, 109), (2, 2, 124, 122), (3, 1, 119, 123), (4, 0, 92, 90), (5, 7, 105, 109), (5, 6, 124, 126), (7, 5, 119, 123), (7, 6, 126, 124)],
+        "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 122), (2, 1, 119, 123), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 126), (6, 5, 119, 123), (7, 6, 126, 124)],
     },
     "single_bl": {
         "first_coded": 6,
         "decode_bytes": 768,
-        "cbf_ctx_updates": [(1, 3, 105, 109), (2, 2, 124, 122), (3, 1, 119, 123), (4, 0, 92, 90), (5, 7, 105, 109), (6, 6, 124, 122), (6, 5, 119, 117), (7, 5, 117, 119)],
+        "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 122), (2, 1, 119, 123), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 117), (7, 5, 117, 119)],
     },
     "cb_mirror_single_tl": {
         "first_coded": 0,
         "decode_bytes": 384,
-        "cbf_ctx_updates": [(0, 3, 105, 103), (2, 3, 103, 109), (3, 3, 109, 113), (4, 0, 92, 90), (5, 7, 105, 109), (6, 6, 124, 122), (7, 5, 119, 123), (7, 4, 92, 90)],
+        "cbf_ctx_updates": [(0, 3, 105, 103), (1, 3, 103, 109), (2, 3, 109, 113), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
     },
     "cb_mirror_single_tr": {
         "first_coded": 1,
         "decode_bytes": 384,
-        "cbf_ctx_updates": [(1, 3, 105, 109), (1, 2, 124, 126), (3, 1, 119, 123), (4, 2, 126, 124), (5, 7, 105, 109), (6, 6, 124, 122), (7, 5, 119, 123), (7, 4, 92, 90)],
+        "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 126), (2, 1, 119, 123), (3, 2, 126, 124), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
     },
     "cb_mirror_single_bl": {
         "first_coded": 2,
         "decode_bytes": 384,
-        "cbf_ctx_updates": [(1, 3, 105, 109), (2, 2, 124, 122), (2, 1, 119, 117), (4, 1, 117, 119), (5, 7, 105, 109), (6, 6, 124, 122), (7, 5, 119, 123), (7, 4, 92, 90)],
+        "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 122), (2, 1, 119, 117), (3, 1, 117, 119), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
     },
     "cb_mirror_single_br": {
         "first_coded": 3,
         "decode_bytes": 768,
-        "cbf_ctx_updates": [(1, 3, 105, 109), (2, 2, 124, 122), (3, 1, 119, 123), (3, 0, 92, 100), (5, 7, 105, 109), (6, 6, 124, 122), (7, 5, 119, 123), (7, 4, 92, 90)],
+        "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 122), (2, 1, 119, 123), (3, 0, 92, 100), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
     },
 }
 root = Path("output/cabac_chroma_ac_debug")
@@ -169,5 +169,5 @@ for name, exp in expected.items():
         f"CABACRES/CABACCTX trace present, CHRAC_CBF trail locked"
     )
 
-print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks promoted Cr top/left strict passes, the full remaining sparse Cb top/left miss trace set, and CHRAC_CBF selector/state trails")
+print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks promoted Cr top/left strict passes, the remaining sparse Cb top/left miss trace set, and true pending-block CHRAC_CBF selector/state trails")
 PY

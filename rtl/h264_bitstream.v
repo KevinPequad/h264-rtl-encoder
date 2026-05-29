@@ -369,6 +369,8 @@ module h264_bitstream #(
     reg [6:0]  cabac_res_chroma_ac_level_ctx_state_1;
     reg [4:0]  cabac_pending_ctx_kind;
     reg [3:0]  cabac_pending_ctx_sel;
+    reg [1:0]  cabac_pending_res_category;
+    reg [3:0]  cabac_pending_res_block_idx;
     reg [3:0]  cabac_res_block_idx;
     reg [1:0]  cabac_res_category;
     reg        cabac_res_scan_start;
@@ -995,6 +997,8 @@ module h264_bitstream #(
             end
             cabac_pending_ctx_kind <= CABAC_CTX_NONE;
             cabac_pending_ctx_sel <= 4'd0;
+            cabac_pending_res_category <= CABAC_RES_CAT_LUMA;
+            cabac_pending_res_block_idx <= 4'd0;
             cabac_res_block_idx <= 4'd0;
             cabac_res_category <= CABAC_RES_CAT_LUMA;
             cabac_res_scan_start <= 1'b0;
@@ -1022,7 +1026,7 @@ module h264_bitstream #(
                      (cabac_pending_ctx_kind == CABAC_CTX_RES_CHRAC_LAST) ||
                      (cabac_pending_ctx_kind == CABAC_CTX_RES_CHRAC_LEVEL)))
                     $display("[CABACCTX] mb=%0d cat=%0d blk=%0d kind=%0d sel=%0d in=%0d out=%0d",
-                             cabac_mb_counter, cabac_res_category, cabac_res_block_idx,
+                             cabac_mb_counter, cabac_pending_res_category, cabac_pending_res_block_idx,
                              cabac_pending_ctx_kind, cabac_pending_ctx_sel,
                              cabac_ctx_state_in, cabac_ctx_state_out);
                 case (cabac_pending_ctx_kind)
@@ -2812,6 +2816,8 @@ module h264_bitstream #(
                             cabac_bin_value <= cabac_res_bin_value;
                             cabac_bin_bypass <= cabac_res_bin_bypass;
                             cabac_bin_terminate <= 1'b0;
+                            cabac_pending_res_category <= cabac_res_category;
+                            cabac_pending_res_block_idx <= cabac_res_block_idx;
                             if (cabac_res_category == CABAC_RES_CAT_CHROMA_DC) begin
                                 case (cabac_res_bin_ctx_idx)
                                     9'd97: begin

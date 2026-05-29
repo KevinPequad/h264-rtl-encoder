@@ -76,3 +76,13 @@ Next useful probe:
   - Cb BL short-decodes after `[(1,3,105,109),(2,2,124,122),(2,1,119,117),...]`.
   - Cb BR strict-decodes with `[(1,3,105,109),(2,2,124,122),(3,1,119,123),(3,0,92,100),...]`.
 - This narrows the next repair to the Cb-plane sparse-left CBF context-state/ordering transition after the first coded block; do not promote any Cb TL/TR/BL row until FFmpeg emits the full `768/768` raw output.
+
+## 2026-05-29 true pending-block CBF trace labels
+
+- Fixed the `DEBUG_CABAC_P16X16` `[CABACCTX]` trace to print the residual block/category captured when the bin was issued, instead of the live `cabac_res_block_idx` after the residual scheduler had already advanced.
+- Updated `scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` to lock the corrected CHRAC_CBF trails. The remaining sparse Cb misses are now labeled against the actual Cb AC blocks:
+  - Cb TL short-decodes with `[(0,3,105,103),(1,3,103,109),(2,3,109,113),(3,0,92,90),...]`.
+  - Cb TR short-decodes with `[(0,3,105,109),(1,2,124,126),(2,1,119,123),(3,2,126,124),...]`.
+  - Cb BL short-decodes with `[(0,3,105,109),(1,2,124,122),(2,1,119,117),(3,1,117,119),...]`.
+  - Cb BR still strict-decodes with `[(0,3,105,109),(1,2,124,122),(2,1,119,123),(3,0,92,100),...]`.
+- This does not promote a new sparse-Cb strict-decode row yet; it removes a misleading debug label that made post-coded-block CBF transitions look shifted by one or two blocks. Next repair probe should target those actual Cb block 0/1/2 transition differences, not the old live-index labels.
