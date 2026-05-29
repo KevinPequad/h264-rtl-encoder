@@ -362,6 +362,7 @@ module h264_bitstream #(
     reg [6:0]  cabac_res_chroma_dc_level_ctx_state_0;
     reg [6:0]  cabac_res_chroma_dc_level_ctx_state_1;
     reg [6:0]  cabac_res_chroma_ac_cbf_ctx_state [0:3];
+    reg [6:0]  cabac_res_chroma_ac_cr_cbf_ctx_state [0:3];
     reg [6:0]  cabac_res_chroma_ac_sig_ctx_state [0:14];
     reg [6:0]  cabac_res_chroma_ac_last_ctx_state [0:14];
     reg [6:0]  cabac_res_chroma_ac_level_ctx_state_0;
@@ -955,6 +956,7 @@ module h264_bitstream #(
             for (cabac_res_i = 0; cabac_res_i < 4; cabac_res_i = cabac_res_i + 1) begin
                 cabac_res_chroma_dc_cbf_ctx_state[cabac_res_i] <= 7'd0;
                 cabac_res_chroma_ac_cbf_ctx_state[cabac_res_i] <= 7'd0;
+                cabac_res_chroma_ac_cr_cbf_ctx_state[cabac_res_i] <= 7'd0;
             end
             cabac_res_chroma_dc_level_ctx_state_0 <= 7'd0;
             cabac_res_chroma_dc_level_ctx_state_1 <= 7'd0;
@@ -1056,7 +1058,12 @@ module h264_bitstream #(
                         else
                             cabac_res_chroma_dc_level_ctx_state_1 <= cabac_ctx_state_out;
                     end
-                    CABAC_CTX_RES_CHRAC_CBF: cabac_res_chroma_ac_cbf_ctx_state[cabac_pending_ctx_sel[1:0]] <= cabac_ctx_state_out;
+                    CABAC_CTX_RES_CHRAC_CBF: begin
+                        if (cabac_pending_ctx_sel[2])
+                            cabac_res_chroma_ac_cr_cbf_ctx_state[cabac_pending_ctx_sel[1:0]] <= cabac_ctx_state_out;
+                        else
+                            cabac_res_chroma_ac_cbf_ctx_state[cabac_pending_ctx_sel[1:0]] <= cabac_ctx_state_out;
+                    end
                     CABAC_CTX_RES_CHRAC_SIG: cabac_res_chroma_ac_sig_ctx_state[cabac_pending_ctx_sel] <= cabac_ctx_state_out;
                     CABAC_CTX_RES_CHRAC_LAST: cabac_res_chroma_ac_last_ctx_state[cabac_pending_ctx_sel] <= cabac_ctx_state_out;
                     CABAC_CTX_RES_CHRAC_LEVEL: begin
@@ -1685,9 +1692,13 @@ module h264_bitstream #(
                                     cabac_res_chroma_dc_level_ctx_state_1 <= cabac_init_state(-2, 58, 26);
 
                                     cabac_res_chroma_ac_cbf_ctx_state[0] <= cabac_init_state(-1, 48, 26);
+                                    cabac_res_chroma_ac_cr_cbf_ctx_state[0] <= cabac_init_state(-1, 48, 26);
                                     cabac_res_chroma_ac_cbf_ctx_state[1] <= cabac_init_state(0, 68, 26);
+                                    cabac_res_chroma_ac_cr_cbf_ctx_state[1] <= cabac_init_state(0, 68, 26);
                                     cabac_res_chroma_ac_cbf_ctx_state[2] <= cabac_init_state(-4, 69, 26);
+                                    cabac_res_chroma_ac_cr_cbf_ctx_state[2] <= cabac_init_state(-4, 69, 26);
                                     cabac_res_chroma_ac_cbf_ctx_state[3] <= cabac_init_state(-8, 88, 26);
+                                    cabac_res_chroma_ac_cr_cbf_ctx_state[3] <= cabac_init_state(-8, 88, 26);
                                     cabac_res_chroma_ac_sig_ctx_state[0] <= cabac_init_state(7, 50, 26);
                                     cabac_res_chroma_ac_sig_ctx_state[1] <= cabac_init_state(16, 39, 26);
                                     cabac_res_chroma_ac_sig_ctx_state[2] <= cabac_init_state(5, 44, 26);
@@ -2814,9 +2825,12 @@ module h264_bitstream #(
                             end else if (cabac_res_category == CABAC_RES_CAT_CHROMA_AC) begin
                                 case (cabac_res_bin_ctx_idx)
                                     9'd101: begin
-                                        cabac_ctx_state_in <= cabac_res_chroma_ac_cbf_ctx_state[cabac_res_chroma_ac_cbf_ctx_sel_for(cabac_res_block_idx)];
+                                        if (cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE)
+                                            cabac_ctx_state_in <= cabac_res_chroma_ac_cr_cbf_ctx_state[cabac_res_chroma_ac_cbf_ctx_sel_for(cabac_res_block_idx)];
+                                        else
+                                            cabac_ctx_state_in <= cabac_res_chroma_ac_cbf_ctx_state[cabac_res_chroma_ac_cbf_ctx_sel_for(cabac_res_block_idx)];
                                         cabac_pending_ctx_kind <= CABAC_CTX_RES_CHRAC_CBF;
-                                        cabac_pending_ctx_sel <= {2'd0, cabac_res_chroma_ac_cbf_ctx_sel_for(cabac_res_block_idx)};
+                                        cabac_pending_ctx_sel <= {1'b0, (cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE), cabac_res_chroma_ac_cbf_ctx_sel_for(cabac_res_block_idx)};
                                     end
                                     9'd266: begin
                                         cabac_ctx_state_in <= cabac_res_chroma_ac_level_ctx_state_0;

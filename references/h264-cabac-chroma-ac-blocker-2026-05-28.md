@@ -7,14 +7,14 @@ Focused gate: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cr_ac_prob
 Current strict-decode pass set after inferred-final coefficient fix:
 
 - Cb dense checker: full 768/768 raw output, decoded-plane sanity `U_SAD=256 V_SAD=0`.
-- Cr sparse right column: `single_tr` and `single_br` full 768/768 raw output, decoded-plane sanity `U_SAD=0 V_SAD=64`.
+- Cr sparse right column plus bottom-left: `single_tr`, `single_bl`, and `single_br` full 768/768 raw output, decoded-plane sanity `U_SAD=0 V_SAD=64`.
 - Cb sparse mirror bottom-right: `cb_mirror_single_br` full 768/768 raw output, decoded-plane sanity `U_SAD=64 V_SAD=0`.
 - Dense both-plane AC checker: full 768/768 raw output, decoded-plane sanity exercises both chroma planes.
 
 Current expected-miss set remains decoder-success with short 384/768 raw output:
 
 - Cr dense checker: `bytestream -21`, short 384/768 raw output.
-- Cr sparse left column: `single_tl` (`bytestream -17`) and `single_bl` (`bytestream -11`), short 384/768 raw output.
+- Cr sparse top-left: `single_tl` (`bytestream -19`), short 384/768 raw output.
 - Cb sparse mirrors except bottom-right: `cb_mirror_single_tl` (`bytestream -13`), `cb_mirror_single_tr` (`bytestream -29`), and `cb_mirror_single_bl` (`bytestream -11`), short 384/768 raw output.
 
 Rejected context experiments:
@@ -31,7 +31,7 @@ Rejected context experiments:
   | `left=0 top=1` | 768 | 384 | 384 | 384 | 384 | 384 | 384 | 384 | 384 | 384 | 384 |
 
 - The change was reverted after each probe; the canonical gate then passed again with the existing pass/miss set above.
-- The mixed results pointed away from a simple edge-default bug. The inferred-final coefficient fix promoted dense both-plane AC, but sparse left-column Cb/Cr and dense Cr remain short-output blockers, so context-state history from zero chroma-AC coded_block_flag bins remains a useful next probe.
+- The mixed results pointed away from a simple edge-default bug. The inferred-final coefficient fix promoted dense both-plane AC, but sparse top-left Cb/Cr and dense Cr remain short-output blockers, so context-state history from zero chroma-AC coded_block_flag bins remains a useful next probe.
 
 Next useful probe:
 
@@ -41,9 +41,15 @@ Next useful probe:
 ## Debug trace checkpoint
 
 - `scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` now builds with `DEBUG_CABAC_P16X16=1` and locks four diagnostic fixtures:
-  - Cr `single_tl`: first coded chroma-AC block `4`, expected short `384/768` decode.
+  - Cr `single_tl`: first coded chroma-AC block `4`, expected short `384/768` decode (`bytestream -19` after split Cb/Cr CBF state).
   - Cr `single_tr`: first coded chroma-AC block `5`, strict `768/768` decode.
   - Cb mirror `single_tl`: first coded chroma-AC block `0`, expected short `384/768` decode.
   - Cb mirror `single_br`: first coded chroma-AC block `3`, strict `768/768` decode.
 - `rtl/h264_bitstream.v` now emits `[CABACCTX]` context-state update lines under `DEBUG_CABAC_P16X16`, alongside `[CABACRES]` residual-bin lines. This makes the sparse-left miss vs right-column pass comparison reproducible without VCD dumping.
 - Next repair target: use the locked `CABACRES`/`CABACCTX` pairs to test a narrow chroma-AC context-state/ordering fix, then promote the affected expected-miss rows only when FFmpeg emits the full `768/768` raw output.
+
+## 2026-05-28 Cr bottom-left promotion
+
+- Split the reduced chroma-AC CBF context-state storage between Cb and Cr planes while preserving the existing plane-local CBF context selector and coded-edge defaults.
+- This promoted Cr `single_bl` from the expected short-output miss set to a strict full `768/768` FFmpeg decode without regressing `single_tr`, `single_br`, dense Cb, dense both-plane, or Cb bottom-right controls.
+- Remaining short-output signatures are Cr dense checker/top-left and Cb sparse mirrors except bottom-right; next probe should compare top-left CBF zero-history and significant/last state progression against the newly passing bottom-left and right-column Cr fixtures.
