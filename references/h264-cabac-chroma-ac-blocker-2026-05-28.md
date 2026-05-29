@@ -131,3 +131,9 @@ Next useful probe:
 - Extended `scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` to lock the ordered sequence of chroma-AC CBF bins and the first coded payload context update for each sparse Cb/Cr fixture.
 - The remaining sparse Cb top-row misses now explicitly capture the coded-before-zero shape: `cb_mirror_single_tl` emits `CBF0=1`, then the block-0 payload, then zero CBFs for blocks 1..7; `cb_mirror_single_tr` emits `CBF0=0`, `CBF1=1`, then the block-1 payload before later zero CBFs. The bottom-row sparse-Cb strict-pass controls remain locked as zero CBFs before the block-2/block-3 payload.
 - `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` passed with this additional ordering check. No new strict-decode promotion was made; the immediate repair target remains the top-row Cb coded-before-later-zero CBF ordering/context-state interaction or an independent decoder-side CABAC CBF decision trace.
+
+## 2026-05-29 sparse-Cb FFmpeg signature lock and Cr-bank probe
+
+- Extended `scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` to lock the FFmpeg stderr signatures alongside decoded-byte counts: the remaining Cb top-left/top-right misses are now tied to `bytestream -19` and `bytestream -21`, while the Cr sparse controls and Cb bottom-row controls must keep clean strict-pass logs.
+- Rejected a temporary source probe that routed sparse Cb top-row CHRAC_CBF state through the Cr CBF bank. It preserved Cr sparse strict passes but kept Cb TL/TR at `384/768` and regressed the already-green Cb bottom-left mirror to short output, so the blocker is not just the Cb-vs-Cr CBF state bank choice.
+- Next useful repair target remains the same-plane sparse-Cb top-row coded-before-zero ordering/context transition, now with the decoder error signatures locked by the diagnostic gate.

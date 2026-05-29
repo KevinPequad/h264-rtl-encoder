@@ -85,6 +85,7 @@ expected = {
     "single_tl": {
         "first_coded": 4,
         "decode_bytes": 768,
+        "ffmpeg_signature": "",
         "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 122), (2, 1, 119, 123), (3, 0, 92, 90), (4, 4, 92, 100), (5, 7, 105, 109), (6, 7, 109, 113), (7, 4, 100, 98)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
         "order_probe": [("cbf", 0, 0), ("cbf", 1, 0), ("cbf", 2, 0), ("cbf", 3, 0), ("cbf", 4, 1), ("payload", 4), ("cbf", 5, 0), ("cbf", 6, 0), ("cbf", 7, 0)],
@@ -92,6 +93,7 @@ expected = {
     "single_tr": {
         "first_coded": 5,
         "decode_bytes": 768,
+        "ffmpeg_signature": "",
         "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 122), (2, 1, 119, 123), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 126), (6, 5, 119, 123), (7, 6, 126, 124)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
         "order_probe": [("cbf", 0, 0), ("cbf", 1, 0), ("cbf", 2, 0), ("cbf", 3, 0), ("cbf", 4, 0), ("cbf", 5, 1), ("payload", 5), ("cbf", 6, 0), ("cbf", 7, 0)],
@@ -99,6 +101,7 @@ expected = {
     "single_bl": {
         "first_coded": 6,
         "decode_bytes": 768,
+        "ffmpeg_signature": "",
         "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 122), (2, 1, 119, 123), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 117), (7, 5, 117, 119)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
         "order_probe": [("cbf", 0, 0), ("cbf", 1, 0), ("cbf", 2, 0), ("cbf", 3, 0), ("cbf", 4, 0), ("cbf", 5, 0), ("cbf", 6, 1), ("payload", 6), ("cbf", 7, 0)],
@@ -106,6 +109,7 @@ expected = {
     "cb_mirror_single_tl": {
         "first_coded": 0,
         "decode_bytes": 384,
+        "ffmpeg_signature": "bytestream -19",
         "cbf_ctx_updates": [(0, 1, 119, 117), (1, 1, 117, 119), (2, 3, 105, 109), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
         "order_probe": [("cbf", 0, 1), ("payload", 0), ("cbf", 1, 0), ("cbf", 2, 0), ("cbf", 3, 0), ("cbf", 4, 0), ("cbf", 5, 0), ("cbf", 6, 0), ("cbf", 7, 0)],
@@ -113,6 +117,7 @@ expected = {
     "cb_mirror_single_tr": {
         "first_coded": 1,
         "decode_bytes": 384,
+        "ffmpeg_signature": "bytestream -21",
         "cbf_ctx_updates": [(0, 1, 119, 123), (1, 1, 123, 121), (2, 3, 105, 109), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
         "order_probe": [("cbf", 0, 0), ("cbf", 1, 1), ("payload", 1), ("cbf", 2, 0), ("cbf", 3, 0), ("cbf", 4, 0), ("cbf", 5, 0), ("cbf", 6, 0), ("cbf", 7, 0)],
@@ -120,6 +125,7 @@ expected = {
     "cb_mirror_single_bl": {
         "first_coded": 2,
         "decode_bytes": 768,
+        "ffmpeg_signature": "",
         "cbf_ctx_updates": [(0, 1, 119, 123), (1, 1, 123, 125), (2, 3, 105, 103), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
         "order_probe": [("cbf", 0, 0), ("cbf", 1, 0), ("cbf", 2, 1), ("payload", 2), ("cbf", 3, 0), ("cbf", 4, 0), ("cbf", 5, 0), ("cbf", 6, 0), ("cbf", 7, 0)],
@@ -127,6 +133,7 @@ expected = {
     "cb_mirror_single_br": {
         "first_coded": 3,
         "decode_bytes": 768,
+        "ffmpeg_signature": "",
         "cbf_ctx_updates": [(0, 1, 119, 123), (1, 1, 123, 125), (2, 3, 105, 109), (3, 0, 92, 100), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
         "order_probe": [("cbf", 0, 0), ("cbf", 1, 0), ("cbf", 2, 0), ("cbf", 3, 1), ("payload", 3), ("cbf", 4, 0), ("cbf", 5, 0), ("cbf", 6, 0), ("cbf", 7, 0)],
@@ -213,10 +220,24 @@ for name, exp in expected.items():
             pass
     if got_bytes != exp["decode_bytes"]:
         raise SystemExit(f"[FAIL] {name}: decoded {got_bytes} bytes, expected {exp['decode_bytes']}")
+    ffmpeg_text = ffmpeg_log.read_text(encoding="utf-8", errors="replace")
+    expected_signature = exp["ffmpeg_signature"]
+    if expected_signature:
+        if expected_signature not in ffmpeg_text:
+            raise SystemExit(
+                f"[FAIL] {name}: FFmpeg log did not include locked signature "
+                f"{expected_signature!r}: {ffmpeg_text.strip()!r}"
+            )
+        ffmpeg_status = expected_signature
+    else:
+        if ffmpeg_text.strip():
+            raise SystemExit(f"[FAIL] {name}: FFmpeg strict-pass log was not empty: {ffmpeg_text.strip()!r}")
+        ffmpeg_status = "clean"
     print(
         f"[PASS] {name}: first coded chroma-AC block {first_blk}, decoded {got_bytes}/768 bytes, "
-        f"CABACRES/CABACCTX trace present, CHRAC_CBF, coded-payload, and CBF/payload ordering trails locked"
+        f"FFmpeg signature {ffmpeg_status}, CABACRES/CABACCTX trace present, CHRAC_CBF, "
+        f"coded-payload, and CBF/payload ordering trails locked"
     )
 
-print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks promoted Cr top/left strict passes, the remaining sparse Cb top-row miss trace set plus bottom-row strict passes, true pending-block CHRAC_CBF selector/state trails, identical coded-block payload context trails, and the current CBF-before-payload ordering around sparse top-row Cb misses")
+print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks promoted Cr top/left strict passes, the remaining sparse Cb top-row miss trace set plus bottom-row strict passes, true pending-block CHRAC_CBF selector/state trails, identical coded-block payload context trails, current CBF-before-payload ordering, and FFmpeg bytestream signatures around sparse top-row Cb misses")
 PY
