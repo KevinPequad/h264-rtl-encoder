@@ -110,3 +110,10 @@ Next useful probe:
 - Rejected a narrow experiment that made the Cr-plane zero-CBF walk reuse the Cb CHRAC_CBF context-state bank when the fixture was Cb-only AC (`cb_any && !cr_any`). It did not promote Cb TL/TR and regressed the already-green Cb bottom-left mirror to short `384/768` output.
 - The rejected trail changed the post-Cb Cr-zero selectors from split-plane `sel=7/6/5/4` to shared-bank `sel=3/2/1/0`, confirming the remaining top-row Cb blocker is not fixed by simply sharing Cb CBF state into the all-zero Cr plane.
 - Next useful repair target: preserve the current split Cb/Cr state banks and probe the Cb top-row coded-block ordering/context transition before the later same-plane zero CBF(s), especially the repeated `sel=1` update for `cb_mirror_single_tl`/`cb_mirror_single_tr` versus the passing bottom-row `sel=3`/`sel=0` coded updates.
+
+## 2026-05-29 sparse-Cb top-row adjacent-selector probes
+
+- Rejected two additional Cb-only top-row CBF selector experiments while preserving the current split Cb/Cr state banks and the landed bottom-row baseline (`[1,1,3,0]` for Cb blocks 0..3).
+- Temporary `[1,3,3,0]` kept Cb TL short at the locked `bytestream -19` one-frame output and changed Cb TR only to a different short-output signature (`bytestream -25` instead of the locked `-21`); no strict full `768/768` top-row decode.
+- Temporary `[3,1,3,0]` immediately changed Cb TL away from the locked short signature without producing a full two-frame decode, so it is also not a repair.
+- The source was restored after each probe. This further narrows the blocker away from a simple adjacent top-row CBF selector swap; next useful probe is the actual same-plane top-row coded-before-zero ordering/state interaction, or an independent decoder-side trace of the CABAC CBF decisions for `cb_mirror_single_tl`/`cb_mirror_single_tr`.
