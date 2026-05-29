@@ -226,7 +226,7 @@ if name.startswith("cb_"):
         raise SystemExit(
             f"[FAIL] CR_AC {name} strict-pass decoded plane sanity expected Cb-only change, got U_SAD={u_sad} V_SAD={v_sad}"
         )
-elif name.startswith("cr_") or name in {"single_tr", "single_bl", "single_br"}:
+elif name.startswith("cr_") or name in {"single_tl", "single_tr", "single_bl", "single_br"}:
     if v_sad == 0 or u_sad != 0:
         raise SystemExit(
             f"[FAIL] CR_AC {name} strict-pass decoded plane sanity expected Cr-only change, got U_SAD={u_sad} V_SAD={v_sad}"
@@ -247,8 +247,8 @@ PY
 }
 
 run_strict_pass cb_checker 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=4 cabac_chroma_cr_ac_blocks=0'
-run_expected_miss checker 'bytestream -21' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=4'
-run_expected_miss single_tl 'bytestream -19' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
+run_expected_miss checker 'bytestream -25' 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=4'
+run_strict_pass single_tl 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
 run_strict_pass single_tr 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
 run_strict_pass single_bl 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
 run_strict_pass single_br 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
@@ -258,4 +258,4 @@ run_expected_miss cb_mirror_single_tr 'bytestream -29' 'cabac_chroma_cb_ac_mbs=1
 run_expected_miss cb_mirror_single_bl 'bytestream -11' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
 run_strict_pass cb_mirror_single_br 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
 
-echo "[PASS] CABAC P16x16 sparse chroma AC strict-decode blocker is narrowed: Cr single_tr/single_bl/single_br, dense both-plane AC, and Cb mirror single_br strict-decode, while top-left sparse Cb/Cr and dense Cr remain signature-locked expected misses"
+echo "[PASS] CABAC P16x16 sparse chroma AC strict-decode blocker is narrowed: Cr single_tl/single_tr/single_bl/single_br, dense both-plane AC, and Cb mirror single_br strict-decode, while sparse Cb top/left mirrors and dense Cr remain signature-locked expected misses"

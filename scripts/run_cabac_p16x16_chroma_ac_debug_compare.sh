@@ -69,7 +69,7 @@ from pathlib import Path
 import re
 
 expected = {
-    "single_tl": {"first_coded": 4, "decode_bytes": 384},
+    "single_tl": {"first_coded": 4, "decode_bytes": 768},
     "single_tr": {"first_coded": 5, "decode_bytes": 768},
     "cb_mirror_single_tl": {"first_coded": 0, "decode_bytes": 384},
     "cb_mirror_single_br": {"first_coded": 3, "decode_bytes": 768},
@@ -101,8 +101,8 @@ for name, exp in expected.items():
     debug_text = sim_log.read_text(encoding="utf-8", errors="replace")
     if "[CABACRES]" not in debug_text or "[CABACCTX]" not in debug_text:
         raise SystemExit(f"[FAIL] {name}: debug trace did not include both residual-bin and context-update lines")
-    # FFmpeg emits a short raw file for the two known miss signatures and full
-    # 768-byte output for the two strict-pass controls; lock those signatures so
+    # FFmpeg emits a short raw file for the remaining known miss signature and full
+    # 768-byte output for the strict-pass controls; lock those signatures so
     # this remains a diagnostic compare rather than silently promoting/demoting.
     raw_path = Path(f"/tmp/nonexistent_{name}")
     # Decode bytes were printed by the shell loop; recompute from the h264 to keep
@@ -125,5 +125,5 @@ for name, exp in expected.items():
         raise SystemExit(f"[FAIL] {name}: decoded {got_bytes} bytes, expected {exp['decode_bytes']}")
     print(f"[PASS] {name}: first coded chroma-AC block {first_blk}, decoded {got_bytes}/768 bytes, CABACRES/CABACCTX trace present")
 
-print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks fail/pass trace pairs for next context-state repair")
+print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks promoted Cr top-left strict pass and remaining Cb top-left fail/pass trace pairs")
 PY
