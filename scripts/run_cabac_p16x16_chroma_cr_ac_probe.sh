@@ -117,12 +117,19 @@ run_expected_miss() {
     actual_bytes="$(wc -c < "$raw_yuv")"
     rm -f "$raw_yuv"
     if [ "$actual_bytes" -ne "$expected_bytes" ]; then
+      local expected_short_bytes
+      expected_short_bytes=$((16 * 16 * 3 / 2))
+      if [ "$actual_bytes" -ne "$expected_short_bytes" ]; then
+        echo "[FAIL] CR_AC ${name} short raw decode emitted ${actual_bytes}/${expected_bytes} bytes, expected the locked one-frame ${expected_short_bytes}/${expected_bytes} miss"
+        tail -80 "$ffmpeg_log"
+        exit 1
+      fi
       if ! grep -q "$expected_signature" "$ffmpeg_log"; then
         echo "[FAIL] CR_AC ${name} short raw decode did not preserve expected FFmpeg signature '$expected_signature'"
         tail -80 "$ffmpeg_log"
         exit 1
       fi
-      echo "[PASS] CR_AC ${name} remains isolated: FFmpeg returned success with ${expected_signature} and emitted ${actual_bytes}/${expected_bytes} decoded bytes"
+      echo "[PASS] CR_AC ${name} remains isolated: FFmpeg returned success with ${expected_signature} and emitted locked one-frame ${actual_bytes}/${expected_bytes} decoded bytes"
       return 0
     fi
     echo "[FAIL] CR_AC ${name} strict-decoded two full frames; promote the gate instead of keeping this expected-miss probe"
