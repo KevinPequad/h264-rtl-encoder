@@ -208,3 +208,10 @@ Next useful probe:
 - Added a `DEBUG_CABAC_P16X16` `[CABACTERM]` tap in `rtl/h264_bitstream.v` at the slice-terminate handoff so the diagnostic Cb AC arithmetic probe now locks the CABAC core pre-flush state for failing masks `0x1`, `0x2`, and `0xc` against strict controls `0x3`, `0x4`, and `0x8`.
 - `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` now checks the terminate pre-state in addition to decoded bytes, FFmpeg signatures, CBF arithmetic trails, residual output byte chunks, CBF/payload order, and first-payload state.
 - This still does not promote a sparse Cb top/split mask to full `768/768`; it narrows the next repair below CBF selector/static ordering to the CABAC arithmetic residual tail versus final terminate handoff, with a stable pre-flush state row available for each representative failing/passing mask.
+
+## 2026-05-30 residual level node-context probe
+
+- Rejected a staged RTL experiment that replaced the residual4x4 helper's two-context level scaffold with the x264/spec-style `coeff_abs_level_minus1` node-context walk (`level1` contexts base+1/+2/+3/+4/+0, `levelgt1` contexts base+5..+9, unary stop bins, and per-block node reset) plus full luma/chroma-DC/chroma-AC level context-state arrays.
+- Standalone syntax compiled, but the focused integrated gate regressed an already-green control: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh` failed at `CR_AC checker strict-pass control decoded 384 bytes, expected 768 bytes`, while the dense Cb control still strict-decoded.
+- The source was restored after the probe. This rules out landing the level node-context walk by itself as the sparse-Cb repair; the next fix should combine any level-binarization cleanup with a decoder/reference CABAC decision trace so Cr dense and Cb dense controls stay green while top/split sparse Cb masks are promoted.
+
