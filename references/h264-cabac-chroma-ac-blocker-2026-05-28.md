@@ -197,3 +197,8 @@ Next useful probe:
 - Bottom-left is now known to be phase/sign sensitive at the same residual magnitude: `+5/even` and `-5/odd` short-decode with `bytestream -5`, while `+5/odd` and `-5/even` strict-decode full `768/768` with Cb-only decoded-plane SAD.
 - Bottom-right remains a green control for all four `±5` parity/sign cases. This broadens the immediate repair target from top-row position alone to residual payload/arithmetic-state interaction with coefficient sign/phase, still below static CBF selector choice.
 
+## 2026-05-30 Cb AC level-suffix probe
+
+- Added `scripts/run_cabac_p16x16_chroma_cb_ac_level_suffix_probe.py`, which patches only a staged RTL workspace to replace the current fixed-binary residual level suffix scaffold with a small unary stop-bit form for `coeff_abs_level_remaining`.
+- The staged suffix change does not promote representative sparse Cb AC masks: `0x1`, `0x2`, and `0xc` still stop at one decoded frame (`384/768`) with the locked FFmpeg signatures (`-19`, `-21`, and `-18`), while strict controls `0x3` and `0x4` remain full `768/768`.
+- This rules out the simple residual-level suffix-form hypothesis for the current sparse Cb blocker. The next repair should compare the CABAC arithmetic/decoder decisions around the same-plane Cb AC coded/zero block transitions rather than repeating fixed-vs-unary suffix experiments.
