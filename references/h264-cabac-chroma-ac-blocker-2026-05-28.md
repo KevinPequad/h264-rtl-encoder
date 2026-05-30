@@ -190,3 +190,10 @@ Next useful probe:
 - The staged wait does not promote the remaining sparse Cb AC masks: representative failing masks `0x1`, `0x2`, and `0xc` still emit one decoded frame (`384/768`), while strict-pass controls `0x3` and `0x4` remain full `768/768`.
 - The wait changes the failing FFmpeg bytestream signatures (`0x1:-24`, `0x2:-22`, `0xc:-15`) without producing a strict decode, so the next repair should stay below simple terminate-tail waiting and compare residual CABAC arithmetic/output state around the Cb AC coded/zero block transitions.
 
+## 2026-05-30 Cb-only AC phase/polarity probe
+
+- Added `scripts/run_cabac_p16x16_chroma_cb_ac_phase_probe.sh` to lock a small parity/sign lattice at the first nonzero sparse Cb AC residual step (`±5`) without changing RTL.
+- Top-row Cb singleton blocks remain isolated one-frame misses for both checker parities and both signs: block0 keeps `bytestream -19`, block1 keeps `bytestream -21`.
+- Bottom-left is now known to be phase/sign sensitive at the same residual magnitude: `+5/even` and `-5/odd` short-decode with `bytestream -5`, while `+5/odd` and `-5/even` strict-decode full `768/768` with Cb-only decoded-plane SAD.
+- Bottom-right remains a green control for all four `±5` parity/sign cases. This broadens the immediate repair target from top-row position alone to residual payload/arithmetic-state interaction with coefficient sign/phase, still below static CBF selector choice.
+
