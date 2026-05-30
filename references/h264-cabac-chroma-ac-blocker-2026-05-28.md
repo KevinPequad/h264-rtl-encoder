@@ -183,3 +183,10 @@ Next useful probe:
 - Expanded `scripts/run_cabac_p16x16_chroma_cb_ac_zerodc_probe.sh` from the four singleton masks to all 15 nonzero Cb-only chroma-AC masks using a balanced pattern with zero chroma-DC contribution.
 - Result: without chroma DC, only bottom-row masks `0x4`, `0x8`, and `0xc` strict-decode. Top-row, mixed, and full masks remain isolated one-frame misses with exact FFmpeg signatures (`0x1:-20`, `0x2:-18`, `0x3:-24`, `0x5:-22`, `0x6:-26`, `0x7:-19`, `0x9:-20`, `0xa:-30`, `0xb:-17`, `0xd:-15`, `0xe:-15`, `0xf:-9`).
 - Compared with the normal Cb-AC mask lattice, removing chroma DC regresses top-pair/dense/full-ish masks that otherwise strict-decode. This points the next repair below static CBF selectors and toward the interaction between chroma-DC context/history, Cb AC CBF ordering, and CABAC arithmetic output around the Cb residual tail.
+
+## 2026-05-30 CABAC terminate-wait probe
+
+- Added `scripts/run_cabac_p16x16_chroma_cb_ac_terminate_wait_probe.py`, which patches only a staged RTL workspace to make the CABAC terminate(1) trailer state wait for `cabac_bits_valid` or `cabac_done` before advancing.
+- The staged wait does not promote the remaining sparse Cb AC masks: representative failing masks `0x1`, `0x2`, and `0xc` still emit one decoded frame (`384/768`), while strict-pass controls `0x3` and `0x4` remain full `768/768`.
+- The wait changes the failing FFmpeg bytestream signatures (`0x1:-24`, `0x2:-22`, `0xc:-15`) without producing a strict decode, so the next repair should stay below simple terminate-tail waiting and compare residual CABAC arithmetic/output state around the Cb AC coded/zero block transitions.
+
