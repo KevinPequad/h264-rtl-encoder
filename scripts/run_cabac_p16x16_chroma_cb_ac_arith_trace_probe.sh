@@ -139,7 +139,7 @@ EXPECTED = {
     },
 }
 
-def decoded_bytes(path: Path) -> int:
+def decoded_raw(path: Path) -> bytes:
     with tempfile.NamedTemporaryFile(prefix="h264_cb_ac_arith_decode_", suffix=".yuv", delete=False) as tmp:
         tmp_path = Path(tmp.name)
     try:
@@ -147,17 +147,22 @@ def decoded_bytes(path: Path) -> int:
             "ffmpeg", "-y", "-v", "error", "-xerror", "-i", str(path),
             "-f", "rawvideo", "-pix_fmt", "yuv420p", str(tmp_path),
         ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-        return tmp_path.stat().st_size if tmp_path.exists() else 0
+        return tmp_path.read_bytes() if tmp_path.exists() else b""
     finally:
         try:
             tmp_path.unlink()
         except FileNotFoundError:
             pass
 
+FRAME_SIZE = 16 * 16 * 3 // 2
+LUMA_SIZE = 16 * 16
+CHROMA_SIZE = 16 * 16 // 4
+
 for mask, exp in EXPECTED.items():
     sim_log = ROOT / f"mask_{mask}.sim.log"
     h264 = ROOT / f"mask_{mask}.h264"
     ffmpeg_log = ROOT / f"mask_{mask}.ffmpeg.log"
+    fixture = Path(f"data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_ac_arith_mask_{mask}.yuv")
     text = sim_log.read_text(encoding="utf-8", errors="replace")
     cbf = []
     order = []
@@ -219,9 +224,20 @@ for mask, exp in EXPECTED.items():
             if first_payload is None:
                 first_payload = (blk, kind, sel, state_in, state_out, ari_range, ari_queue, ari_pbyte)
 
-    got_bytes = decoded_bytes(h264)
+    decoded = decoded_raw(h264)
+    got_bytes = len(decoded)
     if got_bytes != exp["bytes"]:
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} decoded {got_bytes}/768 bytes, expected {exp['bytes']}/768")
+    src = fixture.read_bytes()
+    if got_bytes >= FRAME_SIZE and decoded[:FRAME_SIZE] != src[:FRAME_SIZE]:
+        raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} changed the IDR reference frame")
+    if got_bytes == 2 * FRAME_SIZE:
+        u0 = FRAME_SIZE + LUMA_SIZE
+        v0 = u0 + CHROMA_SIZE
+        u_sad = sum(abs(decoded[u0 + i] - src[u0 + i]) for i in range(CHROMA_SIZE))
+        v_sad = sum(abs(decoded[v0 + i] - src[v0 + i]) for i in range(CHROMA_SIZE))
+        if u_sad == 0 or v_sad != 0:
+            raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} expected Cb-only decoded delta, got U_SAD={u_sad} V_SAD={v_sad}")
     ffmpeg_text = ffmpeg_log.read_text(encoding="utf-8", errors="replace")
     if exp["signature"]:
         if exp["signature"] not in ffmpeg_text:

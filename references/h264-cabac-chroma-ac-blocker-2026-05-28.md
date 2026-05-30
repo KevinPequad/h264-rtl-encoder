@@ -238,3 +238,9 @@ Next useful probe:
 - Re-ran `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` and found the diagnostic gate could fail on mask `0xc` when the C++ testbench frame-complete line split the Verilog `[CABACBITS]` stdout row for the `3a` byte.
 - Hardened the probe to keep the full `0xc` byte-chunk expectation plus the stream-size/tail lock, while tolerating the known non-atomic log-line split as an alternate parsed byte-chunk list. This fixes a local execution blocker without relaxing the actual H.264 stream-tail check (`...beb3189943a6990`).
 - The repaired probe now passes again with masks `0x1`, `0x2`, and `0xc` still short at `384/768`, and masks `0x3`, `0x4`, and `0x8` strict-decodable at `768/768`. No sparse-Cb promotion was claimed.
+
+## 2026-05-30 Cb AC arithmetic decoded-plane sanity hardening
+
+- Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` so the representative arithmetic trace gate now decodes the generated streams into raw yuv420p bytes instead of checking only the byte count.
+- The gate now verifies every emitted first frame remains byte-identical to the IDR source frame, and every full two-frame strict-pass control (`0x3`, `0x4`, `0x8`) has a Cb-only decoded-plane delta (`U_SAD != 0`, `V_SAD == 0`). This prevents a future CABAC arithmetic/tail change from being misclassified as green merely because FFmpeg emitted `768/768` bytes.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` passes with the existing fail/pass partition unchanged (`0x1`, `0x2`, `0xc` short at `384/768`; `0x3`, `0x4`, `0x8` full at `768/768`).
