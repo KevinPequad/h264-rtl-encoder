@@ -140,6 +140,7 @@ sim = build_sim(
 
 qualified: list[tuple[tuple[int, int, int, int], dict[int, int]]] = []
 near: list[tuple[tuple[int, int, int, int], dict[int, int]]] = []
+top_row_hits: list[tuple[tuple[int, int, int, int], dict[int, int]]] = []
 for table in itertools.product(range(4), repeat=4):
     result = {mask: run_decode_bytes(sim, table, mask) for mask in SINGLE_MASKS}
     full_count = sum(decoded == FULL_BYTES for decoded in result.values())
@@ -147,6 +148,8 @@ for table in itertools.product(range(4), repeat=4):
         near.append((table, result))
     if full_count >= 3:
         qualified.append((table, result))
+    if (result[0x1] == FULL_BYTES) or (result[0x2] == FULL_BYTES):
+        top_row_hits.append((table, result))
 
 expected_near = {
     (1, 1, 3, 0): {0x1: 384, 0x2: 384, 0x4: 768, 0x8: 768},
@@ -155,9 +158,12 @@ expected_near = {
 near_map = {table: result for table, result in near}
 if qualified:
     raise SystemExit(f"[FAIL] sparse Cb CBF context selector sweep found a selector table that promotes at least three singleton masks: {qualified[:4]}")
+if top_row_hits:
+    raise SystemExit(f"[FAIL] sparse Cb CBF context selector sweep unexpectedly promoted top-row singleton mask(s): {top_row_hits[:4]}")
 if near_map != expected_near:
     raise SystemExit(f"[FAIL] sparse Cb CBF context selector sweep changed near-pass set: {near_map}")
 
 print("[PASS] CABAC P16x16 sparse Cb AC singleton blocker is not solved by the 4-entry CBF context selector table alone")
+print("[PASS] exhaustive 4-entry CBF selector sweep found zero top-row singleton strict-decode promotions for masks 0x1/0x2")
 print("[PASS] only selector tables (1,1,3,0) and (0,2,0,3) preserve the two bottom singleton strict-decodes, and neither promotes top singleton masks 0x1/0x2")
 PY
