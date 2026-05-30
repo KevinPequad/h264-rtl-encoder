@@ -220,3 +220,9 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` so the representative Cb-only chroma-AC arithmetic trace now locks the generated H.264 stream size and final 32-byte tail for failing masks `0x1`, `0x2`, `0xc` and strict-pass controls `0x3`, `0x4`, `0x8`.
 - Current tails confirm the short-output masks are not just missing a whole trailing NAL: all six streams keep the same SPS/PPS/AUD/IDR layout and second-slice start, while the payload tail differs per Cb AC mask.
 - This still does not promote any sparse Cb mask to `768/768`; it makes future CABAC arithmetic/bitstream-tail repairs fail fast if they silently drift the already-characterized failing/pass control streams.
+
+## 2026-05-30 Cb AC DC-bias probe
+
+- Added `scripts/run_cabac_p16x16_chroma_cb_ac_dc_bias_probe.sh` to vary a uniform Cb-plane DC bias (`-16/-8/0/+8/+16`) around representative Cb-only chroma-AC masks (`0x1`, `0x2`, `0x3`, `0x4`, `0x8`, `0xc`).
+- Result: DC bias does not promote the remaining sparse top/split Cb AC masks; `0x1`, `0x2`, and `0xc` remain isolated one-frame `384/768` misses across all tested biases with locked FFmpeg bytestream signatures.
+- The same bias sweep regresses otherwise-green masks `0x3`, `0x4`, and `0x8` whenever the uniform DC bias is nonzero; only their zero-bias controls strict-decode full `768/768`. This narrows the repair away from adding/manipulating Cb DC history and toward matching the CABAC arithmetic/output transition for the zero-bias sparse-Cb residual tail.
