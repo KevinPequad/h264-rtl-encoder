@@ -28,7 +28,7 @@ def zero_dc_cb_for_mask(mask: int) -> bytes:
 
 out_dir = Path("data")
 out_dir.mkdir(parents=True, exist_ok=True)
-for mask in (0x1, 0x2, 0x4, 0x8):
+for mask in range(0x1, 0x10):
     out = out_dir / f"smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_ac_zerodc_mask_{mask:x}.yuv"
     out.write_bytes(y0 + flat_chroma + flat_chroma + y1 + zero_dc_cb_for_mask(mask) + flat_chroma)
     print(f"[INFO] CB_AC_ZERODC mask=0x{mask:x} fixture {out} size={out.stat().st_size}")
@@ -64,10 +64,20 @@ expected_bytes = frame_size * 2
 expected_short_signatures = {
     0x1: "bytestream -20",
     0x2: "bytestream -18",
+    0x3: "bytestream -24",
+    0x5: "bytestream -22",
+    0x6: "bytestream -26",
+    0x7: "bytestream -19",
+    0x9: "bytestream -20",
+    0xA: "bytestream -30",
+    0xB: "bytestream -17",
+    0xD: "bytestream -15",
+    0xE: "bytestream -15",
+    0xF: "bytestream -9",
 }
-expected_strict = {0x4, 0x8}
+expected_strict = {0x4, 0x8, 0xC}
 
-for mask in (0x1, 0x2, 0x4, 0x8):
+for mask in range(0x1, 0x10):
     input_path = root / "data" / f"smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_ac_zerodc_mask_{mask:x}.yuv"
     h264 = root / "output" / f"cabac_p16x16_chroma_residual_cb_ac_zerodc_mask_{mask:x}.h264"
     sim_log = root / "output" / f"validation_cabac_p16x16_chroma_residual_cb_ac_zerodc_mask_{mask:x}.sim.log"
@@ -87,8 +97,9 @@ for mask in (0x1, 0x2, 0x4, 0x8):
         raise SystemExit(f"[FAIL] CB_AC_ZERODC mask=0x{mask:x} did not exercise integrated CABAC P16x16")
     if "cabac_chroma_dc_mbs=0" not in sim_text or "cb_ac_mbs=1" not in sim_text or "cr_ac_mbs=0" not in sim_text:
         raise SystemExit(f"[FAIL] CB_AC_ZERODC mask=0x{mask:x} did not stay zero-DC Cb-only AC")
-    if "cb_ac_blocks=1" not in sim_text or "cr_ac_blocks=0" not in sim_text:
-        raise SystemExit(f"[FAIL] CB_AC_ZERODC mask=0x{mask:x} did not report exactly one Cb AC block")
+    expected_blocks = mask.bit_count()
+    if f"cb_ac_blocks={expected_blocks}" not in sim_text or "cr_ac_blocks=0" not in sim_text:
+        raise SystemExit(f"[FAIL] CB_AC_ZERODC mask=0x{mask:x} did not report {expected_blocks} Cb AC block(s)")
 
     with ffmpeg_log.open("w") as log:
         subprocess.run(
@@ -114,7 +125,7 @@ for mask in (0x1, 0x2, 0x4, 0x8):
         v_sad = sum(abs(dec[v0 + i] - src[v0 + i]) for i in range(chroma_size))
         if u_sad == 0 or v_sad != 0:
             raise SystemExit(f"[FAIL] CB_AC_ZERODC mask=0x{mask:x} expected Cb-only decoded delta, got U_SAD={u_sad} V_SAD={v_sad}")
-        print(f"[PASS] CB_AC_ZERODC mask=0x{mask:x} bottom-row singleton strict-decodes {actual_bytes}/{expected_bytes} with zero chroma-DC contribution U_SAD={u_sad} V_SAD={v_sad}")
+        print(f"[PASS] CB_AC_ZERODC mask=0x{mask:x} strict-decodes {actual_bytes}/{expected_bytes} with zero chroma-DC contribution, cb_ac_blocks={expected_blocks}, U_SAD={u_sad} V_SAD={v_sad}")
     else:
         expected_signature = expected_short_signatures[mask]
         if actual_bytes != frame_size:
@@ -125,11 +136,11 @@ for mask in (0x1, 0x2, 0x4, 0x8):
                 f"{expected_signature!r}: {ff_text.strip()!r}"
             )
         print(
-            f"[PASS] CB_AC_ZERODC mask=0x{mask:x} top-row singleton remains isolated one-frame miss "
-            f"{actual_bytes}/{expected_bytes} with zero chroma-DC contribution and FFmpeg signature {expected_signature}"
+            f"[PASS] CB_AC_ZERODC mask=0x{mask:x} remains isolated one-frame miss "
+            f"{actual_bytes}/{expected_bytes} with zero chroma-DC contribution, cb_ac_blocks={expected_blocks}, and FFmpeg signature {expected_signature}"
         )
 
     raw_yuv.unlink(missing_ok=True)
 
-print("[PASS] CABAC P16x16 sparse Cb-only chroma AC zero-DC probe locks the blocker to top-row AC placement: top-row singletons still miss without chroma DC, while bottom-row singletons strict-decode")
+print("[PASS] CABAC P16x16 Cb-only chroma AC zero-DC lattice locked: only bottom-row masks 0x4/0x8/0xc strict-decode without chroma DC, while top-row and mixed masks remain exact-signature one-frame misses")
 PY
