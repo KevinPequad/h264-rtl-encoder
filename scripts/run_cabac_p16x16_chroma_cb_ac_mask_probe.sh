@@ -55,7 +55,15 @@ from pathlib import Path
 sim = sys.argv[1]
 root = Path.cwd()
 expected_full = {0x3, 0x4, 0x7, 0x8, 0xb, 0xd, 0xe, 0xf}
-expected_short = {0x1, 0x2, 0x5, 0x6, 0x9, 0xa, 0xc}
+expected_short_signatures = {
+    0x1: "bytestream -19",
+    0x2: "bytestream -21",
+    0x5: "bytestream -22",
+    0x6: "bytestream -18",
+    0x9: "bytestream -14",
+    0xa: "bytestream -20",
+    0xc: "bytestream -18",
+}
 frame_size = 16 * 16 * 3 // 2
 expected_bytes = frame_size * 2
 
@@ -105,17 +113,24 @@ for mask in range(1, 16):
         if u_sad == 0 or v_sad != 0:
             raise SystemExit(f"[FAIL] CB_AC mask=0x{mask:x} expected Cb-only decoded delta, got U_SAD={u_sad} V_SAD={v_sad}")
         print(f"[PASS] CB_AC mask=0x{mask:x} strict-decodes {actual_bytes}/{expected_bytes} with cb_ac_blocks={expected_blocks} U_SAD={u_sad} V_SAD={v_sad}")
-    elif mask in expected_short:
+    elif mask in expected_short_signatures:
         if actual_bytes != frame_size:
             raise SystemExit(f"[FAIL] CB_AC mask=0x{mask:x} decoded {actual_bytes}/{expected_bytes} bytes, expected locked one-frame miss")
         ff_text = ffmpeg_log.read_text(errors="ignore")
-        if "Invalid data found" not in ff_text and "bytestream" not in ff_text:
-            raise SystemExit(f"[FAIL] CB_AC mask=0x{mask:x} short decode did not preserve an FFmpeg error signature")
-        print(f"[PASS] CB_AC mask=0x{mask:x} remains isolated one-frame miss {actual_bytes}/{expected_bytes} with cb_ac_blocks={expected_blocks}")
+        expected_signature = expected_short_signatures[mask]
+        if expected_signature not in ff_text:
+            raise SystemExit(
+                f"[FAIL] CB_AC mask=0x{mask:x} short decode did not preserve expected FFmpeg signature "
+                f"{expected_signature!r}: {ff_text.strip()!r}"
+            )
+        print(
+            f"[PASS] CB_AC mask=0x{mask:x} remains isolated one-frame miss {actual_bytes}/{expected_bytes} "
+            f"with cb_ac_blocks={expected_blocks} and FFmpeg signature {expected_signature}"
+        )
     else:
         raise SystemExit(f"internal expected mask partition missed 0x{mask:x}")
 
     raw_yuv.unlink(missing_ok=True)
 
-print("[PASS] CABAC P16x16 Cb-only chroma AC mask lattice locked: top-pair/dense/full-ish masks strict-decode, while single-top, split top+bottom, and bottom-pair sparse masks remain isolated one-frame misses")
+print("[PASS] CABAC P16x16 Cb-only chroma AC mask lattice locked: top-pair/dense/full-ish masks strict-decode, while single-top, split top+bottom, and bottom-pair sparse masks remain isolated one-frame misses with exact FFmpeg bytestream signatures")
 PY

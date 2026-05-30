@@ -152,3 +152,9 @@ Next useful probe:
 - Current isolated one-frame misses are `0x1`, `0x2`, `0x5`, `0x6`, `0x9`, `0xa`, and `0xc`; these emit the expected Cb AC block counters but stop at `384/768` raw bytes with FFmpeg error signatures. This expands the blocker from only single top-row Cb mirrors to a Cb mask-lattice pattern: top-pair/dense/full-ish masks pass, but single-top, split top+bottom, and bottom-pair sparse masks still fail.
 - A temporary plusarg-based exhaustive sweep of the 4^4 static CBF selector sequence for the failing masks found no selector tuple that promoted any of the failing masks to full `768/768`, then restored `rtl/h264_bitstream.v`. The next repair target should therefore compare CABAC arithmetic-state/renormalization or decoder-side CBF/payload decisions across passing masks `0x3/0x4/0x8` and failing masks `0x1/0x2/0xc`, not repeat static CBF selector sweeps.
 
+
+## 2026-05-29 Cb-only AC mask signature lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_mask_probe.sh` so each currently failing Cb-only sparse AC mask now has an exact FFmpeg bytestream signature, not just a generic short-decode check.
+- Locked signatures: `0x1 -> bytestream -19`, `0x2 -> bytestream -21`, `0x5 -> bytestream -22`, `0x6 -> bytestream -18`, `0x9 -> bytestream -14`, `0xa -> bytestream -20`, and `0xc -> bytestream -18`; all still emit exactly one decoded 16x16 yuv420p frame (`384/768`) while the known passing masks remain full `768/768`.
+- This keeps the gate from papering over the blocker: any future repair must promote a mask to the strict-pass partition and update the expectation, while signature drift in the remaining misses now fails fast.
