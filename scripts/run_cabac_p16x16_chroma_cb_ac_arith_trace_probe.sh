@@ -128,7 +128,12 @@ EXPECTED = {
         "cbf": [(0, 1, 119, 123, 284, -7, "89"), (1, 1, 123, 125, 256, -6, "89"), (2, 3, 105, 103, 350, -5, "89"), (3, 0, 92, 100, 344, -1, "3a"), (4, 7, 105, 109, 270, -7, "64"), (5, 6, 124, 122, 284, -6, "64"), (6, 5, 119, 123, 464, -4, "64"), (7, 4, 92, 90, 365, -4, "64")],
         "order": [("cbf", 0), ("cbf", 1), ("cbf", 2), ("payload", 2), ("cbf", 3), ("payload", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (2, 22, 0, 122, 120, 384, -4, "89"),
-        "bits": [(1, 0, 8, "eb", 0), (2, 0, 8, "31", 8), (2, 2, 8, "89", 16), (2, 2, 8, "94", 24), (2, 3, 8, "69", 40), (2, 3, 8, "90", 48)],
+        "bits": [(1, 0, 8, "eb", 0), (2, 0, 8, "31", 8), (2, 2, 8, "89", 16), (2, 2, 8, "94", 24), (2, 3, 8, "3a", 32), (2, 3, 8, "69", 40), (2, 3, 8, "90", 48)],
+        # The blk3 `3a` CABACBITS line can be split by the C++ testbench's
+        # frame-complete stdout line in Verilator logs. The stream tail below
+        # still locks that byte, but allow the parser to tolerate the known
+        # non-atomic diagnostic line rather than making the probe flaky.
+        "bits_alt": [(1, 0, 8, "eb", 0), (2, 0, 8, "31", 8), (2, 2, 8, "89", 16), (2, 2, 8, "94", 24), (2, 3, 8, "69", 40), (2, 3, 8, "90", 48)],
         "term": [(0, "00", 0, 21552, 365, -4, 0, 1, "64")],
         "stream": (452, "808080808080808080808080808080800000000141d008086beb3189943a6990"),
     },
@@ -225,7 +230,7 @@ for mask, exp in EXPECTED.items():
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} expected clean FFmpeg log, got {ffmpeg_text.strip()!r}")
     if cbf != exp["cbf"]:
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} CBF arithmetic trail {cbf}, expected {exp['cbf']}")
-    if bits_chunks != exp["bits"]:
+    if bits_chunks != exp["bits"] and bits_chunks != exp.get("bits_alt"):
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} CABAC output byte chunks {bits_chunks}, expected {exp['bits']}")
     if term != exp["term"]:
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} CABAC terminate pre-state {term}, expected {exp['term']}")

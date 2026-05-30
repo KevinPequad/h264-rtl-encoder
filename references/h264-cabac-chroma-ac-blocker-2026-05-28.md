@@ -232,3 +232,9 @@ Next useful probe:
 - Added `scripts/run_cabac_p16x16_chroma_cb_ac_ctx_latency_probe.py`, which patches only a staged RTL workspace to make the residual bin source wait for the CABAC core context writeback before accepting the next residual bin.
 - The staged handoff bubble does not promote the remaining sparse Cb AC masks: `0x1` and `0x2` still stop at one decoded frame (`384/768`) with their locked signatures, and representative split mask `0xc` remains a short decode.
 - The same staged bubble regresses the otherwise-green top-pair control `0x3` to a short decode while bottom-single controls `0x4` and `0x8` stay strict-decodable. This rejects the simple context-writeback-latency hypothesis as a repair and keeps the next target on syntax/arithmetic-state decisions around top-row and split Cb residual tails.
+
+## 2026-05-30 Cb AC arithmetic trace parser hardening
+
+- Re-ran `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` and found the diagnostic gate could fail on mask `0xc` when the C++ testbench frame-complete line split the Verilog `[CABACBITS]` stdout row for the `3a` byte.
+- Hardened the probe to keep the full `0xc` byte-chunk expectation plus the stream-size/tail lock, while tolerating the known non-atomic log-line split as an alternate parsed byte-chunk list. This fixes a local execution blocker without relaxing the actual H.264 stream-tail check (`...beb3189943a6990`).
+- The repaired probe now passes again with masks `0x1`, `0x2`, and `0xc` still short at `384/768`, and masks `0x3`, `0x4`, and `0x8` strict-decodable at `768/768`. No sparse-Cb promotion was claimed.
