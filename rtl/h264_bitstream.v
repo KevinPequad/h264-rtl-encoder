@@ -2868,6 +2868,10 @@ module h264_bitstream #(
                             `endif
                         end
                         if (cabac_bits_valid) begin
+                            if (DEBUG_CABAC_P16X16 && (cabac_res_category != CABAC_RES_CAT_LUMA))
+                                $display("[CABACBITS] mb=%0d cat=%0d blk=%0d count=%0d bits=%024x bit_cnt=%0d",
+                                         cabac_mb_counter, cabac_res_category, cabac_res_block_idx,
+                                         cabac_bits_count, cabac_bits_out[127:32], bit_cnt);
                             bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                             bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                         end

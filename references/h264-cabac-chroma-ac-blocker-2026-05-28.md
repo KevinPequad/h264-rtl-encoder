@@ -172,3 +172,8 @@ Next useful probe:
 - The probe compares failing masks `0x1`, `0x2`, and `0xc` against strict-pass controls `0x3`, `0x4`, and `0x8`, checking decoded byte counts, FFmpeg signatures, CHRAC_CBF selector/state transitions, CABAC arithmetic state taps, CBF/payload order, and first-payload state.
 - Current result remains diagnostic rather than a promotion: `0x1`, `0x2`, and `0xc` still emit one-frame `384/768` output, while `0x3`, `0x4`, and `0x8` strict-decode full `768/768`. Next repair should use this narrower arithmetic trail to compare the failing same-plane zero-CBF transitions against the passing top-pair/bottom-single masks.
 
+## 2026-05-30 CABAC residual byte-chunk trace lock
+
+- Added a `DEBUG_CABAC_P16X16` `[CABACBITS]` tap in `rtl/h264_bitstream.v` for non-luma residual CABAC byte chunks as they are handed from `h264_cabac_core` into the bitstream writer.
+- Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` to lock the emitted byte chunks for failing Cb-only masks `0x1`, `0x2`, and `0xc` against strict-pass controls `0x3`, `0x4`, and `0x8`, alongside the existing CBF arithmetic/context/order checks.
+- The failing masks still stop at one decoded frame (`384/768`) and the strict-pass controls remain full (`768/768`); the new byte tap narrows the next repair below selector/context choice to CABAC output-byte/carry/termination behavior around the sparse-Cb top-row and split-mask residual tail.
