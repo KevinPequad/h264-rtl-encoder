@@ -80,6 +80,7 @@ EXPECTED = {
         "first_payload": (0, 22, 0, 122, 120, 410, -8, "2e"),
         "bits": [(2, 0, 8, "eb", 0), (2, 0, 8, "2e", 8), (2, 0, 8, "d2", 16), (2, 7, 8, "26", 24)],
         "term": [(0, "00", 0, 1592, 365, -7, 0, 1, "9d")],
+        "stream": (449, "808080808080808080808080808080808080800000000141d008086beb2ed226"),
     },
     "2": {
         "bytes": 384,
@@ -89,6 +90,7 @@ EXPECTED = {
         "first_payload": (1, 22, 0, 122, 120, 280, -7, "2f"),
         "bits": [(2, 1, 8, "eb", 0), (2, 1, 8, "2f", 8), (2, 1, 8, "6b", 16), (2, 6, 8, "5d", 24)],
         "term": [(0, "00", 0, 1386, 266, -7, 0, 1, "16")],
+        "stream": (449, "808080808080808080808080808080808080800000000141d008086beb2f6b5d"),
     },
     "3": {
         "bytes": 768,
@@ -98,6 +100,7 @@ EXPECTED = {
         "first_payload": (0, 22, 0, 122, 120, 410, -6, "84"),
         "bits": [(1, 0, 8, "eb", 0), (2, 0, 8, "31", 8), (2, 0, 8, "84", 16), (2, 0, 8, "d4", 24), (2, 1, 8, "89", 32), (2, 1, 8, "9e", 40), (2, 5, 8, "58", 48)],
         "term": [(0, "00", 0, 7054, 304, -5, 0, 1, "4a")],
+        "stream": (452, "808080808080808080808080808080800000000141d008086beb3184d4899e58"),
     },
     "4": {
         "bytes": 768,
@@ -107,6 +110,7 @@ EXPECTED = {
         "first_payload": (2, 22, 0, 122, 120, 374, -6, "2f"),
         "bits": [(2, 1, 8, "eb", 0), (2, 2, 8, "2f", 8), (2, 2, 8, "a1", 16), (2, 7, 8, "d5", 24)],
         "term": [(0, "00", 0, 208, 365, -8, 0, 1, "1")],
+        "stream": (449, "808080808080808080808080808080808080800000000141d008086beb2fa1d5"),
     },
     "8": {
         "bytes": 768,
@@ -116,6 +120,7 @@ EXPECTED = {
         "first_payload": (3, 22, 0, 122, 120, 418, -2, "2f"),
         "bits": [(2, 1, 8, "eb", 0), (2, 3, 8, "2f", 8), (2, 3, 8, "c5", 16), (2, 5, 8, "f8", 24)],
         "term": [(0, "00", 0, 2798, 304, -5, 0, 1, "9a")],
+        "stream": (449, "808080808080808080808080808080808080800000000141d008086beb2fc5f8"),
     },
     "c": {
         "bytes": 384,
@@ -125,6 +130,7 @@ EXPECTED = {
         "first_payload": (2, 22, 0, 122, 120, 384, -4, "89"),
         "bits": [(1, 0, 8, "eb", 0), (2, 0, 8, "31", 8), (2, 2, 8, "89", 16), (2, 2, 8, "94", 24), (2, 3, 8, "69", 40), (2, 3, 8, "90", 48)],
         "term": [(0, "00", 0, 21552, 365, -4, 0, 1, "64")],
+        "stream": (452, "808080808080808080808080808080800000000141d008086beb3189943a6990"),
     },
 }
 
@@ -223,14 +229,22 @@ for mask, exp in EXPECTED.items():
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} CABAC output byte chunks {bits_chunks}, expected {exp['bits']}")
     if term != exp["term"]:
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} CABAC terminate pre-state {term}, expected {exp['term']}")
+    expected_size, expected_tail = exp["stream"]
+    data = h264.read_bytes()
+    got_tail = data[-32:].hex()
+    if len(data) != expected_size or got_tail != expected_tail:
+        raise SystemExit(
+            f"[FAIL] CB_AC_ARITH mask=0x{mask} stream tail/size "
+            f"size={len(data)} tail={got_tail}, expected size={expected_size} tail={expected_tail}"
+        )
     if order != exp["order"]:
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} CBF/payload order {order}, expected {exp['order']}")
     if first_payload != exp["first_payload"]:
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} first payload arithmetic row {first_payload}, expected {exp['first_payload']}")
     print(
         f"[PASS] CB_AC_ARITH mask=0x{mask} decoded {got_bytes}/768, "
-        f"CBF arithmetic trail, output byte chunks, terminate pre-state, and first-payload state locked"
+        f"CBF arithmetic trail, output byte chunks, stream tail, terminate pre-state, and first-payload state locked"
     )
 
-print("[PASS] CABAC P16x16 Cb-only chroma AC arithmetic trace probe locks failing top/split masks against passing top-pair and bottom-single controls, including residual output byte chunks and terminate pre-state")
+print("[PASS] CABAC P16x16 Cb-only chroma AC arithmetic trace probe locks failing top/split masks against passing top-pair and bottom-single controls, including residual output byte chunks, stream tails, and terminate pre-state")
 PY

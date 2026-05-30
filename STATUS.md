@@ -1115,3 +1115,5 @@ The encoder should only be marked complete once:
 - keep the encoder end to end through the RTL bitstream path
 - use `THREADS=1 BUILD_JOBS=1` by default; only use more threads for an explicit fast/max-thread run or a justified batch gate
 - be wary of simulation times and prove fixes on small cases first
+
+- 2026-05-30: tightened `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` to lock representative Cb-only chroma-AC stream sizes/tails alongside the existing arithmetic/context traces; sparse masks `0x1`, `0x2`, and `0xc` remain one-frame `384/768` misses while `0x3`, `0x4`, and `0x8` remain full `768/768` controls.

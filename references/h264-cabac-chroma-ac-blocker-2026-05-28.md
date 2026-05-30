@@ -215,3 +215,8 @@ Next useful probe:
 - Standalone syntax compiled, but the focused integrated gate regressed an already-green control: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cr_ac_probe.sh` failed at `CR_AC checker strict-pass control decoded 384 bytes, expected 768 bytes`, while the dense Cb control still strict-decoded.
 - The source was restored after the probe. This rules out landing the level node-context walk by itself as the sparse-Cb repair; the next fix should combine any level-binarization cleanup with a decoder/reference CABAC decision trace so Cr dense and Cb dense controls stay green while top/split sparse Cb masks are promoted.
 
+## 2026-05-30 Cb AC stream-tail lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` so the representative Cb-only chroma-AC arithmetic trace now locks the generated H.264 stream size and final 32-byte tail for failing masks `0x1`, `0x2`, `0xc` and strict-pass controls `0x3`, `0x4`, `0x8`.
+- Current tails confirm the short-output masks are not just missing a whole trailing NAL: all six streams keep the same SPS/PPS/AUD/IDR layout and second-slice start, while the payload tail differs per Cb AC mask.
+- This still does not promote any sparse Cb mask to `768/768`; it makes future CABAC arithmetic/bitstream-tail repairs fail fast if they silently drift the already-characterized failing/pass control streams.
