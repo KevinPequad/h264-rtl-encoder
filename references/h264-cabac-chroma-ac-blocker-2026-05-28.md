@@ -226,3 +226,9 @@ Next useful probe:
 - Added `scripts/run_cabac_p16x16_chroma_cb_ac_dc_bias_probe.sh` to vary a uniform Cb-plane DC bias (`-16/-8/0/+8/+16`) around representative Cb-only chroma-AC masks (`0x1`, `0x2`, `0x3`, `0x4`, `0x8`, `0xc`).
 - Result: DC bias does not promote the remaining sparse top/split Cb AC masks; `0x1`, `0x2`, and `0xc` remain isolated one-frame `384/768` misses across all tested biases with locked FFmpeg bytestream signatures.
 - The same bias sweep regresses otherwise-green masks `0x3`, `0x4`, and `0x8` whenever the uniform DC bias is nonzero; only their zero-bias controls strict-decode full `768/768`. This narrows the repair away from adding/manipulating Cb DC history and toward matching the CABAC arithmetic/output transition for the zero-bias sparse-Cb residual tail.
+
+## 2026-05-30 CABAC residual context-latency probe
+
+- Added `scripts/run_cabac_p16x16_chroma_cb_ac_ctx_latency_probe.py`, which patches only a staged RTL workspace to make the residual bin source wait for the CABAC core context writeback before accepting the next residual bin.
+- The staged handoff bubble does not promote the remaining sparse Cb AC masks: `0x1` and `0x2` still stop at one decoded frame (`384/768`) with their locked signatures, and representative split mask `0xc` remains a short decode.
+- The same staged bubble regresses the otherwise-green top-pair control `0x3` to a short decode while bottom-single controls `0x4` and `0x8` stay strict-decodable. This rejects the simple context-writeback-latency hypothesis as a repair and keeps the next target on syntax/arithmetic-state decisions around top-row and split Cb residual tails.
