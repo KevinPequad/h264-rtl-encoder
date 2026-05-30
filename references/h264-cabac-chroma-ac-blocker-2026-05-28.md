@@ -165,3 +165,10 @@ Next useful probe:
 - Added explicit debug-state outputs from `rtl/h264_cabac_core.v` and plumbed them into the `DEBUG_CABAC_P16X16` `[CABACCTX]` trace as `ari_low`, `ari_range`, `ari_queue`, `ari_outstanding`, `ari_pending`, and `ari_pbyte`.
 - Tightened `scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` so the sparse chroma-AC diagnostic gate now fails if those arithmetic-state taps disappear; the existing CBF selector/state, coded-payload, ordering, decoded-byte, and FFmpeg-signature locks are unchanged.
 - This does not promote any Cb mask to strict decode yet. It gives the next repair probe a stable RTL-side arithmetic/renormalization signature for comparing failing Cb top-row / split masks against passing Cb bottom singles and top-pair masks without simulator hierarchy hacks.
+
+## 2026-05-30 Cb-only arithmetic trace probe
+
+- Added `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` to build the CABAC P16x16 path with `DEBUG_CABAC_P16X16=1` and lock representative Cb-only chroma-AC mask arithmetic traces.
+- The probe compares failing masks `0x1`, `0x2`, and `0xc` against strict-pass controls `0x3`, `0x4`, and `0x8`, checking decoded byte counts, FFmpeg signatures, CHRAC_CBF selector/state transitions, CABAC arithmetic state taps, CBF/payload order, and first-payload state.
+- Current result remains diagnostic rather than a promotion: `0x1`, `0x2`, and `0xc` still emit one-frame `384/768` output, while `0x3`, `0x4`, and `0x8` strict-decode full `768/768`. Next repair should use this narrower arithmetic trail to compare the failing same-plane zero-CBF transitions against the passing top-pair/bottom-single masks.
+
