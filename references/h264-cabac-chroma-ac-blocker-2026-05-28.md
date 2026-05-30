@@ -244,3 +244,10 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` so the representative arithmetic trace gate now decodes the generated streams into raw yuv420p bytes instead of checking only the byte count.
 - The gate now verifies every emitted first frame remains byte-identical to the IDR source frame, and every full two-frame strict-pass control (`0x3`, `0x4`, `0x8`) has a Cb-only decoded-plane delta (`U_SAD != 0`, `V_SAD == 0`). This prevents a future CABAC arithmetic/tail change from being misclassified as green merely because FFmpeg emitted `768/768` bytes.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` passes with the existing fail/pass partition unchanged (`0x1`, `0x2`, `0xc` short at `384/768`; `0x3`, `0x4`, `0x8` full at `768/768`).
+
+## 2026-05-30 sparse-Cb residual-tail bitflip probe
+
+- Added `scripts/run_cabac_p16x16_chroma_cb_ac_tail_bitflip_probe.sh` to generate representative failing Cb-only AC masks (`0x1`, `0x2`, `0xc`) and exhaustively flip single bits in the post-slice-header residual tail bytes.
+- The baseline streams remain the locked short one-frame misses (`0x1:-19`, `0x2:-21`, `0xc:-18` at `384/768`), but the probe now locks exact one-bit payload mutations that make FFmpeg emit two full frames with byte-identical IDR and Cb-only decoded deltas: 5 mutations for `0x1`, 6 for `0x2`, and 3 for `0xc`.
+- This narrows the next repair below CBF selector/context choice and below whole-stream framing: the current encoded streams are close enough that individual residual-tail payload bits can produce a strict-decodable Cb-only result, so the next useful target is matching the CABAC arithmetic/output byte decisions around those tail bytes against the decoder/reference trace.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_tail_bitflip_probe.sh` passes and preserves the existing failing baseline while locking the strict-decodable one-bit mutation set.
