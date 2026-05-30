@@ -198,6 +198,8 @@ for name, exp in expected.items():
     debug_text = sim_log.read_text(encoding="utf-8", errors="replace")
     if "[CABACRES]" not in debug_text or "[CABACCTX]" not in debug_text:
         raise SystemExit(f"[FAIL] {name}: debug trace did not include both residual-bin and context-update lines")
+    if "ari_low=" not in debug_text or "ari_range=" not in debug_text or "ari_queue=" not in debug_text:
+        raise SystemExit(f"[FAIL] {name}: context-update trace did not include CABAC arithmetic state taps")
     # FFmpeg emits a short raw file for the remaining known miss signature and full
     # 768-byte output for the strict-pass controls; lock those signatures so
     # this remains a diagnostic compare rather than silently promoting/demoting.
@@ -235,9 +237,9 @@ for name, exp in expected.items():
         ffmpeg_status = "clean"
     print(
         f"[PASS] {name}: first coded chroma-AC block {first_blk}, decoded {got_bytes}/768 bytes, "
-        f"FFmpeg signature {ffmpeg_status}, CABACRES/CABACCTX trace present, CHRAC_CBF, "
+        f"FFmpeg signature {ffmpeg_status}, CABACRES/CABACCTX arithmetic trace present, CHRAC_CBF, "
         f"coded-payload, and CBF/payload ordering trails locked"
     )
 
-print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks promoted Cr top/left strict passes, the remaining sparse Cb top-row miss trace set plus bottom-row strict passes, true pending-block CHRAC_CBF selector/state trails, identical coded-block payload context trails, current CBF-before-payload ordering, and FFmpeg bytestream signatures around sparse top-row Cb misses")
+print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks promoted Cr top/left strict passes, the remaining sparse Cb top-row miss trace set plus bottom-row strict passes, true pending-block CHRAC_CBF selector/state trails, identical coded-block payload context trails, CABAC arithmetic trace taps, current CBF-before-payload ordering, and FFmpeg bytestream signatures around sparse top-row Cb misses")
 PY

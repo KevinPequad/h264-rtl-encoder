@@ -158,3 +158,10 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_mask_probe.sh` so each currently failing Cb-only sparse AC mask now has an exact FFmpeg bytestream signature, not just a generic short-decode check.
 - Locked signatures: `0x1 -> bytestream -19`, `0x2 -> bytestream -21`, `0x5 -> bytestream -22`, `0x6 -> bytestream -18`, `0x9 -> bytestream -14`, `0xa -> bytestream -20`, and `0xc -> bytestream -18`; all still emit exactly one decoded 16x16 yuv420p frame (`384/768`) while the known passing masks remain full `768/768`.
 - This keeps the gate from papering over the blocker: any future repair must promote a mask to the strict-pass partition and update the expectation, while signature drift in the remaining misses now fails fast.
+
+
+## 2026-05-29 CABAC arithmetic trace tap
+
+- Added explicit debug-state outputs from `rtl/h264_cabac_core.v` and plumbed them into the `DEBUG_CABAC_P16X16` `[CABACCTX]` trace as `ari_low`, `ari_range`, `ari_queue`, `ari_outstanding`, `ari_pending`, and `ari_pbyte`.
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_debug_compare.sh` so the sparse chroma-AC diagnostic gate now fails if those arithmetic-state taps disappear; the existing CBF selector/state, coded-payload, ordering, decoded-byte, and FFmpeg-signature locks are unchanged.
+- This does not promote any Cb mask to strict decode yet. It gives the next repair probe a stable RTL-side arithmetic/renormalization signature for comparing failing Cb top-row / split masks against passing Cb bottom singles and top-pair masks without simulator hierarchy hacks.

@@ -31,7 +31,18 @@ module h264_cabac_core (
     output reg  [6:0]   ctx_state_out,
 
     output reg          done,
-    output reg          active
+    output reg          active,
+
+    // Debug-only arithmetic coder state taps. These are normal wires so the
+    // bitstream-level DEBUG_CABAC_P16X16 trace can correlate residual context
+    // decisions with CABAC renormalization/byte-output state without reaching
+    // through simulator-specific hierarchy.
+    output wire [63:0]  debug_low,
+    output wire [8:0]   debug_range,
+    output wire signed [7:0] debug_queue,
+    output wire [7:0]   debug_outstanding,
+    output wire         debug_pending_valid,
+    output wire [7:0]   debug_pending_byte
 );
 
     reg [7:0] work_range_lps_tab [0:63][0:3];
@@ -167,6 +178,12 @@ module h264_cabac_core (
     end
 
     assign bin_ready = active;
+    assign debug_low = cod_i_low;
+    assign debug_range = cod_i_range;
+    assign debug_queue = cod_i_queue;
+    assign debug_outstanding = outstanding_count;
+    assign debug_pending_valid = pending_byte_valid;
+    assign debug_pending_byte = pending_byte;
 
     task automatic append_byte;
         input [7:0] byte_t;

@@ -391,6 +391,12 @@ module h264_bitstream #(
     wire [6:0] cabac_ctx_state_out;
     wire       cabac_done;
     wire       cabac_active;
+    wire [63:0] cabac_debug_low;
+    wire [8:0] cabac_debug_range;
+    wire signed [7:0] cabac_debug_queue;
+    wire [7:0] cabac_debug_outstanding;
+    wire       cabac_debug_pending_valid;
+    wire [7:0] cabac_debug_pending_byte;
 
 
     localparam [4:0] CABAC_CTX_NONE      = 5'd0;
@@ -600,7 +606,13 @@ module h264_bitstream #(
         .ctx_state_wr(cabac_ctx_state_wr),
         .ctx_state_out(cabac_ctx_state_out),
         .done(cabac_done),
-        .active(cabac_active)
+        .active(cabac_active),
+        .debug_low(cabac_debug_low),
+        .debug_range(cabac_debug_range),
+        .debug_queue(cabac_debug_queue),
+        .debug_outstanding(cabac_debug_outstanding),
+        .debug_pending_valid(cabac_debug_pending_valid),
+        .debug_pending_byte(cabac_debug_pending_byte)
     );
 
 
@@ -1077,10 +1089,12 @@ module h264_bitstream #(
                      (cabac_pending_ctx_kind == CABAC_CTX_RES_CHRAC_SIG) ||
                      (cabac_pending_ctx_kind == CABAC_CTX_RES_CHRAC_LAST) ||
                      (cabac_pending_ctx_kind == CABAC_CTX_RES_CHRAC_LEVEL)))
-                    $display("[CABACCTX] mb=%0d cat=%0d blk=%0d kind=%0d sel=%0d in=%0d out=%0d",
+                    $display("[CABACCTX] mb=%0d cat=%0d blk=%0d kind=%0d sel=%0d in=%0d out=%0d ari_low=%0h ari_range=%0d ari_queue=%0d ari_outstanding=%0d ari_pending=%0d ari_pbyte=%0h",
                              cabac_mb_counter, cabac_pending_res_category, cabac_pending_res_block_idx,
                              cabac_pending_ctx_kind, cabac_pending_ctx_sel,
-                             cabac_ctx_state_in, cabac_ctx_state_out);
+                             cabac_ctx_state_in, cabac_ctx_state_out,
+                             cabac_debug_low, cabac_debug_range, cabac_debug_queue,
+                             cabac_debug_outstanding, cabac_debug_pending_valid, cabac_debug_pending_byte);
                 case (cabac_pending_ctx_kind)
                     CABAC_CTX_SKIP: begin
                         case (cabac_pending_ctx_sel)
