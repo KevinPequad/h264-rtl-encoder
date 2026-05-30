@@ -79,6 +79,7 @@ EXPECTED = {
         "order": [("cbf", 0), ("payload", 0), ("cbf", 1), ("cbf", 2), ("cbf", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (0, 22, 0, 122, 120, 410, -8, "2e"),
         "bits": [(2, 0, 8, "eb", 0), (2, 0, 8, "2e", 8), (2, 0, 8, "d2", 16), (2, 7, 8, "26", 24)],
+        "term": [(0, "00", 0, 1592, 365, -7, 0, 1, "9d")],
     },
     "2": {
         "bytes": 384,
@@ -87,6 +88,7 @@ EXPECTED = {
         "order": [("cbf", 0), ("cbf", 1), ("payload", 1), ("cbf", 2), ("cbf", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (1, 22, 0, 122, 120, 280, -7, "2f"),
         "bits": [(2, 1, 8, "eb", 0), (2, 1, 8, "2f", 8), (2, 1, 8, "6b", 16), (2, 6, 8, "5d", 24)],
+        "term": [(0, "00", 0, 1386, 266, -7, 0, 1, "16")],
     },
     "3": {
         "bytes": 768,
@@ -95,6 +97,7 @@ EXPECTED = {
         "order": [("cbf", 0), ("payload", 0), ("cbf", 1), ("payload", 1), ("cbf", 2), ("cbf", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (0, 22, 0, 122, 120, 410, -6, "84"),
         "bits": [(1, 0, 8, "eb", 0), (2, 0, 8, "31", 8), (2, 0, 8, "84", 16), (2, 0, 8, "d4", 24), (2, 1, 8, "89", 32), (2, 1, 8, "9e", 40), (2, 5, 8, "58", 48)],
+        "term": [(0, "00", 0, 7054, 304, -5, 0, 1, "4a")],
     },
     "4": {
         "bytes": 768,
@@ -103,6 +106,7 @@ EXPECTED = {
         "order": [("cbf", 0), ("cbf", 1), ("cbf", 2), ("payload", 2), ("cbf", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (2, 22, 0, 122, 120, 374, -6, "2f"),
         "bits": [(2, 1, 8, "eb", 0), (2, 2, 8, "2f", 8), (2, 2, 8, "a1", 16), (2, 7, 8, "d5", 24)],
+        "term": [(0, "00", 0, 208, 365, -8, 0, 1, "1")],
     },
     "8": {
         "bytes": 768,
@@ -111,6 +115,7 @@ EXPECTED = {
         "order": [("cbf", 0), ("cbf", 1), ("cbf", 2), ("cbf", 3), ("payload", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (3, 22, 0, 122, 120, 418, -2, "2f"),
         "bits": [(2, 1, 8, "eb", 0), (2, 3, 8, "2f", 8), (2, 3, 8, "c5", 16), (2, 5, 8, "f8", 24)],
+        "term": [(0, "00", 0, 2798, 304, -5, 0, 1, "9a")],
     },
     "c": {
         "bytes": 384,
@@ -119,6 +124,7 @@ EXPECTED = {
         "order": [("cbf", 0), ("cbf", 1), ("cbf", 2), ("payload", 2), ("cbf", 3), ("payload", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (2, 22, 0, 122, 120, 384, -4, "89"),
         "bits": [(1, 0, 8, "eb", 0), (2, 0, 8, "31", 8), (2, 2, 8, "89", 16), (2, 2, 8, "94", 24), (2, 3, 8, "69", 40), (2, 3, 8, "90", 48)],
+        "term": [(0, "00", 0, 21552, 365, -4, 0, 1, "64")],
     },
 }
 
@@ -147,7 +153,22 @@ for mask, exp in EXPECTED.items():
     bits_chunks = []
     payload_blocks = set()
     first_payload = None
+    term = []
     for line in text.splitlines():
+        if "[CABACTERM]" in line:
+            m_term = re.search(
+                r"count=(\d+) bits=([0-9a-f]+) bit_cnt=(\d+) ari_low=([0-9a-f]+) "
+                r"ari_range=(\d+) ari_queue=(-?\d+) ari_outstanding=(\d+) "
+                r"ari_pending=(\d+) ari_pbyte=([0-9a-f]+)",
+                line,
+            )
+            if m_term:
+                count, bits, bit_cnt, low, ari_range, ari_queue, outstanding, pending, pbyte = m_term.groups()
+                term.append((
+                    int(count), bits[:2], int(bit_cnt), int(low, 16), int(ari_range),
+                    int(ari_queue), int(outstanding), int(pending), pbyte,
+                ))
+            continue
         if "[CABACBITS]" in line:
             m_bits = re.search(
                 r"cat=(\d+) blk=(\d+) count=(\d+) bits=([0-9a-f]+) bit_cnt=(\d+)",
@@ -200,14 +221,16 @@ for mask, exp in EXPECTED.items():
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} CBF arithmetic trail {cbf}, expected {exp['cbf']}")
     if bits_chunks != exp["bits"]:
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} CABAC output byte chunks {bits_chunks}, expected {exp['bits']}")
+    if term != exp["term"]:
+        raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} CABAC terminate pre-state {term}, expected {exp['term']}")
     if order != exp["order"]:
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} CBF/payload order {order}, expected {exp['order']}")
     if first_payload != exp["first_payload"]:
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} first payload arithmetic row {first_payload}, expected {exp['first_payload']}")
     print(
         f"[PASS] CB_AC_ARITH mask=0x{mask} decoded {got_bytes}/768, "
-        f"CBF arithmetic trail, output byte chunks, and first-payload state locked"
+        f"CBF arithmetic trail, output byte chunks, terminate pre-state, and first-payload state locked"
     )
 
-print("[PASS] CABAC P16x16 Cb-only chroma AC arithmetic trace probe locks failing top/split masks against passing top-pair and bottom-single controls, including residual output byte chunks")
+print("[PASS] CABAC P16x16 Cb-only chroma AC arithmetic trace probe locks failing top/split masks against passing top-pair and bottom-single controls, including residual output byte chunks and terminate pre-state")
 PY

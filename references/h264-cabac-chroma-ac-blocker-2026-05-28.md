@@ -124,7 +124,7 @@ Next useful probe:
 - Completed the remaining Cb-only top-row static CBF selector sweep for sparse Cb AC, keeping bottom-row selectors at the current green baseline (`[*,*,3,0]` for Cb blocks 0..3) and restoring source after each probe.
 - Newly rejected top-row pairs `[0,1]`, `[1,0]`, `[0,3]`, `[3,0]`, `[2,3]`, `[3,2]`, `[0,2]`, and `[2,0]`: none promoted `cb_mirror_single_tl` or `cb_mirror_single_tr` to strict `768/768`; most also regressed one or both bottom-row sparse-Cb controls.
 - Together with the earlier rejected `[0,0]`, `[1,2]`, `[2,1]`, `[2,2]`, `[1,3]`, `[3,1]`, and `[3,3]` probes plus the baseline `[1,1]`, this exhausts the 4x4 static selector space for Cb blocks 0/1 under the current `[block2=3, block3=0]` bottom-row mapping.
-- Next useful target is no longer another static Cb top-row selector remap; probe the residual scheduler/CABAC state ordering around Cb top-row coded AC before later same-plane zero CBFs, or capture an independent decoder-side trace of the expected Cb TL/TR coded_block_flag decisions.
+- Next useful target is no longer another static Cb top-row selector remap; probe the residual scheduler/CABAC state ordering around Cb top-row coded AC before later same-plane zero CBFs, or capture an independent decoder-side CABAC CBF decision trace of the expected Cb TL/TR coded_block_flag decisions.
 
 ## 2026-05-29 sparse-Cb CBF/payload ordering lock
 
@@ -202,3 +202,9 @@ Next useful probe:
 - Added `scripts/run_cabac_p16x16_chroma_cb_ac_level_suffix_probe.py`, which patches only a staged RTL workspace to replace the current fixed-binary residual level suffix scaffold with a small unary stop-bit form for `coeff_abs_level_remaining`.
 - The staged suffix change does not promote representative sparse Cb AC masks: `0x1`, `0x2`, and `0xc` still stop at one decoded frame (`384/768`) with the locked FFmpeg signatures (`-19`, `-21`, and `-18`), while strict controls `0x3` and `0x4` remain full `768/768`.
 - This rules out the simple residual-level suffix-form hypothesis for the current sparse Cb blocker. The next repair should compare the CABAC arithmetic/decoder decisions around the same-plane Cb AC coded/zero block transitions rather than repeating fixed-vs-unary suffix experiments.
+
+## 2026-05-30 CABAC terminate pre-state trace lock
+
+- Added a `DEBUG_CABAC_P16X16` `[CABACTERM]` tap in `rtl/h264_bitstream.v` at the slice-terminate handoff so the diagnostic Cb AC arithmetic probe now locks the CABAC core pre-flush state for failing masks `0x1`, `0x2`, and `0xc` against strict controls `0x3`, `0x4`, and `0x8`.
+- `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` now checks the terminate pre-state in addition to decoded bytes, FFmpeg signatures, CBF arithmetic trails, residual output byte chunks, CBF/payload order, and first-payload state.
+- This still does not promote a sparse Cb top/split mask to full `768/768`; it narrows the next repair below CBF selector/static ordering to the CABAC arithmetic residual tail versus final terminate handoff, with a stable pre-flush state row available for each representative failing/passing mask.
