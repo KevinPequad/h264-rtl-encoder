@@ -191,6 +191,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"expected_blocks=.*?cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=4.*?run_strict_pass single_tl 'cabac_chroma_cb_ac_mbs=0\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0\s+cabac_chroma_cr_ac_blocks=1'.*?run_strict_pass both_planes 'cabac_chroma_cb_ac_mbs=1\s+cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=4\s+cabac_chroma_cr_ac_blocks=4'",
     ),
     (
+        "top_reports_chroma_dc_plane_counters",
+        "rtl/h264_encoder_top.v",
+        r"frame_cabac_chroma_cb_dc_mb_count.*?frame_cabac_chroma_cr_dc_mb_count.*?cabac_chroma_cb_dc_mbs=%0d\s+cabac_chroma_cr_dc_mbs=%0d.*?cb_dc_mbs=%0d\s+cr_dc_mbs=%0d",
+    ),
+    (
         "top_reports_chroma_ac_block_counters",
         "rtl/h264_encoder_top.v",
         r"frame_cabac_chroma_cb_ac_block_count.*?frame_cabac_chroma_cr_ac_block_count.*?cabac_chroma_cb_ac_blocks=%0d\s+cabac_chroma_cr_ac_blocks=%0d",
@@ -243,12 +248,12 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "gate_locks_combined_luma_chroma_dc_residual_smoke",
         "scripts/run_cabac_p16x16_luma_chroma_dc_residual_check.py",
-        r"luma \+ chroma DC-only residual.*?EXPECTED_FINAL_SLICE\s*=\s*\"0000000141d008086b3ab6beea5045573d34f76b\".*?EXPECTED_CAVLC_SUPPRESSED_BITS\s*=\s*164.*?EXPECTED_Y_SAD\s*=\s*2048.*?EXPECTED_U_SAD\s*=\s*512.*?EXPECTED_V_SAD\s*=\s*512.*?cabac_chroma_dc_mbs=1.*?cabac_chroma_ac_mbs=0.*?cabac_chroma_cb_ac_blocks=0.*?cabac_chroma_cr_ac_blocks=0.*?CABAC P16x16 combined luma\+Cb\+Cr DC-only residual smoke strict-decodes",
+        r"luma \+ chroma DC-only residual.*?EXPECTED_FINAL_SLICE\s*=\s*\"0000000141d008086b3ab6beea5045573d34f76b\".*?EXPECTED_CAVLC_SUPPRESSED_BITS\s*=\s*164.*?EXPECTED_Y_SAD\s*=\s*2048.*?EXPECTED_U_SAD\s*=\s*512.*?EXPECTED_V_SAD\s*=\s*512.*?cabac_chroma_dc_mbs=1.*?cabac_chroma_ac_mbs=0.*?cabac_chroma_cb_dc_mbs=1.*?cabac_chroma_cr_dc_mbs=1.*?cabac_chroma_cb_ac_blocks=0.*?cabac_chroma_cr_ac_blocks=0.*?CABAC P16x16 combined luma\+Cb\+Cr DC-only residual smoke strict-decodes",
     ),
     (
         "gate_locks_luma_single_plane_chroma_dc_residual_smoke",
         "scripts/run_cabac_p16x16_luma_single_chroma_dc_residual_check.py",
-        r"luma \+ single-plane chroma-DC residual.*?EXPECTED_FINAL_SLICE\s*=\s*\"0000000141d008086b3ab6beea5045573d34f7\".*?EXPECTED_CAVLC_SUPPRESSED_BITS\s*=\s*152.*?EXPECTED_Y_SAD\s*=\s*2048.*?name=\"cb_dc\".*?expected_u_sad=512.*?expected_v_sad=0.*?name=\"cr_dc\".*?expected_u_sad=0.*?expected_v_sad=512.*?cabac_chroma_dc_mbs=1.*?cabac_chroma_ac_mbs=0.*?CABAC P16x16 luma plus single-plane Cb/Cr DC residual smoke cases strict-decode",
+        r"luma \+ single-plane chroma-DC residual.*?EXPECTED_FINAL_SLICE\s*=\s*\"0000000141d008086b3ab6beea5045573d34f7\".*?EXPECTED_CAVLC_SUPPRESSED_BITS\s*=\s*152.*?EXPECTED_Y_SAD\s*=\s*2048.*?name=\"cb_dc\".*?expected_cb_dc_mbs=1.*?expected_cr_dc_mbs=0.*?expected_u_sad=512.*?expected_v_sad=0.*?name=\"cr_dc\".*?expected_cb_dc_mbs=0.*?expected_cr_dc_mbs=1.*?expected_u_sad=0.*?expected_v_sad=512.*?cabac_chroma_dc_mbs=1.*?cabac_chroma_ac_mbs=0.*?cabac_chroma_cb_dc_mbs=\{case\.expected_cb_dc_mbs\}.*?cabac_chroma_cr_dc_mbs=\{case\.expected_cr_dc_mbs\}.*?CABAC P16x16 luma plus single-plane Cb/Cr DC residual smoke cases strict-decode",
     ),
     (
         "gate_locks_combined_luma_chroma_residual_smoke",

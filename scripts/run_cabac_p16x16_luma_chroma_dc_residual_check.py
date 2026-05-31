@@ -132,6 +132,8 @@ def check_sim_log(text: str) -> None:
         "cabac_chroma_mbs=1",
         "cabac_chroma_dc_mbs=1",
         "cabac_chroma_ac_mbs=0",
+        "cabac_chroma_cb_dc_mbs=1",
+        "cabac_chroma_cr_dc_mbs=1",
         "cabac_chroma_cb_ac_mbs=0",
         "cabac_chroma_cr_ac_mbs=0",
         "cabac_chroma_cb_ac_blocks=0",

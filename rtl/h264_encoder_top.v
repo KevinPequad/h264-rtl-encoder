@@ -463,6 +463,8 @@ module h264_encoder_top #(
     reg [15:0] frame_cabac_chroma_mb_count;
     reg [15:0] frame_cabac_chroma_dc_mb_count;
     reg [15:0] frame_cabac_chroma_ac_mb_count;
+    reg [15:0] frame_cabac_chroma_cb_dc_mb_count;
+    reg [15:0] frame_cabac_chroma_cr_dc_mb_count;
     reg [15:0] frame_cabac_chroma_cb_ac_mb_count;
     reg [15:0] frame_cabac_chroma_cr_ac_mb_count;
     reg [15:0] frame_cabac_chroma_cb_ac_block_count;
@@ -1995,6 +1997,8 @@ pred_buf = {(256*BD){1'b0}};
     reg [4:0] i16_dc_total_coeff;
     reg       i16_luma_ac_nonzero;
     reg       i16_chroma_dc_nonzero;
+    reg       i16_chroma_cb_dc_nonzero;
+    reg       i16_chroma_cr_dc_nonzero;
     reg       i16_chroma_ac_nonzero;
     reg       i16_chroma_cb_ac_nonzero;
     reg       i16_chroma_cr_ac_nonzero;
@@ -2358,7 +2362,7 @@ pred_buf = {(256*BD){1'b0}};
             intra_pred_bits_mb <= 64'd0;
             intra_pred_count_mb <= 7'd0;
             is_intra16_mb_hdr <= 1'b0; is_ipcm_mb_hdr <= 1'b0; intra_mb_type_code_num <= 6'd0;
-            i16_dc_total_coeff <= 5'd0; i16_luma_ac_nonzero <= 1'b0; i16_chroma_dc_nonzero <= 1'b0; i16_chroma_ac_nonzero <= 1'b0; i16_chroma_cb_ac_nonzero <= 1'b0; i16_chroma_cr_ac_nonzero <= 1'b0; i16_cbp_chroma <= 2'd0;
+            i16_dc_total_coeff <= 5'd0; i16_luma_ac_nonzero <= 1'b0; i16_chroma_dc_nonzero <= 1'b0; i16_chroma_cb_dc_nonzero <= 1'b0; i16_chroma_cr_dc_nonzero <= 1'b0; i16_chroma_ac_nonzero <= 1'b0; i16_chroma_cb_ac_nonzero <= 1'b0; i16_chroma_cr_ac_nonzero <= 1'b0; i16_cbp_chroma <= 2'd0;
             pskip_syntax_eligible_reg <= 1'b0;
             bskip_syntax_eligible_reg <= 1'b0;
             frame_skip_mb_count <= 16'd0;
@@ -2379,6 +2383,8 @@ pred_buf = {(256*BD){1'b0}};
             frame_cabac_chroma_mb_count <= 16'd0;
             frame_cabac_chroma_dc_mb_count <= 16'd0;
             frame_cabac_chroma_ac_mb_count <= 16'd0;
+            frame_cabac_chroma_cb_dc_mb_count <= 16'd0;
+            frame_cabac_chroma_cr_dc_mb_count <= 16'd0;
             frame_cabac_chroma_cb_ac_mb_count <= 16'd0;
             frame_cabac_chroma_cr_ac_mb_count <= 16'd0;
             frame_cabac_chroma_cb_ac_block_count <= 16'd0;
@@ -3637,6 +3643,8 @@ pred_buf = {(256*BD){1'b0}};
                         i16_dc_total_coeff <= 5'd0;
                         i16_luma_ac_nonzero <= 1'b0;
                         i16_chroma_dc_nonzero <= 1'b0;
+                        i16_chroma_cb_dc_nonzero <= 1'b0;
+                        i16_chroma_cr_dc_nonzero <= 1'b0;
                         i16_chroma_ac_nonzero <= 1'b0;
                         i16_chroma_cb_ac_nonzero <= 1'b0;
                         i16_chroma_cr_ac_nonzero <= 1'b0;
@@ -3659,6 +3667,8 @@ pred_buf = {(256*BD){1'b0}};
                         i16_dc_total_coeff <= 5'd0;
                         i16_luma_ac_nonzero <= 1'b0;
                         i16_chroma_dc_nonzero <= 1'b0;
+                        i16_chroma_cb_dc_nonzero <= 1'b0;
+                        i16_chroma_cr_dc_nonzero <= 1'b0;
                         i16_chroma_ac_nonzero <= 1'b0;
                         i16_chroma_cb_ac_nonzero <= 1'b0;
                         i16_chroma_cr_ac_nonzero <= 1'b0;
@@ -4119,6 +4129,10 @@ pred_buf = {(256*BD){1'b0}};
                         frame_cabac_chroma_dc_mb_count <= frame_cabac_chroma_dc_mb_count + 16'd1;
                     if (cabac_non_skip_subset_ok_w && (i16_cbp_chroma == 2'd2))
                         frame_cabac_chroma_ac_mb_count <= frame_cabac_chroma_ac_mb_count + 16'd1;
+                    if (cabac_non_skip_subset_ok_w && i16_chroma_cb_dc_nonzero)
+                        frame_cabac_chroma_cb_dc_mb_count <= frame_cabac_chroma_cb_dc_mb_count + 16'd1;
+                    if (cabac_non_skip_subset_ok_w && i16_chroma_cr_dc_nonzero)
+                        frame_cabac_chroma_cr_dc_mb_count <= frame_cabac_chroma_cr_dc_mb_count + 16'd1;
                     if (cabac_non_skip_subset_ok_w && i16_chroma_cb_ac_nonzero)
                         frame_cabac_chroma_cb_ac_mb_count <= frame_cabac_chroma_cb_ac_mb_count + 16'd1;
                     if (cabac_non_skip_subset_ok_w && i16_chroma_cr_ac_nonzero)
@@ -4983,8 +4997,10 @@ pred_buf = {(256*BD){1'b0}};
                                 end
                                 BS_ZIGZAG: if (zz_done) begin
                                     cabac_chroma_dc_scan_buf[0] <= scan_flat;
-                                    if (total_coeffs != 5'd0)
+                                    if (total_coeffs != 5'd0) begin
                                         i16_chroma_dc_nonzero <= 1'b1;
+                                        i16_chroma_cb_dc_nonzero <= 1'b1;
+                                    end
                                     if (!bs_busy) begin
                                         cavlc_start <= 1'b1;
                                         blk_state <= BS_CAVLC;
@@ -5026,8 +5042,10 @@ pred_buf = {(256*BD){1'b0}};
                                 end
                                 BS_ZIGZAG: if (zz_done) begin
                                     cabac_chroma_dc_scan_buf[1] <= scan_flat;
-                                    if (total_coeffs != 5'd0)
+                                    if (total_coeffs != 5'd0) begin
                                         i16_chroma_dc_nonzero <= 1'b1;
+                                        i16_chroma_cr_dc_nonzero <= 1'b1;
+                                    end
                                     if (!bs_busy) begin
                                         cavlc_start <= 1'b1;
                                         blk_state <= BS_CAVLC;
@@ -5258,10 +5276,10 @@ pred_buf = {(256*BD){1'b0}};
                              done <= 1'b1;
                             $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d p_l0_refgt0_mbs=%0d p16x8_mbs=%0d p8x16_mbs=%0d p8x8_mbs=%0d p8x4_mbs=%0d p4x8_mbs=%0d p4x4_mbs=%0d",
                                      cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count, frame_p_l0_nonzero_ref_mb_count, frame_p16x8_mb_count, frame_p8x16_mb_count, frame_p8x8_mb_count, frame_p8x4_mb_count, frame_p4x8_mb_count, frame_p4x4_mb_count);
-                            $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d cabac_chroma_mbs=%0d cabac_chroma_dc_mbs=%0d cabac_chroma_ac_mbs=%0d cabac_chroma_cb_ac_mbs=%0d cabac_chroma_cr_ac_mbs=%0d cabac_chroma_cb_ac_blocks=%0d cabac_chroma_cr_ac_blocks=%0d cavlc_suppressed_bits=%0d",
-                                     cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count, frame_cabac_chroma_mb_count, frame_cabac_chroma_dc_mb_count, frame_cabac_chroma_ac_mb_count, frame_cabac_chroma_cb_ac_mb_count, frame_cabac_chroma_cr_ac_mb_count, frame_cabac_chroma_cb_ac_block_count, frame_cabac_chroma_cr_ac_block_count, frame_cabac_cavlc_suppressed_bits);
-                            $display("[CABAC_CHROMA] Frame %0d cabac_chroma_mbs=%0d cabac_chroma_dc_mbs=%0d cabac_chroma_ac_mbs=%0d cb_ac_mbs=%0d cr_ac_mbs=%0d cb_ac_blocks=%0d cr_ac_blocks=%0d cavlc_suppressed_bits=%0d",
-                                     cur_frame_num, frame_cabac_chroma_mb_count, frame_cabac_chroma_dc_mb_count, frame_cabac_chroma_ac_mb_count, frame_cabac_chroma_cb_ac_mb_count, frame_cabac_chroma_cr_ac_mb_count, frame_cabac_chroma_cb_ac_block_count, frame_cabac_chroma_cr_ac_block_count, frame_cabac_cavlc_suppressed_bits);
+                            $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d cabac_chroma_mbs=%0d cabac_chroma_dc_mbs=%0d cabac_chroma_ac_mbs=%0d cabac_chroma_cb_dc_mbs=%0d cabac_chroma_cr_dc_mbs=%0d cabac_chroma_cb_ac_mbs=%0d cabac_chroma_cr_ac_mbs=%0d cabac_chroma_cb_ac_blocks=%0d cabac_chroma_cr_ac_blocks=%0d cavlc_suppressed_bits=%0d",
+                                     cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count, frame_cabac_chroma_mb_count, frame_cabac_chroma_dc_mb_count, frame_cabac_chroma_ac_mb_count, frame_cabac_chroma_cb_dc_mb_count, frame_cabac_chroma_cr_dc_mb_count, frame_cabac_chroma_cb_ac_mb_count, frame_cabac_chroma_cr_ac_mb_count, frame_cabac_chroma_cb_ac_block_count, frame_cabac_chroma_cr_ac_block_count, frame_cabac_cavlc_suppressed_bits);
+                            $display("[CABAC_CHROMA] Frame %0d cabac_chroma_mbs=%0d cabac_chroma_dc_mbs=%0d cabac_chroma_ac_mbs=%0d cb_dc_mbs=%0d cr_dc_mbs=%0d cb_ac_mbs=%0d cr_ac_mbs=%0d cb_ac_blocks=%0d cr_ac_blocks=%0d cavlc_suppressed_bits=%0d",
+                                     cur_frame_num, frame_cabac_chroma_mb_count, frame_cabac_chroma_dc_mb_count, frame_cabac_chroma_ac_mb_count, frame_cabac_chroma_cb_dc_mb_count, frame_cabac_chroma_cr_dc_mb_count, frame_cabac_chroma_cb_ac_mb_count, frame_cabac_chroma_cr_ac_mb_count, frame_cabac_chroma_cb_ac_block_count, frame_cabac_chroma_cr_ac_block_count, frame_cabac_cavlc_suppressed_bits);
 
                              refbank_poc_lsb[current_write_bank] <= cur_pic_order_cnt_lsb;
                             if (is_p_frame) begin

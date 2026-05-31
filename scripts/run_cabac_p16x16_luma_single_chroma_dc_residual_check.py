@@ -36,13 +36,15 @@ class Case:
     name: str
     cb_dc: bool
     cr_dc: bool
+    expected_cb_dc_mbs: int
+    expected_cr_dc_mbs: int
     expected_u_sad: int
     expected_v_sad: int
 
 
 CASES = (
-    Case(name="cb_dc", cb_dc=True, cr_dc=False, expected_u_sad=512, expected_v_sad=0),
-    Case(name="cr_dc", cb_dc=False, cr_dc=True, expected_u_sad=0, expected_v_sad=512),
+    Case(name="cb_dc", cb_dc=True, cr_dc=False, expected_cb_dc_mbs=1, expected_cr_dc_mbs=0, expected_u_sad=512, expected_v_sad=0),
+    Case(name="cr_dc", cb_dc=False, cr_dc=True, expected_cb_dc_mbs=0, expected_cr_dc_mbs=1, expected_u_sad=0, expected_v_sad=512),
 )
 
 
@@ -138,7 +140,7 @@ def decode_raw(h264: Path, case: Case) -> tuple[bytes, str]:
         raw_path.unlink(missing_ok=True)
 
 
-def check_sim_log(text: str) -> None:
+def check_sim_log(text: str, case: Case) -> None:
     forbidden = "[CABAC_PSUBSET]"
     if forbidden in text:
         raise SystemExit(f"[FAIL] LUMA_SINGLE_CHROMA_DC_RES hit CABAC subset guard {forbidden}")
@@ -147,11 +149,14 @@ def check_sim_log(text: str) -> None:
         "cabac_chroma_mbs=1",
         "cabac_chroma_dc_mbs=1",
         "cabac_chroma_ac_mbs=0",
+        f"cabac_chroma_cb_dc_mbs={case.expected_cb_dc_mbs}",
+        f"cabac_chroma_cr_dc_mbs={case.expected_cr_dc_mbs}",
         "cabac_chroma_cb_ac_mbs=0",
         "cabac_chroma_cr_ac_mbs=0",
         "cabac_chroma_cb_ac_blocks=0",
         "cabac_chroma_cr_ac_blocks=0",
         f"cavlc_suppressed_bits={EXPECTED_CAVLC_SUPPRESSED_BITS}",
+        f"cb_dc_mbs={case.expected_cb_dc_mbs} cr_dc_mbs={case.expected_cr_dc_mbs}",
         "cb_ac_mbs=0 cr_ac_mbs=0 cb_ac_blocks=0 cr_ac_blocks=0",
     ):
         if needle not in text:
@@ -180,7 +185,7 @@ def check_decoded_planes(fixture: Path, raw: bytes, case: Case) -> tuple[int, in
 def run_case(sim: Path, case: Case) -> None:
     fixture = make_fixture(case)
     h264, sim_text = run_sim(sim, fixture, case)
-    check_sim_log(sim_text)
+    check_sim_log(sim_text, case)
 
     stream = h264.read_bytes()
     final_slice = final_slice_hex(stream)
