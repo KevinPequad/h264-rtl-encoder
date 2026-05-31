@@ -433,6 +433,19 @@ module h264_bitstream #(
     localparam [3:0] CABAC_CHROMA_AC_TOTAL_MINUS1 = (CHROMA_FORMAT_IDC == 2) ? 4'd15 : 4'd7;
     localparam [3:0] CABAC_CHROMA_AC_BLOCKS_PER_PLANE = (CHROMA_FORMAT_IDC == 2) ? 4'd8 : 4'd4;
 
+    task automatic cabac_debug_header_bits;
+        begin
+            `ifndef SYNTHESIS
+            if (DEBUG_CABAC_P16X16)
+                $display("[CABACHDRBITS] mb=%0d sub=%0d kind=%0d sel=%0d count=%0d bits=%024x bit_cnt=%0d ari_low=%0h ari_range=%0d ari_queue=%0d ari_outstanding=%0d ari_pending=%0d ari_pbyte=%0h",
+                         cabac_mb_counter, sub, cabac_pending_ctx_kind, cabac_pending_ctx_sel,
+                         cabac_bits_count, cabac_bits_out[127:32], bit_cnt,
+                         cabac_debug_low, cabac_debug_range, cabac_debug_queue,
+                         cabac_debug_outstanding, cabac_debug_pending_valid, cabac_debug_pending_byte);
+            `endif
+        end
+    endtask
+
     function automatic [6:0] cabac_init_state;
         input integer m;
         input integer n;
@@ -1231,6 +1244,12 @@ module h264_bitstream #(
 
                     S_EMIT: begin
                         if (bit_cnt >= 7'd8) begin
+                            `ifndef SYNTHESIS
+                            if (DEBUG_CABAC_P16X16)
+                                $display("[CABACEMIT] mb=%0d return_state=%0d return_sub=%0d byte=%02x bit_cnt=%0d bit_buf=%024x pending_kind=%0d pending_sel=%0d",
+                                         cabac_mb_counter, return_state, sub, bit_buf[95:88], bit_cnt,
+                                         bit_buf, cabac_pending_ctx_kind, cabac_pending_ctx_sel);
+                            `endif
                             write_byte <= bit_buf[95:88];
                             do_write   <= 1'b1;
                             bit_buf    <= bit_buf << 8;
@@ -2137,6 +2156,7 @@ module h264_bitstream #(
                                     `endif
                                     end
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
@@ -2170,6 +2190,7 @@ module h264_bitstream #(
                                     `endif
                                     end
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
@@ -2203,6 +2224,7 @@ module h264_bitstream #(
                                     `endif
                                     end
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
@@ -2226,6 +2248,7 @@ module h264_bitstream #(
                                     `endif
                                     end
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
@@ -2249,6 +2272,7 @@ module h264_bitstream #(
                                     `endif
                                     end
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
@@ -2277,6 +2301,7 @@ module h264_bitstream #(
                                     `endif
                                     end
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
@@ -2305,6 +2330,7 @@ module h264_bitstream #(
                                     `endif
                                     end
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
@@ -2334,6 +2360,7 @@ module h264_bitstream #(
                                     `endif
                                     end
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
@@ -2363,6 +2390,7 @@ module h264_bitstream #(
                                     `endif
                                     end
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
@@ -2392,6 +2420,7 @@ module h264_bitstream #(
                                     `endif
                                     end
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
@@ -2416,6 +2445,7 @@ module h264_bitstream #(
                                     `endif
                                     end
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
@@ -2445,6 +2475,7 @@ module h264_bitstream #(
                                     `endif
                                     end
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
@@ -2487,6 +2518,7 @@ module h264_bitstream #(
                                     `endif
                                     end
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
@@ -2518,6 +2550,7 @@ module h264_bitstream #(
                                     `endif
                                 end
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                 end
@@ -3093,6 +3126,7 @@ module h264_bitstream #(
                                              cabac_debug_low, cabac_debug_range, cabac_debug_queue,
                                              cabac_debug_outstanding, cabac_debug_pending_valid, cabac_debug_pending_byte);
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;

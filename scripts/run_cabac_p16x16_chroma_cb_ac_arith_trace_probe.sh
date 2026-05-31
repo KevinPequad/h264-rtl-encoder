@@ -79,6 +79,7 @@ EXPECTED = {
         "order": [("cbf", 0), ("payload", 0), ("cbf", 1), ("cbf", 2), ("cbf", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (0, 22, 0, 122, 120, 410, -8, "2e"),
         "bits": [(2, 0, 8, "eb", 0), (2, 0, 8, "2e", 8), (2, 0, 8, "d2", 16), (2, 7, 8, "26", 24)],
+        "emit_tail": [("eb", 32), ("2e", 24), ("d2", 16), ("26", 8)],
         "term": [(0, "00", 0, 1592, 365, -7, 0, 1, "9d")],
         "stream": (449, "808080808080808080808080808080808080800000000141d008086beb2ed226"),
     },
@@ -89,6 +90,7 @@ EXPECTED = {
         "order": [("cbf", 0), ("cbf", 1), ("payload", 1), ("cbf", 2), ("cbf", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (1, 22, 0, 122, 120, 280, -7, "2f"),
         "bits": [(2, 1, 8, "eb", 0), (2, 1, 8, "2f", 8), (2, 1, 8, "6b", 16), (2, 6, 8, "5d", 24)],
+        "emit_tail": [("eb", 32), ("2f", 24), ("6b", 16), ("5d", 8)],
         "term": [(0, "00", 0, 1386, 266, -7, 0, 1, "16")],
         "stream": (449, "808080808080808080808080808080808080800000000141d008086beb2f6b5d"),
     },
@@ -99,6 +101,7 @@ EXPECTED = {
         "order": [("cbf", 0), ("payload", 0), ("cbf", 1), ("payload", 1), ("cbf", 2), ("cbf", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (0, 22, 0, 122, 120, 410, -6, "84"),
         "bits": [(1, 0, 8, "eb", 0), (2, 0, 8, "31", 8), (2, 0, 8, "84", 16), (2, 0, 8, "d4", 24), (2, 1, 8, "89", 32), (2, 1, 8, "9e", 40), (2, 5, 8, "58", 48)],
+        "emit_tail": [("eb", 56), ("31", 48), ("84", 40), ("d4", 32), ("89", 24), ("9e", 16), ("58", 8)],
         "term": [(0, "00", 0, 7054, 304, -5, 0, 1, "4a")],
         "stream": (452, "808080808080808080808080808080800000000141d008086beb3184d4899e58"),
     },
@@ -109,6 +112,7 @@ EXPECTED = {
         "order": [("cbf", 0), ("cbf", 1), ("cbf", 2), ("payload", 2), ("cbf", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (2, 22, 0, 122, 120, 374, -6, "2f"),
         "bits": [(2, 1, 8, "eb", 0), (2, 2, 8, "2f", 8), (2, 2, 8, "a1", 16), (2, 7, 8, "d5", 24)],
+        "emit_tail": [("eb", 32), ("2f", 24), ("a1", 16), ("d5", 8)],
         "term": [(0, "00", 0, 208, 365, -8, 0, 1, "1")],
         "stream": (449, "808080808080808080808080808080808080800000000141d008086beb2fa1d5"),
     },
@@ -119,6 +123,7 @@ EXPECTED = {
         "order": [("cbf", 0), ("cbf", 1), ("cbf", 2), ("cbf", 3), ("payload", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (3, 22, 0, 122, 120, 418, -2, "2f"),
         "bits": [(2, 1, 8, "eb", 0), (2, 3, 8, "2f", 8), (2, 3, 8, "c5", 16), (2, 5, 8, "f8", 24)],
+        "emit_tail": [("eb", 32), ("2f", 24), ("c5", 16), ("f8", 8)],
         "term": [(0, "00", 0, 2798, 304, -5, 0, 1, "9a")],
         "stream": (449, "808080808080808080808080808080808080800000000141d008086beb2fc5f8"),
     },
@@ -129,6 +134,7 @@ EXPECTED = {
         "order": [("cbf", 0), ("cbf", 1), ("cbf", 2), ("payload", 2), ("cbf", 3), ("payload", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (2, 22, 0, 122, 120, 384, -4, "89"),
         "bits": [(1, 0, 8, "eb", 0), (2, 0, 8, "31", 8), (2, 2, 8, "89", 16), (2, 2, 8, "94", 24), (2, 3, 8, "3a", 32), (2, 3, 8, "69", 40), (2, 3, 8, "90", 48)],
+        "emit_tail": [("eb", 56), ("31", 48), ("89", 40), ("94", 32), ("3a", 24), ("69", 16), ("90", 8)],
         # The blk3 `3a` CABACBITS line can be split by the C++ testbench's
         # frame-complete stdout line in Verilator logs. The stream tail below
         # still locks that byte, but allow the parser to tolerate the known
@@ -157,6 +163,7 @@ def decoded_raw(path: Path) -> bytes:
 FRAME_SIZE = 16 * 16 * 3 // 2
 LUMA_SIZE = 16 * 16
 CHROMA_SIZE = 16 * 16 // 4
+P_SLICE_EMIT_PREFIX = ("d0", "08", "08", "6b")
 
 for mask, exp in EXPECTED.items():
     sim_log = ROOT / f"mask_{mask}.sim.log"
@@ -170,7 +177,21 @@ for mask, exp in EXPECTED.items():
     payload_blocks = set()
     first_payload = None
     term = []
+    emit = []
     for line in text.splitlines():
+        if "[CABACEMIT]" in line:
+            m_emit = re.search(
+                r"mb=(\d+) return_state=(\d+) return_sub=(\d+) byte=([0-9a-f]+) "
+                r"bit_cnt=(\d+) bit_buf=([0-9a-f]+) pending_kind=(\d+) pending_sel=(\d+)",
+                line,
+            )
+            if m_emit:
+                mb, return_state, return_sub, byte, emit_bit_cnt, _bit_buf, pending_kind, pending_sel = m_emit.groups()
+                emit.append((
+                    int(mb), int(return_state), int(return_sub), byte[:2],
+                    int(emit_bit_cnt), int(pending_kind), int(pending_sel),
+                ))
+            continue
         if "[CABACTERM]" in line:
             m_term = re.search(
                 r"count=(\d+) bits=([0-9a-f]+) bit_cnt=(\d+) ari_low=([0-9a-f]+) "
@@ -248,6 +269,19 @@ for mask, exp in EXPECTED.items():
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} CBF arithmetic trail {cbf}, expected {exp['cbf']}")
     if bits_chunks != exp["bits"] and bits_chunks != exp.get("bits_alt"):
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} CABAC output byte chunks {bits_chunks}, expected {exp['bits']}")
+    p_slice_emit = tuple(item[3] for item in emit if item[1] == 3)
+    got_prefix = p_slice_emit[-4:]
+    if got_prefix != P_SLICE_EMIT_PREFIX:
+        raise SystemExit(
+            f"[FAIL] CB_AC_ARITH mask=0x{mask} P-slice emitted prefix {got_prefix}, "
+            f"expected {P_SLICE_EMIT_PREFIX}"
+        )
+    got_emit_tail = [(item[3], item[4]) for item in emit if item[1] == 0 and item[2] == 46]
+    if got_emit_tail != exp["emit_tail"]:
+        raise SystemExit(
+            f"[FAIL] CB_AC_ARITH mask=0x{mask} emitted residual tail {got_emit_tail}, "
+            f"expected {exp['emit_tail']}"
+        )
     if term != exp["term"]:
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} CABAC terminate pre-state {term}, expected {exp['term']}")
     expected_size, expected_tail = exp["stream"]
@@ -264,8 +298,8 @@ for mask, exp in EXPECTED.items():
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} first payload arithmetic row {first_payload}, expected {exp['first_payload']}")
     print(
         f"[PASS] CB_AC_ARITH mask=0x{mask} decoded {got_bytes}/768, "
-        f"CBF arithmetic trail, output byte chunks, stream tail, terminate pre-state, and first-payload state locked"
+        f"CBF arithmetic trail, output/emit byte chunks, stream tail, terminate pre-state, and first-payload state locked"
     )
 
-print("[PASS] CABAC P16x16 Cb-only chroma AC arithmetic trace probe locks failing top/split masks against passing top-pair and bottom-single controls, including residual output byte chunks, stream tails, and terminate pre-state")
+print("[PASS] CABAC P16x16 Cb-only chroma AC arithmetic trace probe locks failing top/split masks against passing top-pair and bottom-single controls, including P-slice prefix emission, residual output/emit byte chunks, stream tails, and terminate pre-state")
 PY
