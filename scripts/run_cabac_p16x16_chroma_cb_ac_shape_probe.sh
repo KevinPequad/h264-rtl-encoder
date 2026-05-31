@@ -57,10 +57,11 @@ CASES = [
     # d0 08 08 6b header tail and first residual payload byte eb when the
     # quantized AC residual is nonzero; the strict vs miss partition is in the
     # following residual tail, not a one-byte header or payload-boundary
-    # classification artifact.  The complementary checker parities plus
-    # vertical/horizontal shapes lock that the remaining short-decodes are
-    # coefficient-shape/tail sensitive, not simply top-vs-bottom or
-    # left-vs-right block placement and not uniformly checker-parity driven.
+    # classification artifact.  The complementary checker parities plus a
+    # complete vertical/horizontal sweep across all four Cb AC blocks lock that
+    # the remaining short-decodes are coefficient-shape/tail sensitive, not
+    # simply top-vs-bottom or left-vs-right block placement and not uniformly
+    # checker-parity driven.
     (0, "checker_odd", False, "bytestream -19", "0000000141d008086beb2ed226"),
     (0, "checker_even", False, "bytestream -19", "0000000141d008086beb2ed226"),
     (0, "vert_left", True, "", "0000000141d008086beb2f"),
@@ -75,12 +76,15 @@ CASES = [
     (1, "horiz_bottom", True, "", "0000000141d008086beb2f"),
     (2, "checker_odd", True, "", "0000000141d008086beb2fa1d5"),
     (2, "checker_even", False, "bytestream -5", "0000000141d008086beb2fa1d4"),
+    (2, "vert_left", True, "", "0000000141d008086beb2f"),
     (2, "vert_right", True, "", "0000000141d008086beb2f"),
+    (2, "horiz_top", True, "", "0000000141d008086beb2f"),
     (2, "horiz_bottom", True, "", "0000000141d008086beb2f"),
     (3, "checker_odd", True, "", "0000000141d008086beb2fc5f8"),
     (3, "checker_even", True, "", "0000000141d008086beb2fc5f8"),
     (3, "vert_left", False, "bytestream -6", "0000000141d008086beb2fc7"),
     (3, "vert_right", False, "bytestream -6", "0000000141d008086beb2fc7"),
+    (3, "horiz_top", False, "bytestream -18", "0000000141d008086beb2fc5"),
     (3, "horiz_bottom", False, "bytestream -18", "0000000141d008086beb2fc5"),
 ]
 
@@ -190,5 +194,5 @@ for block, pattern_name, expect_full, short_signature, expected_final_slice in C
 
     raw_yuv.unlink(missing_ok=True)
 
-print("[PASS] CABAC P16x16 sparse Cb AC shape probe locks coefficient-shape-sensitive strict/miss partition and exact final-slice tails under common first payload byte eb; repair target is residual coefficient emission/order/arithmetic tail, not only top-row block placement or the P-slice boundary")
+print("[PASS] CABAC P16x16 sparse Cb AC shape probe locks coefficient-shape-sensitive strict/miss partition and exact final-slice tails under common first payload byte eb across a complete vertical/horizontal block sweep; repair target is residual coefficient emission/order/arithmetic tail, not only top-row block placement or the P-slice boundary")
 PY
