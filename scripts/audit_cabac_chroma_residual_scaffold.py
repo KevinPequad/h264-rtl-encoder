@@ -213,7 +213,7 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "probe_promotes_cross_plane_ac_gate",
         "scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py",
-        r"cod_i_queue=-7.*?EXPECTED_HEADER_TAIL\s*=\s*0x6B.*?TAILS\s*=\s*\{.*?\(0x1,\s*0x1\):\s*\"0000000141d008086b3acbb8b517a9\".*?\(0xF,\s*0xF\):\s*\"0000000141d008086b7acc\".*?\(0xE,\s*0x1\):\s*\"0000000141d008086b3acc3602d3f58ca1b3b4\".*?AMPLITUDE_TAILS\s*=\s*\{.*?\(0x5,\s*0xA,\s*160,\s*136\):\s*\"0000000141d008086b\".*?expected_u\s*=\s*cb_mask\.bit_count\(\) \* 8 \* abs\(cb_value - 128\).*?expected_v\s*=\s*cr_mask\.bit_count\(\) \* 8 \* abs\(cr_value - 128\).*?CABAC P16x16 cross-plane chroma-AC gate promoted.*?mixed high-amplitude Cb\+Cr case strict-decode",
+        r"cod_i_queue=-7.*?EXPECTED_HEADER_TAIL\s*=\s*0x6B.*?TAILS\s*=\s*\{.*?\(0x1,\s*0x1\):\s*\"0000000141d008086b3acbb8b517a9\".*?\(0xF,\s*0xF\):\s*\"0000000141d008086b7acc\".*?\(0xE,\s*0x1\):\s*\"0000000141d008086b3acc3602d3f58ca1b3b4\".*?AMPLITUDE_TAILS\s*=\s*\{.*?\(0x5,\s*0xA,\s*160,\s*136\):\s*\"0000000141d008086b\".*?\(0x5,\s*0xA,\s*136,\s*160\):\s*\"0000000141d008086b\".*?\(0x5,\s*0xA,\s*160,\s*160\):\s*\"0000000141d008086b7fff\".*?expected_u\s*=\s*cb_mask\.bit_count\(\) \* 8 \* abs\(cb_value - 128\).*?expected_v\s*=\s*cr_mask\.bit_count\(\) \* 8 \* abs\(cr_value - 128\).*?CABAC P16x16 cross-plane chroma-AC gate promoted.*?mixed high-amplitude Cb/Cr guards strict-decode",
     ),
     (
         "probe_locks_cr_ac_first_payload_substitutions",
