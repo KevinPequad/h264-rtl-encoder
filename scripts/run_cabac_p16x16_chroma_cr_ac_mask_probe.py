@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Cr-only CABAC P16x16 chroma-AC mask-lattice probe.
 
-The older chroma-AC probe locked Cr single-block controls and the dense Cr
-checker separately.  This diagnostic covers every nonzero Cr-only 2x2 chroma-AC
-block mask in one run so multi-block Cr failures cannot hide behind the single
-block pass controls.
+This diagnostic covers every nonzero Cr-only 2x2 chroma-AC block mask in one
+run.  The checked-in CABAC queue initializer now promotes the full lattice, so
+every mask is locked as a strict two-frame FFmpeg decode with exact plane-local
+Cr SAD.
 """
 
 from __future__ import annotations
@@ -27,25 +27,7 @@ LUMA_SIZE = WIDTH * HEIGHT
 CHROMA_SIZE = WIDTH * HEIGHT // 4
 EXPECTED_BYTES = FRAME_SIZE * 2
 
-STRICT_MASKS = {
-    0x1,
-    0x2,
-    0x4,
-    0x6,
-    0x8,
-    0x9,
-    0xF,
-}
-MISS_SIGNATURES = {
-    0x3: "bytestream -6",
-    0x5: "bytestream -16",
-    0x7: "bytestream -37",
-    0xA: "bytestream -12",
-    0xB: "bytestream -17",
-    0xC: "bytestream -16",
-    0xD: "bytestream -17",
-    0xE: "bytestream -7",
-}
+STRICT_MASKS = set(range(1, 16))
 
 
 def checker_chroma(mask: int) -> bytes:
@@ -186,19 +168,7 @@ def run_mask(sim: Path, mask: int, fixture: Path) -> None:
         )
         return
 
-    signature = MISS_SIGNATURES[mask]
-    if len(raw) != FRAME_SIZE:
-        raise SystemExit(
-            f"[FAIL] CR_AC_MASK mask=0x{mask:x} decoded {len(raw)}/{EXPECTED_BYTES}, "
-            f"expected locked one-frame miss"
-        )
-    if signature not in ff_text:
-        got_sig = re.search(r"bytestream -\d+", ff_text)
-        raise SystemExit(
-            f"[FAIL] CR_AC_MASK mask=0x{mask:x} expected FFmpeg signature {signature!r}, "
-            f"got {(got_sig.group(0) if got_sig else ff_text.strip())!r}"
-        )
-    print(f"[PASS] CR_AC_MASK mask=0x{mask:x} remains one-frame {len(raw)}/{EXPECTED_BYTES} miss with {signature}")
+    raise SystemExit(f"internal expected mask partition missed 0x{mask:x}")
 
 
 def main() -> int:
@@ -207,9 +177,8 @@ def main() -> int:
     for mask, fixture in fixtures.items():
         run_mask(sim, mask, fixture)
     print(
-        "[PASS] CABAC P16x16 Cr-only chroma-AC mask probe locks the current mask lattice: "
-        "single blocks plus masks 0x6/0x9/0xf strict-decode, while adjacent/top+bottom multi-block "
-        "masks 0x3/0x5/0x7/0xa/0xb/0xc/0xd/0xe remain exact-signature one-frame misses"
+        "[PASS] CABAC P16x16 Cr-only chroma-AC mask lattice promoted: all 15 nonzero "
+        "2x2 Cr AC masks strict-decode two frames with exact plane-local Cr SAD"
     )
     return 0
 

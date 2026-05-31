@@ -198,7 +198,7 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "probe_locks_cr_ac_mask_lattice",
         "scripts/run_cabac_p16x16_chroma_cr_ac_mask_probe.py",
-        r"STRICT_MASKS\s*=\s*\{\s*0x1,\s*0x2,\s*0x4,\s*0x6,\s*0x8,\s*0x9,\s*0xF,\s*\}.*?MISS_SIGNATURES\s*=\s*\{.*?0x3:\s*\"bytestream -6\".*?0x5:\s*\"bytestream -16\".*?0x7:\s*\"bytestream -37\".*?0xA:\s*\"bytestream -12\".*?0xB:\s*\"bytestream -17\".*?0xC:\s*\"bytestream -16\".*?0xD:\s*\"bytestream -17\".*?0xE:\s*\"bytestream -7\".*?expected_blocks\s*=\s*mask\.bit_count\(\).*?cr_ac_blocks=\{expected_blocks\}.*?expected_v\s*=\s*expected_blocks \* 64",
+        r"STRICT_MASKS\s*=\s*set\(range\(1,\s*16\)\).*?expected_blocks\s*=\s*mask\.bit_count\(\).*?cr_ac_blocks=\{expected_blocks\}.*?expected_v\s*=\s*expected_blocks \* 64.*?CABAC P16x16 Cr-only chroma-AC mask lattice promoted: all 15 nonzero",
     ),
     (
         "probe_locks_cr_ac_first_payload_substitutions",
@@ -253,7 +253,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, Cr AC mask-lattice signatures, Cr AC first-payload substitution coverage, Cb AC shape/tail plus first-payload substitution coverage, Cb AC phase/polarity tail plus first-payload substitution coverage, Cr AC phase/polarity tail plus first-payload substitution coverage, and Cr AC shape/tail partition coverage")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, promoted Cb/Cr chroma-AC mask lattices with exact plane-local SAD, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, Cr AC first-payload substitution coverage, Cb AC shape/tail plus first-payload substitution coverage, Cb AC phase/polarity tail plus first-payload substitution coverage, Cr AC phase/polarity tail plus first-payload substitution coverage, and Cr AC shape/tail partition coverage")
     return 0
 
 
