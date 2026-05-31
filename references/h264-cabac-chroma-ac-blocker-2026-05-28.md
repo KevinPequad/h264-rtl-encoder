@@ -416,3 +416,9 @@ Next useful probe:
 - The generated baseline still uses the locked `d0 08 08 6b eb` P-slice header/first-payload prefix and remains outside the strict expected-SAD class; exactly `183` single-byte first-payload values strict-decode with byte-identical IDR and exact plane-local SAD (`U_SAD=64`, `V_SAD=64`).
 - The known first-payload repair-family substitutions `0xeb->0x75` and bit7 `0xeb->0x6b` are inside that sparse mixed-plane pass class. This reinforces that the next source repair should target the shared CABAC first-payload arithmetic/renormalization boundary rather than adding another CBF selector or bytestream patch special case.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_first_payload_value_sweep.py` passes.
+
+## 2026-05-31 first-payload value-range lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_first_payload_value_sweep.py` so the representative first-payload byte sweep now locks the exact pass-value ranges for each Cb-only, Cr-only, sparse/dense mixed-plane, and strict-but-wrong-quality guard case, not just the pass counts plus the known `0x75`/`0x6b` promoted values.
+- This makes the diagnostic sensitive to equivalence-class drift: a future arithmetic/renormalization source change must either preserve the current first-payload decode/quality classes or deliberately update the expected ranges with stronger evidence, rather than accidentally swapping one passing value set for another with the same count.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_first_payload_value_sweep.py` passes with the exact ranges locked for all nine cases.
