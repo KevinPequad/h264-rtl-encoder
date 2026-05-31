@@ -250,6 +250,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         "scripts/run_cabac_p16x16_luma_chroma_residual_check.py",
         r"both luma residual and both-plane chroma AC residual.*?EXPECTED_FINAL_SLICE\s*=\s*\"0000000141d008086b3afee9ffdd7d77fdb6f7\".*?EXPECTED_CAVLC_SUPPRESSED_BITS\s*=\s*240.*?EXPECTED_Y_SAD\s*=\s*2048.*?EXPECTED_U_SAD\s*=\s*256.*?EXPECTED_V_SAD\s*=\s*256.*?cabac_chroma_cb_ac_blocks=4.*?cabac_chroma_cr_ac_blocks=4.*?CABAC P16x16 combined luma\+Cb\+Cr AC residual smoke strict-decodes",
     ),
+    (
+        "gate_locks_luma_single_plane_chroma_ac_residual_smoke",
+        "scripts/run_cabac_p16x16_luma_single_chroma_ac_residual_check.py",
+        r"luma \+ single-plane chroma-AC residual.*?EXPECTED_CAVLC_SUPPRESSED_BITS\s*=\s*190.*?EXPECTED_Y_SAD\s*=\s*2048.*?name=\"cb_ac\".*?expected_final_slice=\"0000000141d008086b3abeff\".*?expected_u_sad=256.*?expected_v_sad=0.*?expected_cb_ac_blocks=4.*?expected_cr_ac_blocks=0.*?name=\"cr_ac\".*?expected_final_slice=\"0000000141d008086b3af7ef\".*?expected_u_sad=0.*?expected_v_sad=256.*?expected_cb_ac_blocks=0.*?expected_cr_ac_blocks=4.*?CABAC P16x16 luma plus single-plane Cb/Cr AC residual smoke cases strict-decode",
+    ),
 )
 
 
