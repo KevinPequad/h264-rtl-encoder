@@ -396,3 +396,10 @@ Next useful probe:
 - The current baseline partition is unchanged: top-row Cb singleton phase/sign cases and the two bottom-left parity/sign misses remain one-frame failures with exact FFmpeg signatures and final P-slice tails, while the existing bottom-left and bottom-right controls still strict-decode.
 - Mutating only the first CABAC payload byte from `0xeb` to either `0x75` or `0x6b` promotes or preserves every phase/sign case as a strict two-frame decode with a byte-identical IDR frame and exact Cb-only `U_SAD=40` / `V_SAD=0`.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_phase_probe.sh` passes. This further confines the repair target to first-payload CABAC arithmetic/renormalization or residual-tail state, not coefficient sign, parity, CBF selector, or P-slice-boundary handling.
+
+## 2026-05-31 Cr-only phase first-payload preservation lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_cr_ac_phase_probe.sh` with the Cr-side first-payload substitution guard for the singleton `+5/-5/+8` phase/polarity lattice.
+- The baseline Cr phase lattice remains strict two-frame decode across all quadrants, with exact final P-slice tails and exact Cr-only decoded-plane SAD.
+- Mutating only the first CABAC payload byte from `0xeb` to either `0x75` or `0x6b` now must preserve strict two-frame decode, byte-identical IDR, and exact Cr-only `V_SAD` for every AC phase/sign case, matching the shape and Cb-phase first-payload repair family without weakening Cr controls.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cr_ac_phase_probe.sh` passes. This keeps the next source fix scoped to first-payload CABAC arithmetic/renormalization or residual-tail state while explicitly guarding the Cr low-amplitude phase lane.
