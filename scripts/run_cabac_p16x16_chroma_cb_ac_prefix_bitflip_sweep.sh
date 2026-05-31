@@ -70,8 +70,18 @@ expected_short_signatures = {
     0xC: "bytestream -18",
 }
 expected_full = {0x3, 0x4, 0x7, 0x8, 0xB, 0xD, 0xE, 0xF}
-expected_prefix_byte = 0x6B
-prefix_flips = {5: 0x4B, 7: 0xEB}
+# Legacy-named probe note: the common 0x6b byte is the final byte of the
+# P-slice header plus CABAC alignment, not the first residual/CABAC payload
+# byte.  For the generated 2-frame P-slice this byte packs
+# adaptive_ref_pic_marking_mode_flag, cabac_init_idc, slice_qp_delta,
+# disable_deblocking_filter_idc, and the two cabac_alignment_one_bits.  The
+# next byte is the first CABAC-coded MB/payload byte.
+expected_header_tail_byte = 0x6B
+expected_first_cabac_byte = 0xEB
+header_tail_flips = {
+    5: (0x4B, "slice_qp_delta_prefix"),
+    7: (0xEB, "adaptive_ref_pic_marking_mode_flag"),
+}
 
 
 def decode_raw(data: bytes) -> tuple[bytes, str]:
@@ -136,13 +146,19 @@ for mask in range(1, 16):
     last_start = stream.rfind(b"\x00\x00\x00\x01")
     if last_start < 0:
         raise SystemExit(f"[FAIL] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} missing final Annex-B start code")
-    scan_start = last_start + 8
-    if scan_start >= len(stream):
-        raise SystemExit(f"[FAIL] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} missing P-slice payload prefix")
-    if stream[scan_start] != expected_prefix_byte:
+    header_tail_idx = last_start + 8
+    first_cabac_idx = last_start + 9
+    if first_cabac_idx >= len(stream):
+        raise SystemExit(f"[FAIL] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} missing P-slice CABAC payload byte")
+    if stream[header_tail_idx] != expected_header_tail_byte:
         raise SystemExit(
-            f"[FAIL] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} prefix byte 0x{stream[scan_start]:02x}, "
-            f"expected 0x{expected_prefix_byte:02x}"
+            f"[FAIL] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} slice-header tail byte "
+            f"0x{stream[header_tail_idx]:02x}, expected 0x{expected_header_tail_byte:02x}"
+        )
+    if stream[first_cabac_idx] != expected_first_cabac_byte:
+        raise SystemExit(
+            f"[FAIL] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} first CABAC payload byte "
+            f"0x{stream[first_cabac_idx]:02x}, expected 0x{expected_first_cabac_byte:02x}"
         )
 
     baseline_raw, baseline_err = decode_raw(stream)
@@ -161,28 +177,28 @@ for mask in range(1, 16):
             )
 
     mutation_results = []
-    for bit, mutated_byte in prefix_flips.items():
+    for bit, (mutated_byte, field_name) in header_tail_flips.items():
         mutated = bytearray(stream)
-        mutated[scan_start] ^= 1 << bit
-        if mutated[scan_start] != mutated_byte:
-            raise SystemExit(f"internal prefix mutation mismatch for bit {bit}")
+        mutated[header_tail_idx] ^= 1 << bit
+        if mutated[header_tail_idx] != mutated_byte:
+            raise SystemExit(f"internal slice-header-tail mutation mismatch for bit {bit}")
         raw, err = decode_raw(bytes(mutated))
         if err.strip():
-            raise SystemExit(f"[FAIL] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} bit{bit} FFmpeg stderr: {err.strip()!r}")
+            raise SystemExit(f"[FAIL] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} {field_name} bit{bit} FFmpeg stderr: {err.strip()!r}")
         u_sad, v_sad = decoded_plane_sad(mask, raw)
         expected_u = expected_blocks * 64
         if u_sad != expected_u or v_sad != 0:
             raise SystemExit(
-                f"[FAIL] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} bit{bit} SAD U={u_sad} V={v_sad}, "
+                f"[FAIL] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} {field_name} bit{bit} SAD U={u_sad} V={v_sad}, "
                 f"expected U={expected_u} V=0"
             )
-        mutation_results.append(f"bit{bit}->0x{mutated_byte:02x}:U_SAD={u_sad}")
+        mutation_results.append(f"{field_name}/bit{bit}->0x{mutated_byte:02x}:U_SAD={u_sad}")
 
     baseline_kind = "strict" if mask in expected_full else f"short/{expected_short_signatures[mask]}"
     print(
         f"[PASS] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} baseline={baseline_kind}; "
-        f"common prefix 0x6b flips strict-decode ({', '.join(mutation_results)})"
+        f"slice-header tail 0x6b with first CABAC byte 0xeb; header-tail flips strict-decode ({', '.join(mutation_results)})"
     )
 
-print("[PASS] CABAC P16x16 sparse Cb AC prefix bitflip sweep locks that common prefix-byte flips 0x6b->0x4b and 0x6b->0xeb strict-decode all 15 Cb-only AC masks while preserving Cb-only SAD")
+print("[PASS] CABAC P16x16 sparse Cb AC legacy prefix bitflip sweep now locks the 0x6b byte as the final P-slice header/alignment byte, the first CABAC payload byte as 0xeb, and the two header-tail flips that strict-decode all 15 Cb-only AC masks while preserving Cb-only SAD")
 PY
