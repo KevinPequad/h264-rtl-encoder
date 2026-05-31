@@ -78,6 +78,32 @@ expected_full = {0x3, 0x4, 0x7, 0x8, 0xB, 0xD, 0xE, 0xF}
 # next byte is the first CABAC-coded MB/payload byte.
 expected_header_tail_byte = 0x6B
 expected_first_cabac_byte = 0xEB
+# Bit positions are MSB-first in the four-byte CABAC P-slice header RBSP
+# (d0 08 08 6b for the generated second frame):
+#   0      first_mb_in_slice = ue(0)
+#   1      slice_type        = ue(P=0)
+#   2..4   pic_parameter_set_id = ue(1), selecting the CABAC PPS
+#   5..12  frame_num
+#   13..21 pic_order_cnt_lsb
+#   22     num_ref_idx_active_override_flag
+#   23     ref_pic_list_reordering_flag_l0
+#   24     adaptive_ref_pic_marking_mode_flag
+#   25     cabac_init_idc = ue(0)
+#   26     slice_qp_delta = se(0)
+#   27..29 disable_deblocking_filter_idc = ue(1)
+#   30..31 cabac_alignment_one_bit, cabac_alignment_one_bit
+expected_header_field_bits = {
+    "first_mb_in_slice": (0, "1"),
+    "slice_type_p": (1, "1"),
+    "pic_parameter_set_id_1": (2, "010"),
+    "num_ref_idx_active_override_flag": (22, "0"),
+    "ref_pic_list_reordering_flag_l0": (23, "0"),
+    "adaptive_ref_pic_marking_mode_flag": (24, "0"),
+    "cabac_init_idc_0": (25, "1"),
+    "slice_qp_delta_0": (26, "1"),
+    "disable_deblocking_filter_idc_1": (27, "010"),
+    "cabac_alignment_one_bits": (30, "11"),
+}
 header_tail_flips = {
     5: (0x4B, "slice_qp_delta_prefix"),
     7: (0xEB, "adaptive_ref_pic_marking_mode_flag"),
@@ -123,6 +149,18 @@ def decoded_plane_sad(mask: int, raw: bytes) -> tuple[int, int]:
     return u_sad, v_sad
 
 
+def assert_header_field_bits(mask: int, header_bytes: bytes) -> None:
+    bits = "".join(f"{byte:08b}" for byte in header_bytes)
+    if len(bits) != 32:
+        raise SystemExit(f"[FAIL] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} header bit length {len(bits)}, expected 32")
+    for name, (start, expected) in expected_header_field_bits.items():
+        got = bits[start:start + len(expected)]
+        if got != expected:
+            raise SystemExit(
+                f"[FAIL] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} header field {name} bits {got}, expected {expected}"
+            )
+
+
 for mask in range(1, 16):
     input_path = root / "data" / f"smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_ac_prefix_bitflip_mask_{mask:x}.yuv"
     h264 = out_dir / f"mask_{mask:x}.h264"
@@ -150,6 +188,7 @@ for mask in range(1, 16):
     first_cabac_idx = last_start + 9
     if first_cabac_idx >= len(stream):
         raise SystemExit(f"[FAIL] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} missing P-slice CABAC payload byte")
+    assert_header_field_bits(mask, stream[last_start + 5:first_cabac_idx])
     if stream[header_tail_idx] != expected_header_tail_byte:
         raise SystemExit(
             f"[FAIL] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} slice-header tail byte "
@@ -197,8 +236,9 @@ for mask in range(1, 16):
     baseline_kind = "strict" if mask in expected_full else f"short/{expected_short_signatures[mask]}"
     print(
         f"[PASS] CB_AC_PREFIX_BITFLIP mask=0x{mask:x} baseline={baseline_kind}; "
-        f"slice-header tail 0x6b with first CABAC byte 0xeb; header-tail flips strict-decode ({', '.join(mutation_results)})"
+        f"slice-header fields match d0 08 08 6b layout with first CABAC byte 0xeb; "
+        f"header-tail flips strict-decode ({', '.join(mutation_results)})"
     )
 
-print("[PASS] CABAC P16x16 sparse Cb AC legacy prefix bitflip sweep now locks the 0x6b byte as the final P-slice header/alignment byte, the first CABAC payload byte as 0xeb, and the two header-tail flips that strict-decode all 15 Cb-only AC masks while preserving Cb-only SAD")
+print("[PASS] CABAC P16x16 sparse Cb AC legacy prefix bitflip sweep now locks the d0 08 08 6b P-slice header field layout, the first CABAC payload byte as 0xeb, and the two header-tail flips that strict-decode all 15 Cb-only AC masks while preserving Cb-only SAD")
 PY
