@@ -77,8 +77,12 @@ EXPECTED_BASE = {
     "2": (384, "bytestream -21"),
     "c": (384, "bytestream -18"),
 }
-# Entries are: payload byte offset from the locked post-slice-header scan start,
-# original byte, flipped bit, mutated byte, expected Cb-plane SAD.
+# Entries are: CABAC payload byte offset from the locked post-slice-header scan
+# start, original byte, flipped bit, mutated byte, expected Cb-plane SAD.
+# Offset 0 is the common pre-residual CABAC prefix byte for these one-MB
+# P16x16 streams; the residual byte chunks observed by the DEBUG_CABAC_P16X16
+# arithmetic trace begin at offset 1.  Keep both classes locked so a future
+# repair can distinguish early-CABAC-prefix fixes from residual-tail fixes.
 EXPECTED_PROMOTIONS = {
     "1": {
         (0, 0x6B, 5, 0x4B, 64),
@@ -176,10 +180,19 @@ for mask, (base_bytes, signature) in EXPECTED_BASE.items():
             f"[FAIL] CB_AC_TAIL_BITFLIP mask=0x{mask} promotions {sorted(promotions)}, "
             f"expected {sorted(expected)}"
         )
+    prefix_promotions = {item for item in promotions if item[0] == 0}
+    residual_promotions = promotions - prefix_promotions
+    expected_prefix = {item for item in expected if item[0] == 0}
+    if prefix_promotions != expected_prefix:
+        raise SystemExit(
+            f"[FAIL] CB_AC_TAIL_BITFLIP mask=0x{mask} prefix promotions "
+            f"{sorted(prefix_promotions)}, expected {sorted(expected_prefix)}"
+        )
     print(
         f"[PASS] CB_AC_TAIL_BITFLIP mask=0x{mask} baseline stays short at {base_bytes}/768; "
-        f"locked {len(promotions)} one-bit residual-tail mutations that strict-decode with Cb-only delta"
+        f"locked {len(prefix_promotions)} prefix and {len(residual_promotions)} residual-byte "
+        f"one-bit mutations that strict-decode with Cb-only delta"
     )
 
-print("[PASS] CABAC P16x16 sparse Cb AC residual-tail bitflip probe locks strict-decodable one-bit payload mutations for masks 0x1, 0x2, and 0xc")
+print("[PASS] CABAC P16x16 sparse Cb AC payload bitflip probe locks strict-decodable pre-residual-prefix and residual-byte mutations for masks 0x1, 0x2, and 0xc")
 PY
