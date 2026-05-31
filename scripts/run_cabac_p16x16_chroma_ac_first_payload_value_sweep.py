@@ -42,6 +42,7 @@ CASES = {
     "cr_mask1": {"cb_mask": 0x0, "cr_mask": 0x1, "u_sad": 0, "v_sad": 64, "pass_count": 178, "baseline_strict": True},
     "cr_mask3": {"cb_mask": 0x0, "cr_mask": 0x3, "u_sad": 0, "v_sad": 128, "pass_count": 181, "baseline_strict": False},
     "cr_mask5": {"cb_mask": 0x0, "cr_mask": 0x5, "u_sad": 0, "v_sad": 128, "pass_count": 185, "baseline_strict": False},
+    "cbcr_sparse_pair": {"cb_mask": 0x1, "cr_mask": 0x1, "u_sad": 64, "v_sad": 64, "pass_count": 183, "baseline_strict": False},
     "cbcr_dense": {"cb_mask": 0xF, "cr_mask": 0xF, "u_sad": 256, "v_sad": 256, "pass_count": 174, "baseline_strict": True},
     "cbcr_quality_guard": {"cb_mask": 0xE, "cr_mask": 0x1, "u_sad": 192, "v_sad": 64, "pass_count": 190, "baseline_strict": False},
 }
@@ -235,7 +236,7 @@ def main() -> None:
         check_case(sim, name, spec)
     print(
         "[PASS] CABAC P16x16 chroma-AC first-payload value sweep locks broad decode-equivalence classes "
-        "for representative Cb-only, Cr-only, dense Cb+Cr, and mixed-plane quality-guard cases; "
+        "for representative Cb-only, Cr-only, sparse/dense Cb+Cr, and mixed-plane quality-guard cases; "
         "0x6b/0x75 remain promoted controls, but baseline sparse Cb/Cr 0xeb stays outside the "
         "short/strict-but-wrong-plane repair classes"
     )

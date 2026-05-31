@@ -409,3 +409,10 @@ Next useful probe:
 - Extended `scripts/run_cabac_p16x16_chroma_ac_first_payload_value_sweep.py` with the mixed Cb/Cr quality guard (`Cb mask 0xe`, `Cr mask 0x1`) that currently strict-decodes but reconstructs the wrong chroma-plane deltas under the baseline first payload `0xeb`.
 - The guard has 190 single-byte first-payload values that strict-decode with the expected plane-local SAD (`U_SAD=192`, `V_SAD=64`); the known repair-family substitutions `0xeb->0x75` and `0xeb->0x6b` are inside that class, while baseline `0xeb` is not.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_first_payload_value_sweep.py` passes. This keeps the next source repair focused on first-payload CABAC arithmetic/renormalization and requires it to repair decoded-plane quality, not only FFmpeg bytestream short-decodes.
+
+## 2026-05-31 sparse mixed-plane first-payload value sweep
+
+- Extended the same first-payload byte-value sweep with a sparse mixed-plane guard (`Cb mask 0x1`, `Cr mask 0x1`) so the equivalence-class evidence covers a representative sparse/sparse Cb+Cr case, not only Cb-only, Cr-only, dense both-plane, and strict-but-wrong-quality mixed-plane controls.
+- The generated baseline still uses the locked `d0 08 08 6b eb` P-slice header/first-payload prefix and remains outside the strict expected-SAD class; exactly `183` single-byte first-payload values strict-decode with byte-identical IDR and exact plane-local SAD (`U_SAD=64`, `V_SAD=64`).
+- The known first-payload repair-family substitutions `0xeb->0x75` and bit7 `0xeb->0x6b` are inside that sparse mixed-plane pass class. This reinforces that the next source repair should target the shared CABAC first-payload arithmetic/renormalization boundary rather than adding another CBF selector or bytestream patch special case.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_first_payload_value_sweep.py` passes.
