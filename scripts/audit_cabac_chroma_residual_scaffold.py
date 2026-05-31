@@ -201,6 +201,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"STRICT_MASKS\s*=\s*set\(range\(1,\s*16\)\).*?expected_blocks\s*=\s*mask\.bit_count\(\).*?cr_ac_blocks=\{expected_blocks\}.*?expected_v\s*=\s*expected_blocks \* 64.*?CABAC P16x16 Cr-only chroma-AC mask lattice promoted: all 15 nonzero",
     ),
     (
+        "probe_promotes_cross_plane_ac_gate",
+        "scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py",
+        r"cod_i_queue=-7.*?EXPECTED_HEADER_TAIL\s*=\s*0x6B.*?TAILS\s*=\s*\{.*?\(0x1,\s*0x1\):\s*\"0000000141d008086b3acbb8b517a9\".*?\(0xF,\s*0xF\):\s*\"0000000141d008086b7acc\".*?\(0xE,\s*0x1\):\s*\"0000000141d008086b3acc3602d3f58ca1b3b4\".*?expected_u\s*=\s*cb_mask\.bit_count\(\) \* 64.*?expected_v\s*=\s*cr_mask\.bit_count\(\) \* 64.*?CABAC P16x16 cross-plane chroma-AC gate promoted",
+    ),
+    (
         "probe_locks_cr_ac_first_payload_substitutions",
         "scripts/run_cabac_p16x16_chroma_cr_ac_first_payload_substitution_probe.py",
         r"EXPECTED_FIRST_PAYLOAD\s*=\s*0xEB.*?QUEUE_M8_FIRST_PAYLOAD\s*=\s*0x75.*?BIT7_PROMOTED_PAYLOAD\s*=\s*0x6B.*?STRICT_MASKS\s*=\s*\{0x1,\s*0x2,\s*0x4,\s*0x6,\s*0x8,\s*0x9,\s*0xF\}.*?MISS_SIGNATURES\s*=\s*\{.*?0x3:\s*\"bytestream -6\".*?0xE:\s*\"bytestream -7\".*?for label, value in \(\(\"queue_m8_payload_0x75\", QUEUE_M8_FIRST_PAYLOAD\), \(\"bit7_payload_0x6b\", BIT7_PROMOTED_PAYLOAD\)\).*?assert_cr_only\(mask, fixture, raw, label\).*?check_both_plane_guard",
@@ -253,7 +258,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, promoted Cb/Cr chroma-AC mask lattices with exact plane-local SAD, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, Cr AC first-payload substitution coverage, Cb AC shape/tail plus first-payload substitution coverage, Cb AC phase/polarity tail plus first-payload substitution coverage, Cr AC phase/polarity tail plus first-payload substitution coverage, and Cr AC shape/tail partition coverage")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, promoted Cb/Cr chroma-AC mask lattices with exact plane-local SAD, promoted cross-plane Cb+Cr AC strict-decode coverage, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, Cr AC first-payload substitution coverage, Cb AC shape/tail plus first-payload substitution coverage, Cb AC phase/polarity tail plus first-payload substitution coverage, Cr AC phase/polarity tail plus first-payload substitution coverage, and Cr AC shape/tail partition coverage")
     return 0
 
 
