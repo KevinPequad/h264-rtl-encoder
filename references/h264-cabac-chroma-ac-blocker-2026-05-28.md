@@ -290,6 +290,12 @@ Next useful probe:
 - This keeps the prefix-byte repair target below whole-stream framing and prevents a future experiment from preserving the emitted byte sequence while silently moving the bit-buffer alignment that feeds the failing sparse-Cb masks.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` passes with the stricter P-slice emit-tail/bit-buffer rows; sparse masks `0x1`, `0x2`, and `0xc` remain short at `384/768`, while controls `0x3`, `0x4`, and `0x8` remain strict `768/768`.
 
+## 2026-05-30 decoded-plane SAD lock for Cb AC controls
+
+- Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` so the full-decode Cb-only chroma-AC controls no longer pass on any nonzero Cb-plane mismatch. The gate now locks the exact current second-frame decoded-plane SADs against the source fixture: mask `0x3` has `U_SAD=128`, masks `0x4` and `0x8` have `U_SAD=64`, and all keep `V_SAD=0`.
+- This makes the distinction explicit: those masks are strict FFmpeg-decodable controls, not reconstruction-parity closures. Future CABAC arithmetic/tail work must either preserve these exact diagnostic signatures or intentionally promote them to a documented lower-SAD/exact-parity expectation.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` passes with sparse masks `0x1`, `0x2`, and `0xc` still short at `384/768` and controls `0x3`, `0x4`, and `0x8` still full at `768/768` with exact decoded-plane SAD locked.
+
 ## 2026-05-30 full plane-local sparse-Cb CBF trial
 
 - Rejected a local source trial that replaced the sparse Cb-only special CBF selector table with the direct plane-local neighbor derivation for all four Cb AC blocks (`block0=0`, `block1=left`, `block2=top`, `block3=left+top`) while leaving dense/Cr paths unchanged.

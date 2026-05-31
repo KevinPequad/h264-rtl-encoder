@@ -97,6 +97,7 @@ EXPECTED = {
     "3": {
         "bytes": 768,
         "signature": "",
+        "u_sad": 128,
         "cbf": [(0, 1, 119, 117, 392, -7, "84"), (1, 1, 117, 115, 496, -4, "89"), (2, 3, 105, 109, 270, -2, "58"), (3, 0, 92, 90, 422, -1, "58"), (4, 7, 105, 109, 468, -7, "4a"), (5, 6, 124, 122, 482, -6, "4a"), (6, 5, 119, 123, 390, -5, "4a"), (7, 4, 92, 90, 304, -5, "4a")],
         "order": [("cbf", 0), ("payload", 0), ("cbf", 1), ("payload", 1), ("cbf", 2), ("cbf", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (0, 22, 0, 122, 120, 410, -6, "84"),
@@ -108,6 +109,7 @@ EXPECTED = {
     "4": {
         "bytes": 768,
         "signature": "",
+        "u_sad": 64,
         "cbf": [(0, 1, 119, 123, 464, -8, "2f"), (1, 1, 123, 125, 432, -7, "2f"), (2, 3, 105, 103, 315, -7, "2f"), (3, 0, 92, 90, 466, -4, "d4"), (4, 7, 105, 109, 270, -3, "d4"), (5, 6, 124, 122, 284, -2, "d4"), (6, 5, 119, 123, 464, -8, "1"), (7, 4, 92, 90, 365, -8, "1")],
         "order": [("cbf", 0), ("cbf", 1), ("cbf", 2), ("payload", 2), ("cbf", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (2, 22, 0, 122, 120, 374, -6, "2f"),
@@ -119,6 +121,7 @@ EXPECTED = {
     "8": {
         "bytes": 768,
         "signature": "",
+        "u_sad": 64,
         "cbf": [(0, 1, 119, 123, 464, -8, "2f"), (1, 1, 123, 125, 432, -7, "2f"), (2, 3, 105, 109, 468, -5, "2f"), (3, 0, 92, 100, 396, -3, "2f"), (4, 7, 105, 109, 468, -7, "9a"), (5, 6, 124, 122, 482, -6, "9a"), (6, 5, 119, 123, 390, -5, "9a"), (7, 4, 92, 90, 304, -5, "9a")],
         "order": [("cbf", 0), ("cbf", 1), ("cbf", 2), ("cbf", 3), ("payload", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
         "first_payload": (3, 22, 0, 122, 120, 418, -2, "2f"),
@@ -285,8 +288,11 @@ for mask, exp in EXPECTED.items():
         v0 = u0 + CHROMA_SIZE
         u_sad = sum(abs(decoded[u0 + i] - src[u0 + i]) for i in range(CHROMA_SIZE))
         v_sad = sum(abs(decoded[v0 + i] - src[v0 + i]) for i in range(CHROMA_SIZE))
-        if u_sad == 0 or v_sad != 0:
-            raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} expected Cb-only decoded delta, got U_SAD={u_sad} V_SAD={v_sad}")
+        if u_sad != exp["u_sad"] or v_sad != 0:
+            raise SystemExit(
+                f"[FAIL] CB_AC_ARITH mask=0x{mask} decoded-plane drift: "
+                f"U_SAD={u_sad} V_SAD={v_sad}, expected U_SAD={exp['u_sad']} V_SAD=0"
+            )
     ffmpeg_text = ffmpeg_log.read_text(encoding="utf-8", errors="replace")
     if exp["signature"]:
         if exp["signature"] not in ffmpeg_text:
@@ -330,8 +336,8 @@ for mask, exp in EXPECTED.items():
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} first payload arithmetic row {first_payload}, expected {exp['first_payload']}")
     print(
         f"[PASS] CB_AC_ARITH mask=0x{mask} decoded {got_bytes}/768, "
-        f"early header trail, P-slice emit tail/bit-buffer rows, CBF arithmetic trail, output/emit byte chunks, stream tail, terminate pre-state, and first-payload state locked"
+        f"early header trail, P-slice emit tail/bit-buffer rows, CBF arithmetic trail, output/emit byte chunks, stream tail, terminate pre-state, first-payload state, and decoded-plane SAD locked"
     )
 
-print("[PASS] CABAC P16x16 Cb-only chroma AC arithmetic trace probe locks failing top/split masks against passing top-pair and bottom-single controls, including early header debug state, P-slice emit tail/bit-buffer rows, residual output/emit byte chunks, stream tails, and terminate pre-state")
+print("[PASS] CABAC P16x16 Cb-only chroma AC arithmetic trace probe locks failing top/split masks against passing top-pair and bottom-single controls, including early header debug state, P-slice emit tail/bit-buffer rows, residual output/emit byte chunks, stream tails, terminate pre-state, and decoded-plane SAD")
 PY
