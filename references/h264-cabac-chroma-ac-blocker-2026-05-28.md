@@ -314,3 +314,10 @@ Next useful probe:
 - Extended `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` so the DEBUG_CABAC_P16X16 arithmetic trace now includes split top+bottom failing masks `0x5` and `0x6`, not only singleton-top `0x1`/`0x2`, bottom-pair `0xc`, and strict controls `0x3`/`0x4`/`0x8`.
 - The new locks preserve their one-frame failures and exact signatures (`0x5 -> bytestream -22`, `0x6 -> bytestream -18`) while recording CBF arithmetic trails, residual byte chunks, stream tails, terminate pre-state, first-payload state, and the common P-slice prefix emit rows.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` passes with masks `0x1`, `0x2`, `0x5`, `0x6`, and `0xc` short at `384/768`, and controls `0x3`, `0x4`, and `0x8` full at `768/768` with exact Cb-only decoded-plane SAD.
+
+## 2026-05-30 staged sparse-Cb CBF selector-table sweep
+
+- Added `scripts/run_cabac_p16x16_chroma_cb_ac_cbf_selector_sweep.py`, a reusable staged diagnostic that patches only a temporary workspace's sparse-Cb CBF selector table and builds each variant with the same 16x16 two-frame CABAC P16x16 Cb-only AC fixture family.
+- The sweep locks the current mapping `[1,1,3,0]` plus simple unavailable-edge, actual-ish, and all-same selector remaps. None promote the remaining top-row sparse Cb masks `0x1` or `0x2` from the one-frame `384/768` miss state to full `768/768` output.
+- Several variants also regress current strict controls (`0x3`, `0x4`, and/or `0x8`), matching the earlier ad-hoc/static selector probes and turning the no-more-static-selector-remaps conclusion into a checked gate.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_cbf_selector_sweep.py` passes; next repair work should stay focused on the shared CABAC prefix/residual-tail arithmetic decisions rather than another CBF selector table tweak.
