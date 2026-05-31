@@ -54,16 +54,11 @@ from pathlib import Path
 
 sim = sys.argv[1]
 root = Path.cwd()
-expected_full = {0x3, 0x4, 0x7, 0x8, 0xb, 0xd, 0xe, 0xf}
-expected_short_signatures = {
-    0x1: "bytestream -19",
-    0x2: "bytestream -21",
-    0x5: "bytestream -22",
-    0x6: "bytestream -18",
-    0x9: "bytestream -14",
-    0xa: "bytestream -20",
-    0xc: "bytestream -18",
-}
+# The checked-in CABAC core `cod_i_queue=-7` initializer promotes the full
+# nonzero Cb-only 2x2 chroma-AC mask lattice.  Lock every mask as a strict
+# two-frame decode and exact plane-local Cb SAD instead of preserving the older
+# pre-`-7` one-frame miss partition.
+expected_full = set(range(1, 16))
 frame_size = 16 * 16 * 3 // 2
 expected_bytes = frame_size * 2
 
@@ -110,27 +105,14 @@ for mask in range(1, 16):
         chroma_size = 16 * 16 // 4
         u_sad = sum(abs(dec[u0 + i] - src[u0 + i]) for i in range(chroma_size))
         v_sad = sum(abs(dec[v0 + i] - src[v0 + i]) for i in range(chroma_size))
-        if u_sad == 0 or v_sad != 0:
-            raise SystemExit(f"[FAIL] CB_AC mask=0x{mask:x} expected Cb-only decoded delta, got U_SAD={u_sad} V_SAD={v_sad}")
+        expected_u = expected_blocks * 64
+        if u_sad != expected_u or v_sad != 0:
+            raise SystemExit(f"[FAIL] CB_AC mask=0x{mask:x} expected exact Cb-only decoded delta U_SAD={expected_u} V_SAD=0, got U_SAD={u_sad} V_SAD={v_sad}")
         print(f"[PASS] CB_AC mask=0x{mask:x} strict-decodes {actual_bytes}/{expected_bytes} with cb_ac_blocks={expected_blocks} U_SAD={u_sad} V_SAD={v_sad}")
-    elif mask in expected_short_signatures:
-        if actual_bytes != frame_size:
-            raise SystemExit(f"[FAIL] CB_AC mask=0x{mask:x} decoded {actual_bytes}/{expected_bytes} bytes, expected locked one-frame miss")
-        ff_text = ffmpeg_log.read_text(errors="ignore")
-        expected_signature = expected_short_signatures[mask]
-        if expected_signature not in ff_text:
-            raise SystemExit(
-                f"[FAIL] CB_AC mask=0x{mask:x} short decode did not preserve expected FFmpeg signature "
-                f"{expected_signature!r}: {ff_text.strip()!r}"
-            )
-        print(
-            f"[PASS] CB_AC mask=0x{mask:x} remains isolated one-frame miss {actual_bytes}/{expected_bytes} "
-            f"with cb_ac_blocks={expected_blocks} and FFmpeg signature {expected_signature}"
-        )
     else:
         raise SystemExit(f"internal expected mask partition missed 0x{mask:x}")
 
     raw_yuv.unlink(missing_ok=True)
 
-print("[PASS] CABAC P16x16 Cb-only chroma AC mask lattice locked: top-pair/dense/full-ish masks strict-decode, while single-top, split top+bottom, and bottom-pair sparse masks remain isolated one-frame misses with exact FFmpeg bytestream signatures")
+print("[PASS] CABAC P16x16 Cb-only chroma AC mask lattice promoted: all 15 nonzero 2x2 Cb AC masks strict-decode two frames with exact plane-local Cb SAD under the checked-in -7 CABAC queue initializer")
 PY
