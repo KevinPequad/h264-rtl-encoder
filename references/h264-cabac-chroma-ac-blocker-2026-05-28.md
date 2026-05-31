@@ -370,3 +370,9 @@ Next useful probe:
 - High-amplitude (`+32`) shapes now expose a Cr-specific residual-tail partition: most checker/axis/diagonal cases remain one-frame `384/768` misses with exact FFmpeg signatures and final tails, but block-1 anti-diagonal and block-2 main/anti diagonals strict-decode with exact `V_SAD=128`.
 - This keeps the next source repair below CBF selector and P-slice-boundary handling. The useful target is residual coefficient level/suffix/order arithmetic that explains high-amplitude shape failures without regressing low-amplitude Cr strict controls or existing Cb/Cb+Cr guards.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cr_ac_shape_probe.sh` passes.
+
+## 2026-05-31 Cr-only high-amplitude axis-complement lock
+
+- Extended `scripts/run_cabac_p16x16_chroma_cr_ac_shape_probe.sh` with the missing high-amplitude (`+32`) vertical-right and horizontal-bottom complements.
+- The complements exactly match the existing opposite-side axis cases per block: block 0 remains `vert_* -> bytestream -7` and `horiz_* -> -11`; block 1 `vert_* -> -10` and `horiz_* -> -9`; block 2 `vert_* -> -10` and `horiz_* -> -11`; block 3 `vert_* -> -11` and `horiz_* -> -11`, all with matching final P-slice tails.
+- This rules out simple axis-side polarity/placement as the Cr high-amplitude axis failure mode while preserving the known diagonal strict/miss partition; next repair should stay on residual level/suffix/order arithmetic or CABAC tail state.

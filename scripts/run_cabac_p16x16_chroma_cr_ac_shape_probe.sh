@@ -54,10 +54,12 @@ PATTERNS = {
 # the checker/vertical/horizontal block lattice.  High-amplitude shapes expose a
 # Cr residual-tail blocker similar to the newer Cb shape probe, but with a
 # different pass/miss partition: two diagonal block-1/2 cases still strict-decode
-# while the high-amplitude checker/axis cases remain one-frame misses.  Locking
-# the exact final P-slice tails keeps the next source repair focused on residual
-# coefficient level/suffix/order arithmetic instead of reclassifying the common
-# P-slice header/CABAC boundary.
+# while the high-amplitude checker/axis cases remain one-frame misses.  The
+# high-amplitude axis complements are explicitly locked too; left/right and
+# top/bottom currently share exact tails/signatures per block, ruling out a
+# simple axis-side polarity issue.  Locking the exact final P-slice tails keeps
+# the next source repair focused on residual coefficient level/suffix/order
+# arithmetic instead of reclassifying the common P-slice header/CABAC boundary.
 CASES = [
     # block, pattern, test_name, cr_value, expect_full, short_signature, expected_final_slice, expected_v_sad
     (0, "checker_odd", "checker_odd", 133, True, "", "0000000141d008086beb2f99af", 40),
@@ -89,25 +91,33 @@ CASES = [
     (0, "checker_odd", "checker_odd_a32", 160, False, "bytestream -16", "0000000141d008086beb304ee10ab07a", None),
     (0, "checker_even", "checker_even_a32", 160, False, "bytestream -16", "0000000141d008086beb304ee10ab07a", None),
     (0, "vert_left", "vert_left_a32", 160, False, "bytestream -7", "0000000141d008086beb304ee10b9c", None),
+    (0, "vert_right", "vert_right_a32", 160, False, "bytestream -7", "0000000141d008086beb304ee10b9c", None),
     (0, "horiz_top", "horiz_top_a32", 160, False, "bytestream -11", "0000000141d008086beb304ee109fd", None),
+    (0, "horiz_bottom", "horiz_bottom_a32", 160, False, "bytestream -11", "0000000141d008086beb304ee109fd", None),
     (1, "diag_main", "diag_main_a32", 160, False, "bytestream -5", "0000000141d008086beb305071ccc95af9", None),
     (1, "diag_anti", "diag_anti_a32", 160, True, "", "0000000141d008086beb305071ccc95afa", 128),
     (1, "checker_odd", "checker_odd_a32", 160, False, "bytestream -11", "0000000141d008086beb304f4d7f2500", None),
     (1, "checker_even", "checker_even_a32", 160, False, "bytestream -11", "0000000141d008086beb304f4d7f2500", None),
     (1, "vert_left", "vert_left_a32", 160, False, "bytestream -10", "0000000141d008086beb304f4d7f", None),
+    (1, "vert_right", "vert_right_a32", 160, False, "bytestream -10", "0000000141d008086beb304f4d7f", None),
     (1, "horiz_top", "horiz_top_a32", 160, False, "bytestream -9", "0000000141d008086beb304f4d7eac", None),
+    (1, "horiz_bottom", "horiz_bottom_a32", 160, False, "bytestream -9", "0000000141d008086beb304f4d7eac", None),
     (2, "diag_main", "diag_main_a32", 160, True, "", "0000000141d008086beb305078818eb5", 128),
     (2, "diag_anti", "diag_anti_a32", 160, True, "", "0000000141d008086beb305078818eb57d", 128),
     (2, "checker_odd", "checker_odd_a32", 160, False, "bytestream -10", "0000000141d008086beb304f5ea96142", None),
     (2, "checker_even", "checker_even_a32", 160, False, "bytestream -10", "0000000141d008086beb304f5ea96142", None),
     (2, "vert_left", "vert_left_a32", 160, False, "bytestream -10", "0000000141d008086beb304f5ea9", None),
+    (2, "vert_right", "vert_right_a32", 160, False, "bytestream -10", "0000000141d008086beb304f5ea9", None),
     (2, "horiz_top", "horiz_top_a32", 160, False, "bytestream -11", "0000000141d008086beb304f5ea917", None),
+    (2, "horiz_bottom", "horiz_bottom_a32", 160, False, "bytestream -11", "0000000141d008086beb304f5ea917", None),
     (3, "diag_main", "diag_main_a32", 160, False, "bytestream -11", "0000000141d008086beb30503d7cb14c9b", None),
     (3, "diag_anti", "diag_anti_a32", 160, False, "bytestream -11", "0000000141d008086beb30503d7cb14c9b", None),
     (3, "checker_odd", "checker_odd_a32", 160, False, "bytestream -10", "0000000141d008086beb304efc1e8687", None),
     (3, "checker_even", "checker_even_a32", 160, False, "bytestream -10", "0000000141d008086beb304efc1e8687", None),
     (3, "vert_left", "vert_left_a32", 160, False, "bytestream -11", "0000000141d008086beb304efc1e95", None),
+    (3, "vert_right", "vert_right_a32", 160, False, "bytestream -11", "0000000141d008086beb304efc1e95", None),
     (3, "horiz_top", "horiz_top_a32", 160, False, "bytestream -11", "0000000141d008086beb304efc1e7b", None),
+    (3, "horiz_bottom", "horiz_bottom_a32", 160, False, "bytestream -11", "0000000141d008086beb304efc1e7b", None),
 ]
 
 
@@ -213,5 +223,5 @@ for block, pattern_name, test_name, cr_value, expect_full, short_signature, expe
 
     raw_yuv.unlink(missing_ok=True)
 
-print("[PASS] CABAC P16x16 Cr-only chroma AC shape probe locks low-amplitude checker/axis strict decodes plus high-amplitude checker/axis/diagonal strict-miss partition with exact final-slice tails; repair target remains residual coefficient level/suffix/order arithmetic rather than CBF selector or P-slice-boundary handling")
+print("[PASS] CABAC P16x16 Cr-only chroma AC shape probe locks low-amplitude checker/axis strict decodes plus high-amplitude checker/axis-complement/diagonal strict-miss partition with exact final-slice tails; repair target remains residual coefficient level/suffix/order arithmetic rather than CBF selector, axis-side polarity, or P-slice-boundary handling")
 PY
