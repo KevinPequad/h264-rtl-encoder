@@ -389,3 +389,10 @@ Next useful probe:
 - The baseline high-amplitude (`+32`) checker/axis/diagonal Cb-only shape cases still remain one-frame misses with their exact final P-slice tails under the shared generated `d0 08 08 6b eb` header/first-payload prefix.
 - Mutating only the first CABAC payload byte from `0xeb` to either `0x75` or `0x6b` promotes every high-amplitude Cb shape to strict two-frame FFmpeg decode with a byte-identical IDR frame and exact Cb-only SAD (`U_SAD=128` for diagonal four-pixel shapes, `256` for checker/axis eight-pixel shapes).
 - This aligns Cb shape failures with the same scoped first-payload/residual-tail arithmetic target as the Cb mask, Cr mask/shape, and mixed-plane probes, rather than a standalone coefficient placement, CBF selector, or P-slice-boundary issue.
+
+## 2026-05-31 Cb-only phase first-payload lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_phase_probe.sh` so the `±5` parity/sign lattice now checks the same first-CABAC-payload substitution family as the mask and shape probes.
+- The current baseline partition is unchanged: top-row Cb singleton phase/sign cases and the two bottom-left parity/sign misses remain one-frame failures with exact FFmpeg signatures and final P-slice tails, while the existing bottom-left and bottom-right controls still strict-decode.
+- Mutating only the first CABAC payload byte from `0xeb` to either `0x75` or `0x6b` promotes or preserves every phase/sign case as a strict two-frame decode with a byte-identical IDR frame and exact Cb-only `U_SAD=40` / `V_SAD=0`.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_phase_probe.sh` passes. This further confines the repair target to first-payload CABAC arithmetic/renormalization or residual-tail state, not coefficient sign, parity, CBF selector, or P-slice-boundary handling.
