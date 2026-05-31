@@ -375,4 +375,10 @@ Next useful probe:
 
 - Extended `scripts/run_cabac_p16x16_chroma_cr_ac_shape_probe.sh` with the missing high-amplitude (`+32`) vertical-right and horizontal-bottom complements.
 - The complements exactly match the existing opposite-side axis cases per block: block 0 remains `vert_* -> bytestream -7` and `horiz_* -> -11`; block 1 `vert_* -> -10` and `horiz_* -> -9`; block 2 `vert_* -> -10` and `horiz_* -> -11`; block 3 `vert_* -> -11` and `horiz_* -> -11`, all with matching final P-slice tails.
-- This rules out simple axis-side polarity/placement as the Cr high-amplitude axis failure mode while preserving the known diagonal strict/miss partition; next repair should stay on residual level/suffix/order arithmetic or CABAC tail state.
+- This rules out simple axis-side polarity/placement as the Cr high-amplitude axis failure mode while preserving the diagonal strict/miss partition; next repair should stay on residual level/suffix/order arithmetic or CABAC tail state.
+
+## 2026-05-31 Cr-only high-amplitude shape first-payload lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_cr_ac_shape_probe.sh` so every high-amplitude (`+32`) Cr-only checker/axis/diagonal shape now validates exact first-CABAC-payload substitutions in addition to its baseline final-slice tail and FFmpeg strict/miss expectation.
+- For every high-amplitude shape case, the baseline first payload remains `0xeb` after the locked `d0 08 08 6b` header tail. Mutating only that byte to either `0x75` or `0x6b` promotes or preserves strict two-frame FFmpeg decode with a byte-identical IDR frame and exact Cr-only SAD (`V_SAD=128` for diagonal four-pixel shapes, `V_SAD=256` for checker/axis eight-pixel shapes).
+- This brings the Cr high-amplitude coefficient-shape blocker under the same scoped first-payload correction family as the Cb/Cr mask and mixed-plane first-payload probes. The next source repair should target first-payload CABAC arithmetic/renormalization or residual-tail state, not another CBF selector, axis-side polarity, or literal bytestream patch.
