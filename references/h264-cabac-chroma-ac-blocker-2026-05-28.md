@@ -308,3 +308,9 @@ Next useful probe:
 - The probe preserves the current baseline partition (`0x1/0x2/0x5/0x6/0x9/0xa/0xc` short at one frame with locked FFmpeg signatures, all other masks strict-decodable) and then flips only the common first post-slice-header CABAC prefix byte.
 - Both common mutations, `0x6b -> 0x4b` (bit 5) and `0x6b -> 0xeb` (bit 7), strict-decode every mask while preserving the expected Cb-only decoded-plane SAD (`64 * popcount(mask)`, `V_SAD=0`), including masks that already strict-decode at baseline.
 - This moves the next repair target away from per-mask CBF selectors and toward the shared arithmetic decision that produces the `0x6b` prefix byte before residual chunks begin; future source fixes should make that byte/renormalization state match the reference rather than patching individual sparse masks.
+
+## 2026-05-30 split-mask arithmetic trace extension
+
+- Extended `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` so the DEBUG_CABAC_P16X16 arithmetic trace now includes split top+bottom failing masks `0x5` and `0x6`, not only singleton-top `0x1`/`0x2`, bottom-pair `0xc`, and strict controls `0x3`/`0x4`/`0x8`.
+- The new locks preserve their one-frame failures and exact signatures (`0x5 -> bytestream -22`, `0x6 -> bytestream -18`) while recording CBF arithmetic trails, residual byte chunks, stream tails, terminate pre-state, first-payload state, and the common P-slice prefix emit rows.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` passes with masks `0x1`, `0x2`, `0x5`, `0x6`, and `0xc` short at `384/768`, and controls `0x3`, `0x4`, and `0x8` full at `768/768` with exact Cb-only decoded-plane SAD.

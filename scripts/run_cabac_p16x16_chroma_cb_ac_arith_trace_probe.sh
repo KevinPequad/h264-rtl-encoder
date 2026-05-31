@@ -15,7 +15,7 @@ flat = bytes([128]) * ((W // 2) * (H // 2))
 out_dir = Path("data")
 out_dir.mkdir(parents=True, exist_ok=True)
 
-for mask in (0x1, 0x2, 0x3, 0x4, 0x8, 0xC):
+for mask in (0x1, 0x2, 0x3, 0x4, 0x5, 0x6, 0x8, 0xC):
     cb = bytes(
         136
         if (((mask >> ((y // 4) * 2 + (x // 4))) % 2) and ((x + y) % 2))
@@ -47,7 +47,7 @@ PY
 SIM="$(tail -1 "$BUILD_OUT")"
 mkdir -p output/cabac_cb_ac_arith_probe
 
-for mask in 1 2 3 4 8 c; do
+for mask in 1 2 3 4 5 6 8 c; do
   "$SIM" \
     +frames=2 \
     +timeout=5000000 \
@@ -117,6 +117,28 @@ EXPECTED = {
         "emit_tail": [("eb", 32), ("2f", 24), ("a1", 16), ("d5", 8)],
         "term": [(0, "00", 0, 208, 365, -8, 0, 1, "1")],
         "stream": (449, "808080808080808080808080808080808080800000000141d008086beb2fa1d5"),
+    },
+    "5": {
+        "bytes": 384,
+        "signature": "bytestream -22",
+        "cbf": [(0, 1, 119, 117, 309, -7, "bd"), (1, 1, 117, 119, 444, -3, "14"), (2, 3, 105, 103, 327, -3, "14"), (3, 0, 92, 90, 397, -1, "ee"), (4, 7, 105, 109, 468, -7, "92"), (5, 6, 124, 122, 482, -6, "92"), (6, 5, 119, 123, 390, -5, "92"), (7, 4, 92, 90, 304, -5, "92")],
+        "order": [("cbf", 0), ("payload", 0), ("cbf", 1), ("cbf", 2), ("payload", 2), ("cbf", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
+        "first_payload": (0, 22, 0, 122, 120, 362, -6, "bd"),
+        "bits": [(1, 0, 8, "eb", 0), (1, 0, 8, "31", 8), (2, 0, 8, "bd", 16), (2, 0, 8, "e1", 24), (2, 2, 8, "15", 32), (2, 2, 8, "01", 40), (2, 5, 8, "ee", 48)],
+        "emit_tail": [("eb", 56), ("31", 48), ("bd", 40), ("e1", 32), ("15", 24), ("01", 16), ("ee", 8)],
+        "term": [(0, "00", 0, 3774, 304, -5, 0, 1, "92")],
+        "stream": (452, "808080808080808080808080808080800000000141d008086beb31bde11501ee"),
+    },
+    "6": {
+        "bytes": 384,
+        "signature": "bytestream -18",
+        "cbf": [(0, 1, 119, 123, 390, -5, "a4"), (1, 1, 123, 121, 406, -4, "a4"), (2, 3, 105, 103, 291, -2, "99"), (3, 0, 92, 90, 397, -8, "48"), (4, 7, 105, 109, 468, -6, "48"), (5, 6, 124, 122, 482, -5, "48"), (6, 5, 119, 123, 390, -4, "48"), (7, 4, 92, 90, 304, -4, "48")],
+        "order": [("cbf", 0), ("cbf", 1), ("payload", 1), ("cbf", 2), ("payload", 2), ("cbf", 3), ("cbf", 4), ("cbf", 5), ("cbf", 6), ("cbf", 7)],
+        "first_payload": (1, 22, 0, 122, 120, 438, -3, "a4"),
+        "bits": [(1, 0, 8, "eb", 0), (1, 0, 8, "31", 8), (2, 1, 8, "a4", 16), (2, 1, 8, "ee", 24), (2, 2, 8, "99", 32), (2, 2, 8, "33", 40), (2, 2, 8, "d2", 48)],
+        "emit_tail": [("eb", 56), ("31", 48), ("a4", 40), ("ee", 32), ("99", 24), ("33", 16), ("d2", 8)],
+        "term": [(0, "00", 0, 20158, 304, -4, 0, 1, "48")],
+        "stream": (452, "808080808080808080808080808080800000000141d008086beb31a4ee9933d2"),
     },
     "8": {
         "bytes": 768,
@@ -339,5 +361,5 @@ for mask, exp in EXPECTED.items():
         f"early header trail, P-slice emit tail/bit-buffer rows, CBF arithmetic trail, output/emit byte chunks, stream tail, terminate pre-state, first-payload state, and decoded-plane SAD locked"
     )
 
-print("[PASS] CABAC P16x16 Cb-only chroma AC arithmetic trace probe locks failing top/split masks against passing top-pair and bottom-single controls, including early header debug state, P-slice emit tail/bit-buffer rows, residual output/emit byte chunks, stream tails, terminate pre-state, and decoded-plane SAD")
+print("[PASS] CABAC P16x16 Cb-only chroma AC arithmetic trace probe locks failing top, split top+bottom, and bottom-pair masks against passing top-pair and bottom-single controls, including early header debug state, P-slice emit tail/bit-buffer rows, residual output/emit byte chunks, stream tails, terminate pre-state, and decoded-plane SAD")
 PY
