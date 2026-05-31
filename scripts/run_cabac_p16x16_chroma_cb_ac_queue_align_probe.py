@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Staged CABAC core queue-alignment probe for sparse Cb-only chroma AC.
+"""Staged CABAC core queue-alignment probe for sparse chroma AC.
 
-The current integrated CABAC P16x16 source still has a sparse-Cb AC mask
-partition where several masks short-decode.  This probe keeps the canonical
+The current integrated CABAC P16x16 source still has sparse chroma-AC mask
+partitions where several masks short-decode.  This probe keeps the canonical
 checkout untouched, stages an isolated workspace that changes only the CABAC
 core initial output queue from -9 to -8, and verifies that the candidate
-promotes every 16x16 Cb-only AC mask.  It also locks the important negative
-finding that applying that queue shift globally is not yet committable: the
-same candidate regresses a both-plane Cb+Cr AC control.
+promotes every 16x16 Cb-only and Cr-only AC mask.  It also locks the important
+negative finding that applying that queue shift globally is not yet committable:
+the same candidate regresses a both-plane Cb+Cr AC control.
 """
 
 from __future__ import annotations
@@ -50,22 +50,27 @@ def checker_chroma(mask: int = 0xF) -> bytes:
     return bytes(out)
 
 
-def make_fixtures() -> tuple[dict[int, Path], Path]:
+def make_fixtures() -> tuple[dict[int, Path], dict[int, Path], Path]:
     y0 = bytes([64]) * LUMA_SIZE
     y1 = bytes([64]) * LUMA_SIZE
     flat = bytes([128]) * CHROMA_SIZE
     out_dir = ROOT / "data"
     out_dir.mkdir(parents=True, exist_ok=True)
     fixtures: dict[int, Path] = {}
+    cr_fixtures: dict[int, Path] = {}
     for mask in range(1, 16):
         path = out_dir / f"smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_ac_queue_align_mask_{mask:x}.yuv"
         path.write_bytes(y0 + flat + flat + y1 + checker_chroma(mask) + flat)
         fixtures[mask] = path
         print(f"[INFO] CB_AC_QUEUE_ALIGN mask=0x{mask:x} fixture {path} size={path.stat().st_size}")
+        cr_path = out_dir / f"smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_ac_queue_align_mask_{mask:x}.yuv"
+        cr_path.write_bytes(y0 + flat + flat + y1 + flat + checker_chroma(mask))
+        cr_fixtures[mask] = cr_path
+        print(f"[INFO] CR_AC_QUEUE_ALIGN mask=0x{mask:x} fixture {cr_path} size={cr_path.stat().st_size}")
     both = out_dir / "smoke_16x16_2f_cabac_p16x16_chroma_residual_cbcr_ac_queue_align_guard.yuv"
     both.write_bytes(y0 + flat + flat + y1 + checker_chroma(0xF) + checker_chroma(0xF))
     print(f"[INFO] CB_AC_QUEUE_ALIGN both-plane guard fixture {both} size={both.stat().st_size}")
-    return fixtures, both
+    return fixtures, cr_fixtures, both
 
 
 def patch_queue_alignment(workspace: Path) -> None:
@@ -184,6 +189,25 @@ def assert_cb_only(mask: int, fixture: Path, raw: bytes, label: str) -> tuple[in
     return u_sad, v_sad
 
 
+def assert_cr_only(mask: int, fixture: Path, raw: bytes, label: str) -> tuple[int, int]:
+    if len(raw) != EXPECTED_BYTES:
+        raise SystemExit(f"[FAIL] CR_AC_QUEUE_ALIGN {label} mask=0x{mask:x} decoded {len(raw)}/{EXPECTED_BYTES} bytes")
+    src = fixture.read_bytes()
+    if raw[:FRAME_SIZE] != src[:FRAME_SIZE]:
+        raise SystemExit(f"[FAIL] CR_AC_QUEUE_ALIGN {label} mask=0x{mask:x} changed the IDR reference frame")
+    u0 = FRAME_SIZE + LUMA_SIZE
+    v0 = u0 + CHROMA_SIZE
+    u_sad = sum(abs(raw[u0 + i] - src[u0 + i]) for i in range(CHROMA_SIZE))
+    v_sad = sum(abs(raw[v0 + i] - src[v0 + i]) for i in range(CHROMA_SIZE))
+    expected_v = mask.bit_count() * 64
+    if u_sad != 0 or v_sad != expected_v:
+        raise SystemExit(
+            f"[FAIL] CR_AC_QUEUE_ALIGN {label} mask=0x{mask:x} decoded-plane SAD "
+            f"U={u_sad} V={v_sad}, expected U=0 V={expected_v}"
+        )
+    return u_sad, v_sad
+
+
 def check_baseline(sim: Path, fixtures: dict[int, Path]) -> None:
     for mask, fixture in fixtures.items():
         raw, err, h264, _ = run_mask_case(sim, "baseline", mask, fixture)
@@ -208,7 +232,7 @@ def check_baseline(sim: Path, fixtures: dict[int, Path]) -> None:
             )
 
 
-def check_queue_m8(sim: Path, fixtures: dict[int, Path], both_plane_fixture: Path) -> None:
+def check_queue_m8(sim: Path, fixtures: dict[int, Path], cr_fixtures: dict[int, Path], both_plane_fixture: Path) -> None:
     first_payload_bytes: set[int] = set()
     for mask, fixture in fixtures.items():
         raw, err, h264, _ = run_mask_case(sim, "queue_m8", mask, fixture)
@@ -235,6 +259,42 @@ def check_queue_m8(sim: Path, fixtures: dict[int, Path], both_plane_fixture: Pat
             f"[FAIL] CB_AC_QUEUE_ALIGN queue_m8 first payload bytes {sorted(first_payload_bytes)}, expected [0x75]"
         )
 
+    cr_first_payload_bytes: set[int] = set()
+    for mask, fixture in cr_fixtures.items():
+        raw, err, h264, sim_text = run_case(sim, "queue_m8", f"cr_mask_{mask:x}", fixture)
+        expected_blocks = mask.bit_count()
+        for needle in (
+            "cabac_p16x16_mbs=1",
+            "cb_ac_mbs=0",
+            "cr_ac_mbs=1",
+            "cb_ac_blocks=0",
+            f"cr_ac_blocks={expected_blocks}",
+        ):
+            if needle not in sim_text:
+                raise SystemExit(f"[FAIL] CR_AC_QUEUE_ALIGN queue_m8 mask=0x{mask:x} sim log missing {needle}")
+        if err.strip():
+            raise SystemExit(f"[FAIL] CR_AC_QUEUE_ALIGN queue_m8 mask=0x{mask:x} expected clean FFmpeg log, got {err.strip()!r}")
+        u_sad, v_sad = assert_cr_only(mask, fixture, raw, "queue_m8")
+        stream = h264.read_bytes()
+        last_start = stream.rfind(b"\x00\x00\x00\x01")
+        if last_start < 0 or last_start + 9 >= len(stream):
+            raise SystemExit(f"[FAIL] CR_AC_QUEUE_ALIGN queue_m8 mask=0x{mask:x} missing final slice payload")
+        if stream[last_start + 8] != 0x6B:
+            raise SystemExit(
+                f"[FAIL] CR_AC_QUEUE_ALIGN queue_m8 mask=0x{mask:x} header-tail byte "
+                f"0x{stream[last_start + 8]:02x}, expected 0x6b"
+            )
+        cr_first_payload_bytes.add(stream[last_start + 9])
+        print(
+            f"[PASS] CR_AC_QUEUE_ALIGN queue_m8 mask=0x{mask:x} strict-decodes "
+            f"{len(raw)}/{EXPECTED_BYTES} size={h264.stat().st_size} first_payload=0x{stream[last_start + 9]:02x} "
+            f"U_SAD={u_sad} V_SAD={v_sad}"
+        )
+    if cr_first_payload_bytes != {0x75}:
+        raise SystemExit(
+            f"[FAIL] CR_AC_QUEUE_ALIGN queue_m8 first payload bytes {sorted(cr_first_payload_bytes)}, expected [0x75]"
+        )
+
     raw, err, _h264, sim_text = run_case(sim, "queue_m8", "both_planes_guard", both_plane_fixture)
     for needle in (
         "cabac_p16x16_mbs=1",
@@ -257,16 +317,16 @@ def check_queue_m8(sim: Path, fixtures: dict[int, Path], both_plane_fixture: Pat
 
 
 def main() -> None:
-    fixtures, both_plane_fixture = make_fixtures()
+    fixtures, cr_fixtures, both_plane_fixture = make_fixtures()
     baseline = build_candidate("baseline", patch_queue=False)
     check_baseline(baseline, fixtures)
     queue_m8 = build_candidate("queue_m8", patch_queue=True)
-    check_queue_m8(queue_m8, fixtures, both_plane_fixture)
+    check_queue_m8(queue_m8, fixtures, cr_fixtures, both_plane_fixture)
     print(
-        "[PASS] CABAC P16x16 Cb-only chroma-AC queue-alignment staged probe: "
+        "[PASS] CABAC P16x16 chroma-AC queue-alignment staged probe: "
         "baseline sparse-Cb partition is unchanged; globally changing h264_cabac_core "
-        "cod_i_queue initialization from -9 to -8 promotes all 15 Cb-only AC masks to strict "
-        "two-frame FFmpeg decode, but is explicitly blocked from source promotion by the both-plane "
+        "cod_i_queue initialization from -9 to -8 promotes all 15 Cb-only and all 15 Cr-only AC masks "
+        "to strict two-frame FFmpeg decode, but is explicitly blocked from source promotion by the both-plane "
         "Cb+Cr AC regression guard"
     )
 
