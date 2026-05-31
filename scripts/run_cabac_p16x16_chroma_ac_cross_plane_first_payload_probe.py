@@ -28,8 +28,9 @@ EXPECTED_BYTES = FRAME_SIZE * 2
 EXPECTED_HEADER_TAIL = 0x6B
 
 # Representative cross-plane cases: sparse/sparse top-row, diagonal, split-row,
-# orthogonal axis-pair, bottom/top mirror pairs, dense-Cr, dense-Cb,
-# same-diagonal dense, asymmetric three-block, and dense-both controls.  This is
+# orthogonal axis-pair, bottom/top mirror pairs, bottom-row cross-corners,
+# sparse-Cb plus dense-Cr / dense-Cb plus sparse-Cr right-column controls,
+# dense-Cr, dense-Cb, same-diagonal dense, asymmetric three-block, and dense-both controls.  This is
 # deliberately smaller than the full 15x15 lattice
 # so the cron gate stays
 # bounded while still covering the combinations that used to expose short-decode
@@ -49,8 +50,12 @@ TAILS = {
     (0x3, 0xC): "0000000141d008086b3acc614c37df50ec24aaa82a",
     (0xC, 0x3): "0000000141d008086b3acc626e1472133cb0958454",
     (0x1, 0xF): "0000000141d008086b3acbf59d7451ccca22bad74d",
+    (0x2, 0xF): "0000000141d008086b3acbf4ded3f999944575ae9b",
     (0x8, 0x2): "0000000141d008086b3acbe70e269b",
+    (0x4, 0x8): "0000000141d008086b3acbdfe134e5",
+    (0x8, 0x4): "0000000141d008086b3acbe70e2692",
     (0xF, 0x1): "0000000141d008086b3acc332499ec2488aa9fedd3",
+    (0xF, 0x2): "0000000141d008086b3acc332499ec2488aa9fedd7",
     (0xF, 0xF): "0000000141d008086b7acc",
     (0xE, 0x1): "0000000141d008086b3acc3602d3f58ca1b3b4",
 }
@@ -76,6 +81,7 @@ AMPLITUDE_TAILS = {
     (0x6, 0x9, 96, 160): "0000000141d008086b7ffeef",
     (0x9, 0x6, 160, 96): "0000000141d008086b7ade",
     (0xC, 0x3, 96, 160): "0000000141d008086bbaff",
+    (0x2, 0xF, 160, 96): "0000000141d008086b3aff7dbfbe",
 }
 
 
@@ -273,7 +279,8 @@ def main() -> int:
         check_case(sim, cb_mask, cr_mask, tail, cb_value, cr_value)
     print(
         "[PASS] CABAC P16x16 cross-plane chroma-AC gate promoted: representative "
-        "sparse/sparse, mirror, split-row, orthogonal axis-pair, same-diagonal dense, "
+        "sparse/sparse, mirror, split-row, bottom-row cross-corner, "
+        "orthogonal axis-pair, sparse+dense right-column, same-diagonal dense, "
         "asymmetric three-block, dense-Cb, dense-Cr, and dense-both Cb+Cr AC masks "
         "plus positive, reciprocal, and mixed-sign "
         "high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
