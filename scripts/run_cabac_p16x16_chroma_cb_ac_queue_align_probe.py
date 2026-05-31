@@ -208,7 +208,44 @@ def assert_cr_only(mask: int, fixture: Path, raw: bytes, label: str) -> tuple[in
     return u_sad, v_sad
 
 
-def check_baseline(sim: Path, fixtures: dict[int, Path]) -> None:
+def assert_both_planes(fixture: Path, raw: bytes, label: str) -> tuple[int, int]:
+    if len(raw) != EXPECTED_BYTES:
+        raise SystemExit(f"[FAIL] CB_AC_QUEUE_ALIGN {label} decoded {len(raw)}/{EXPECTED_BYTES} bytes")
+    src = fixture.read_bytes()
+    if raw[:FRAME_SIZE] != src[:FRAME_SIZE]:
+        raise SystemExit(f"[FAIL] CB_AC_QUEUE_ALIGN {label} changed the IDR reference frame")
+    u0 = FRAME_SIZE + LUMA_SIZE
+    v0 = u0 + CHROMA_SIZE
+    u_sad = sum(abs(raw[u0 + i] - src[u0 + i]) for i in range(CHROMA_SIZE))
+    v_sad = sum(abs(raw[v0 + i] - src[v0 + i]) for i in range(CHROMA_SIZE))
+    if u_sad != 256 or v_sad != 256:
+        raise SystemExit(
+            f"[FAIL] CB_AC_QUEUE_ALIGN {label} decoded-plane SAD "
+            f"U={u_sad} V={v_sad}, expected U=256 V=256"
+        )
+    return u_sad, v_sad
+
+
+def assert_both_plane_counters(sim_text: str, label: str) -> None:
+    for needle in (
+        "cabac_p16x16_mbs=1",
+        "cb_ac_mbs=1",
+        "cr_ac_mbs=1",
+        "cb_ac_blocks=4",
+        "cr_ac_blocks=4",
+    ):
+        if needle not in sim_text:
+            raise SystemExit(f"[FAIL] CB_AC_QUEUE_ALIGN {label} sim log missing {needle}")
+
+
+def final_slice(stream: bytes, label: str) -> bytes:
+    last_start = stream.rfind(b"\x00\x00\x00\x01")
+    if last_start < 0:
+        raise SystemExit(f"[FAIL] CB_AC_QUEUE_ALIGN {label} missing final Annex-B start code")
+    return stream[last_start:]
+
+
+def check_baseline(sim: Path, fixtures: dict[int, Path], both_plane_fixture: Path) -> bytes:
     for mask, fixture in fixtures.items():
         raw, err, h264, _ = run_mask_case(sim, "baseline", mask, fixture)
         if mask in BASELINE_FULL:
@@ -231,8 +268,33 @@ def check_baseline(sim: Path, fixtures: dict[int, Path]) -> None:
                 f"{len(raw)}/{EXPECTED_BYTES} with {signature}"
             )
 
+    raw, err, h264, sim_text = run_case(sim, "baseline", "both_planes_guard", both_plane_fixture)
+    assert_both_plane_counters(sim_text, "baseline both-plane guard")
+    if err.strip():
+        raise SystemExit(f"[FAIL] CB_AC_QUEUE_ALIGN baseline both-plane guard expected clean FFmpeg log, got {err.strip()!r}")
+    u_sad, v_sad = assert_both_planes(both_plane_fixture, raw, "baseline both-plane guard")
+    stream = h264.read_bytes()
+    tail = final_slice(stream, "baseline both-plane guard")
+    expected_tail = bytes.fromhex("0000000141d008086beb")
+    if tail != expected_tail:
+        raise SystemExit(
+            f"[FAIL] CB_AC_QUEUE_ALIGN baseline both-plane final slice {tail.hex()}, expected {expected_tail.hex()}"
+        )
+    print(
+        "[PASS] CB_AC_QUEUE_ALIGN baseline both-plane guard remains strict "
+        f"{len(raw)}/{EXPECTED_BYTES} size={h264.stat().st_size} final_slice={tail.hex()} "
+        f"U_SAD={u_sad} V_SAD={v_sad}"
+    )
+    return stream
 
-def check_queue_m8(sim: Path, fixtures: dict[int, Path], cr_fixtures: dict[int, Path], both_plane_fixture: Path) -> None:
+
+def check_queue_m8(
+    sim: Path,
+    fixtures: dict[int, Path],
+    cr_fixtures: dict[int, Path],
+    both_plane_fixture: Path,
+    baseline_both_stream: bytes,
+) -> None:
     first_payload_bytes: set[int] = set()
     for mask, fixture in fixtures.items():
         raw, err, h264, _ = run_mask_case(sim, "queue_m8", mask, fixture)
@@ -295,39 +357,50 @@ def check_queue_m8(sim: Path, fixtures: dict[int, Path], cr_fixtures: dict[int, 
             f"[FAIL] CR_AC_QUEUE_ALIGN queue_m8 first payload bytes {sorted(cr_first_payload_bytes)}, expected [0x75]"
         )
 
-    raw, err, _h264, sim_text = run_case(sim, "queue_m8", "both_planes_guard", both_plane_fixture)
-    for needle in (
-        "cabac_p16x16_mbs=1",
-        "cb_ac_mbs=1",
-        "cr_ac_mbs=1",
-        "cb_ac_blocks=4",
-        "cr_ac_blocks=4",
-    ):
-        if needle not in sim_text:
-            raise SystemExit(f"[FAIL] CB_AC_QUEUE_ALIGN queue_m8 both-plane guard sim log missing {needle}")
+    raw, err, h264, sim_text = run_case(sim, "queue_m8", "both_planes_guard", both_plane_fixture)
+    assert_both_plane_counters(sim_text, "queue_m8 both-plane guard")
     if len(raw) != FRAME_SIZE or "bytestream -9" not in err:
         raise SystemExit(
             "[FAIL] CB_AC_QUEUE_ALIGN queue_m8 both-plane guard no longer locks the global -8 regression: "
             f"decoded={len(raw)}/{EXPECTED_BYTES} err={err.strip()!r}"
         )
+    queue_stream = h264.read_bytes()
+    baseline_tail = final_slice(baseline_both_stream, "baseline both-plane guard")
+    queue_tail = final_slice(queue_stream, "queue_m8 both-plane guard")
+    expected_baseline_tail = bytes.fromhex("0000000141d008086beb")
+    expected_queue_tail = bytes.fromhex("0000000141d008086bf599")
+    if baseline_tail != expected_baseline_tail or queue_tail != expected_queue_tail:
+        raise SystemExit(
+            "[FAIL] CB_AC_QUEUE_ALIGN queue_m8 both-plane final-slice drift: "
+            f"baseline={baseline_tail.hex()} queue_m8={queue_tail.hex()}"
+        )
+    common = min(len(baseline_tail), len(queue_tail))
+    diffs = [(idx, baseline_tail[idx], queue_tail[idx]) for idx in range(common) if baseline_tail[idx] != queue_tail[idx]]
+    if diffs != [(9, 0xEB, 0xF5)] or queue_tail[common:] != b"\x99":
+        raise SystemExit(
+            "[FAIL] CB_AC_QUEUE_ALIGN queue_m8 both-plane diff drift: "
+            f"diffs={[(idx, hex(a), hex(b)) for idx, a, b in diffs]} extra={queue_tail[common:].hex()}"
+        )
     print(
         "[PASS] CB_AC_QUEUE_ALIGN queue_m8 both-plane guard confirms global -8 remains non-committable: "
-        f"decoded={len(raw)}/{EXPECTED_BYTES} with bytestream -9"
+        f"decoded={len(raw)}/{EXPECTED_BYTES} with bytestream -9; final_slice {baseline_tail.hex()} -> "
+        f"{queue_tail.hex()} (first residual byte 0xeb->0xf5 plus trailing 0x99)"
     )
 
 
 def main() -> None:
     fixtures, cr_fixtures, both_plane_fixture = make_fixtures()
     baseline = build_candidate("baseline", patch_queue=False)
-    check_baseline(baseline, fixtures)
+    baseline_both_stream = check_baseline(baseline, fixtures, both_plane_fixture)
     queue_m8 = build_candidate("queue_m8", patch_queue=True)
-    check_queue_m8(queue_m8, fixtures, cr_fixtures, both_plane_fixture)
+    check_queue_m8(queue_m8, fixtures, cr_fixtures, both_plane_fixture, baseline_both_stream)
     print(
         "[PASS] CABAC P16x16 chroma-AC queue-alignment staged probe: "
         "baseline sparse-Cb partition is unchanged; globally changing h264_cabac_core "
         "cod_i_queue initialization from -9 to -8 promotes all 15 Cb-only and all 15 Cr-only AC masks "
         "to strict two-frame FFmpeg decode, but is explicitly blocked from source promotion by the both-plane "
-        "Cb+Cr AC regression guard"
+        "Cb+Cr AC regression guard, now locked to the 0xeb->0xf5 first-residual-byte plus trailing-0x99 "
+        "final-slice mutation"
     )
 
 
