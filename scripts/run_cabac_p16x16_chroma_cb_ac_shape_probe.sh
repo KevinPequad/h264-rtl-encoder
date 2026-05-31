@@ -96,8 +96,9 @@ CASES = [
 # coefficient shape/order/arithmetic-tail failures from the low-amplitude
 # quantizer cutoff.  The +32 axis cases are especially useful because their +5
 # counterparts include several strict-decode passes; at higher amplitude all
-# single-block axis patterns short-decode, so the remaining blocker is tied to
-# multi-bin level/suffix emission rather than only sparse CBF context selection.
+# checker/diagonal/axis shapes now short-decode, so the remaining blocker is
+# tied to multi-bin level/suffix emission rather than only sparse CBF context
+# selection or the low-amplitude checker parity partition.
 DIAG32_CASES = [
     (0, "diag_main", False, "bytestream -15", "0000000141d008086beb31d8697707c50a"),
     (0, "diag_anti", False, "bytestream -15", "0000000141d008086beb31d8697707c53d"),
@@ -107,6 +108,16 @@ DIAG32_CASES = [
     (2, "diag_anti", False, "bytestream -17", "0000000141d008086beb31d8f0eab89b6f"),
     (3, "diag_main", False, "bytestream -13", "0000000141d008086beb31d87ae4c8b5f3"),
     (3, "diag_anti", False, "bytestream -15", "0000000141d008086beb31d87ae4c8b5f4"),
+]
+CHECKER32_CASES = [
+    (0, "checker_odd", False, "bytestream -32", "0000000141d008086beb31d5c0504295"),
+    (0, "checker_even", False, "bytestream -20", "0000000141d008086beb31d5c0504292"),
+    (1, "checker_odd", False, "bytestream -28", "0000000141d008086beb31d699eb0f53"),
+    (1, "checker_even", False, "bytestream -26", "0000000141d008086beb31d699eb0f52"),
+    (2, "checker_odd", False, "bytestream -20", "0000000141d008086beb31d6bc810002"),
+    (2, "checker_even", False, "bytestream -14", "0000000141d008086beb31d6bc810001"),
+    (3, "checker_odd", False, "bytestream -22", "0000000141d008086beb31d5f79710f5"),
+    (3, "checker_even", False, "bytestream -22", "0000000141d008086beb31d5f79710f5"),
 ]
 AXIS32_CASES = [
     (0, "vert_left", False, "bytestream -20", "0000000141d008086beb31d5c0ac"),
@@ -132,6 +143,9 @@ ALL_CASES = [
 ] + [
     (block, pattern_name, f"{pattern_name}_a32", 160, expect_full, short_signature, expected_final_slice)
     for block, pattern_name, expect_full, short_signature, expected_final_slice in DIAG32_CASES
+] + [
+    (block, pattern_name, f"{pattern_name}_a32", 160, expect_full, short_signature, expected_final_slice)
+    for block, pattern_name, expect_full, short_signature, expected_final_slice in CHECKER32_CASES
 ] + [
     (block, pattern_name, f"{pattern_name}_a32", 160, expect_full, short_signature, expected_final_slice)
     for block, pattern_name, expect_full, short_signature, expected_final_slice in AXIS32_CASES
@@ -243,5 +257,5 @@ for block, pattern_name, test_name, cb_value, expect_full, short_signature, expe
 
     raw_yuv.unlink(missing_ok=True)
 
-print("[PASS] CABAC P16x16 sparse Cb AC shape probe locks coefficient-shape-sensitive strict/miss partition, exact final-slice tails, and high-amplitude diagonal/axis all-miss signatures under common first payload byte eb; repair target is residual coefficient level/suffix emission/order/arithmetic tail, not only top-row block placement, sparse CBF context selection, or the P-slice boundary")
+print("[PASS] CABAC P16x16 sparse Cb AC shape probe locks coefficient-shape-sensitive strict/miss partition, exact final-slice tails, and high-amplitude checker/diagonal/axis all-miss signatures under common first payload byte eb; repair target is residual coefficient level/suffix emission/order/arithmetic tail, not only top-row block placement, sparse CBF context selection, low-amplitude checker parity, or the P-slice boundary")
 PY
