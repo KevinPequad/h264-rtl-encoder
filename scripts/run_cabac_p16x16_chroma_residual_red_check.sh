@@ -60,7 +60,9 @@ run_case() {
   local expected_cr_dc_mbs="$5"
   local expected_cb_ac_blocks="$6"
   local expected_cr_ac_blocks="$7"
-  local expect_ffmpeg_fail="${8:-0}"
+  local expected_u_sad="$8"
+  local expected_v_sad="$9"
+  local expect_ffmpeg_fail="${10:-0}"
   local h264="output/cabac_p16x16_chroma_residual_${name}.h264"
   local sim_log="output/validation_cabac_p16x16_chroma_residual_${name}.sim.log"
   local ffmpeg_log="output/validation_cabac_p16x16_chroma_residual_${name}.ffmpeg.log"
@@ -153,11 +155,13 @@ run_case() {
     exit 1
   fi
 
-  python3 - "$name" "$input" "$raw_yuv" <<'PY'
+  python3 - "$name" "$input" "$raw_yuv" "$expected_u_sad" "$expected_v_sad" <<'PY'
 import sys
 from pathlib import Path
 
 name, input_path, decoded_path = sys.argv[1:4]
+expected_u_sad = int(sys.argv[4])
+expected_v_sad = int(sys.argv[5])
 width = height = 16
 frame_size = width * height * 3 // 2
 luma_size = width * height
@@ -173,6 +177,12 @@ u0 = frame1 + luma_size
 v0 = u0 + chroma_size
 u_sad = sum(abs(dec[u0 + i] - src[u0 + i]) for i in range(chroma_size))
 v_sad = sum(abs(dec[v0 + i] - src[v0 + i]) for i in range(chroma_size))
+
+if u_sad != expected_u_sad or v_sad != expected_v_sad:
+    raise SystemExit(
+        f"[FAIL] chroma residual {name} decoded-plane SAD drift: "
+        f"U_SAD={u_sad} V_SAD={v_sad}, expected U_SAD={expected_u_sad} V_SAD={expected_v_sad}"
+    )
 
 if name.startswith("cb_"):
     if u_sad == 0 or v_sad != 0:
@@ -198,10 +208,10 @@ PY
   fi
 }
 
-run_case "cb_dc" "$INPUT_CB_DC" 1 1 0 0 0
-run_case "cb_ac" "$INPUT_CB_AC" 2 1 0 4 0
-run_case "cr_dc" "$INPUT_CR_DC" 1 0 1 0 0
+run_case "cb_dc" "$INPUT_CB_DC" 1 1 0 0 0 512 0
+run_case "cb_ac" "$INPUT_CB_AC" 2 1 0 4 0 256 0
+run_case "cr_dc" "$INPUT_CR_DC" 1 0 1 0 0 0 512
 
-run_case "cr_ac" "$INPUT_CR_AC" 2 0 1 0 4
+run_case "cr_ac" "$INPUT_CR_AC" 2 0 1 0 4 0 256
 
 echo "[PASS] CABAC P16x16 Cb/Cr DC-only and DC+AC chroma residual smoke streams strict-decoded"
