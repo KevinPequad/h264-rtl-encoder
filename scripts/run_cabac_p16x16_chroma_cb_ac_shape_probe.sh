@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+cd "$ROOT"
+export PATH=/home/chudpc/.local/verilator-5.020/bin:$PATH
+
+BUILD_OUT="$(mktemp /tmp/h264_cabac_cb_ac_shape_probe_build.XXXXXX)"
+python3 - <<'PY' > "$BUILD_OUT"
+from scripts.rtl_runner import BuildConfig, build_sim, stage_workspace
+workspace = stage_workspace('h264_cabac_cb_ac_shape_probe_')
+config = BuildConfig(
+    width=16,
+    height=16,
+    bit_depth=8,
+    chroma_format_idc=1,
+    jobs=1,
+    enable_idr_ipcm=1,
+    ipcm_sad_threshold=0,
+    enable_cabac_p16x16=1,
+)
+print(build_sim(workspace, config))
+PY
+SIM="$(tail -1 "$BUILD_OUT")"
+mkdir -p output/cabac_cb_ac_shape_probe data
+
+python3 - "$SIM" <<'PY'
+from pathlib import Path
+import subprocess
+import sys
+
+sim = sys.argv[1]
+root = Path.cwd()
+width = height = 16
+frame_size = width * height * 3 // 2
+expected_bytes = frame_size * 2
+chroma_size = width * height // 4
+flat_chroma = bytes([128]) * chroma_size
+y0 = bytes([64]) * (width * height)
+y1 = bytes([64]) * (width * height)
+
+# All cases use the first nonzero quantized AC step (+5) that the amplitude
+# probe already locked.  This narrows the blocker from "top-row sparse Cb AC"
+# to the residual coefficient shape/order itself: some top-row Cb AC shapes
+# strict-decode, and some bottom-row shapes can still short-decode.
+PATTERNS = {
+    "checker_odd": lambda x, y: (x + y) & 1,
+    "checker_even": lambda x, y: ((x + y) & 1) ^ 1,
+    "vert_left": lambda x, y: x < 2,
+    "horiz_top": lambda x, y: y < 2,
+}
+CASES = [
+    # block, pattern, expect_full_decode, short FFmpeg signature when not full
+    (0, "checker_odd", False, "bytestream -19"),
+    (0, "vert_left", True, ""),
+    (0, "horiz_top", False, "bytestream -23"),
+    (1, "checker_odd", False, "bytestream -21"),
+    (1, "vert_left", True, ""),
+    (1, "horiz_top", True, ""),
+    (2, "checker_odd", True, ""),
+    (2, "checker_even", False, "bytestream -5"),
+    (3, "checker_odd", True, ""),
+    (3, "vert_left", False, "bytestream -6"),
+]
+
+
+def make_fixture(block: int, pattern_name: str) -> Path:
+    bx = (block & 1) * 4
+    by = (block >> 1) * 4
+    cb = bytearray(flat_chroma)
+    pattern = PATTERNS[pattern_name]
+    for ly in range(4):
+        for lx in range(4):
+            if pattern(lx, ly):
+                cb[(by + ly) * (width // 2) + (bx + lx)] = 133
+    out = root / "data" / f"smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_ac_shape_blk{block}_{pattern_name}.yuv"
+    out.write_bytes(y0 + flat_chroma + flat_chroma + y1 + bytes(cb) + flat_chroma)
+    print(f"[INFO] CB_AC_SHAPE block={block} pattern={pattern_name} fixture {out.relative_to(root)} size={out.stat().st_size}")
+    return out
+
+
+def extract_signature(text: str) -> str:
+    if "bytestream -" in text:
+        return "bytestream -" + text.split("bytestream -", 1)[1].split("\n", 1)[0]
+    return text.strip().split("\n")[-1] if text.strip() else ""
+
+
+for block, pattern_name, expect_full, short_signature in CASES:
+    input_path = make_fixture(block, pattern_name)
+    h264 = root / "output" / "cabac_cb_ac_shape_probe" / f"blk{block}_{pattern_name}.h264"
+    sim_log = root / "output" / "cabac_cb_ac_shape_probe" / f"blk{block}_{pattern_name}.sim.log"
+    ffmpeg_log = root / "output" / "cabac_cb_ac_shape_probe" / f"blk{block}_{pattern_name}.ffmpeg.log"
+    raw_yuv = Path(f"/tmp/h264_cabac_cb_ac_shape_blk{block}_{pattern_name}.raw.yuv")
+
+    with sim_log.open("w", encoding="utf-8") as log:
+        subprocess.run(
+            [sim, "+frames=2", "+timeout=5000000", f"+input={input_path}", f"+output={h264}", "+idr_interval=12"],
+            cwd=root,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            check=True,
+        )
+    sim_text = sim_log.read_text(errors="ignore")
+    for needle in ("cabac_p16x16_mbs=1", "cabac_chroma_ac_mbs=1", "cb_ac_mbs=1", "cb_ac_blocks=1", "cr_ac_mbs=0", "cr_ac_blocks=0"):
+        if needle not in sim_text:
+            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} sim log missing {needle}")
+
+    with ffmpeg_log.open("w", encoding="utf-8") as log:
+        subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-xerror", "-i", str(h264), "-f", "rawvideo", "-pix_fmt", "yuv420p", str(raw_yuv)],
+            cwd=root,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            check=False,
+        )
+    actual_bytes = raw_yuv.stat().st_size if raw_yuv.exists() else 0
+    ff_text = ffmpeg_log.read_text(errors="ignore")
+
+    if expect_full:
+        if ff_text.strip():
+            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} expected clean FFmpeg log, got {ff_text.strip()!r}")
+        if actual_bytes != expected_bytes:
+            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} decoded {actual_bytes}/{expected_bytes}, expected strict full decode")
+        dec = raw_yuv.read_bytes()
+        src = input_path.read_bytes()
+        u0 = frame_size + width * height
+        v0 = u0 + chroma_size
+        u_sad = sum(abs(dec[u0 + i] - src[u0 + i]) for i in range(chroma_size))
+        v_sad = sum(abs(dec[v0 + i] - src[v0 + i]) for i in range(chroma_size))
+        if u_sad == 0 or v_sad != 0:
+            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} expected Cb-only decoded delta, got U_SAD={u_sad} V_SAD={v_sad}")
+        print(f"[PASS] CB_AC_SHAPE block={block} pattern={pattern_name} strict-decodes {actual_bytes}/{expected_bytes} with Cb-only U_SAD={u_sad}")
+    else:
+        if actual_bytes != frame_size:
+            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} decoded {actual_bytes}/{expected_bytes}, expected one-frame miss")
+        signature = extract_signature(ff_text)
+        if short_signature not in signature:
+            raise SystemExit(
+                f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} expected FFmpeg signature "
+                f"{short_signature!r}, got {ff_text.strip()!r}"
+            )
+        print(f"[PASS] CB_AC_SHAPE block={block} pattern={pattern_name} remains one-frame miss {actual_bytes}/{expected_bytes} with FFmpeg signature {short_signature}")
+
+    raw_yuv.unlink(missing_ok=True)
+
+print("[PASS] CABAC P16x16 sparse Cb AC shape probe locks coefficient-shape-sensitive strict/miss partition; repair target is residual coefficient emission/order, not only top-row block placement")
+PY
