@@ -258,14 +258,17 @@ def check_both_plane_guard(sim: Path, fixture: Path) -> None:
         raise SystemExit(f"[FAIL] CB_AC_FIRST_PAYLOAD_SUB both-plane guard baseline FFmpeg log {err.strip()!r}")
     base_u, base_v = assert_both_planes(fixture, raw, "both-plane baseline")
 
-    raw_075, err_075 = decode_raw(mutate_first_payload(stream, first_idx, QUEUE_M8_FIRST_PAYLOAD))
-    if err_075.strip():
-        raise SystemExit(f"[FAIL] CB_AC_FIRST_PAYLOAD_SUB both-plane guard 0x75 FFmpeg log {err_075.strip()!r}")
-    sub_u, sub_v = assert_both_planes(fixture, raw_075, "both-plane 0x75 substitution")
-    print(
-        "[PASS] CB_AC_FIRST_PAYLOAD_SUB both-plane guard stays strict under exact 0x75 first-payload "
-        f"substitution: baseline U_SAD={base_u} V_SAD={base_v}; sub U_SAD={sub_u} V_SAD={sub_v}"
-    )
+    for label, value in (("0x75", QUEUE_M8_FIRST_PAYLOAD), ("0x6b", BIT7_PROMOTED_PAYLOAD)):
+        raw_sub, err_sub = decode_raw(mutate_first_payload(stream, first_idx, value))
+        if err_sub.strip():
+            raise SystemExit(
+                f"[FAIL] CB_AC_FIRST_PAYLOAD_SUB both-plane guard {label} FFmpeg log {err_sub.strip()!r}"
+            )
+        sub_u, sub_v = assert_both_planes(fixture, raw_sub, f"both-plane {label} substitution")
+        print(
+            f"[PASS] CB_AC_FIRST_PAYLOAD_SUB both-plane guard stays strict under {label} first-payload "
+            f"substitution: baseline U_SAD={base_u} V_SAD={base_v}; sub U_SAD={sub_u} V_SAD={sub_v}"
+        )
 
 
 def main() -> None:
@@ -276,9 +279,9 @@ def main() -> None:
     check_both_plane_guard(sim, both_fixture)
     print(
         "[PASS] CABAC P16x16 Cb-only chroma-AC first-payload substitution probe: exact 0xeb->0x75 "
-        "mutation promotes all Cb-only AC masks like the staged queue_m8 candidate, and the dense Cb+Cr "
-        "guard still strict-decodes under the same one-byte substitution.  This separates the useful first-byte "
-        "correction from the non-committable global queue-shift side effect, so the next fix should target "
+        "mutation promotes all Cb-only AC masks like the staged queue_m8 candidate; the bit7 0xeb->0x6b "
+        "mutation also promotes them; and the dense Cb+Cr guard still strict-decodes under both one-byte "
+        "substitutions.  This separates useful first-byte corrections from the non-committable global queue-shift side effect, so the next fix should target "
         "CABAC first-payload generation while preserving later both-plane arithmetic/output state"
     )
 

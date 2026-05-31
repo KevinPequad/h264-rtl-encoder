@@ -336,3 +336,11 @@ Next useful probe:
 - The `queue_m8` staged variant promotes all 15 nonzero Cb-only chroma-AC masks to clean two-frame FFmpeg decode (`768/768`) with a byte-identical IDR frame, first CABAC payload byte `0x75`, and exact Cb-only decoded-plane SAD (`64 * popcount(mask)`, `V_SAD=0`).
 - This is the first single-source-line class candidate that promotes the full Cb-only AC mask lattice without changing CBF selectors or residual binarization. Next repair should land the queue alignment in `rtl/h264_cabac_core.v`, then refresh the stale expected-miss diagnostics and run the broader CABAC P16x16/luma/chroma gates before claiming the sparse-Cb blocker closed.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_queue_align_probe.py` passes.
+
+## 2026-05-30 queue-shift guard and first-payload substitution split
+
+- Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_queue_align_probe.py` with a dense Cb+Cr AC guard. The staged global `cod_i_queue -9 -> -8` change still promotes every Cb-only AC mask, but it regresses the dense both-plane AC control to one decoded frame (`384/768`, `bytestream -9`). That makes the global queue initialization shift non-committable as a source fix.
+- Added and then extended `scripts/run_cabac_p16x16_chroma_cb_ac_first_payload_substitution_probe.py`. The probe mutates only the first CABAC residual payload byte after the locked `d0 08 08 6b` P-slice header, leaving the generated RTL stream otherwise untouched.
+- Exact `0xeb -> 0x75` and bit7 `0xeb -> 0x6b` first-payload substitutions both promote all 15 Cb-only AC masks to clean two-frame decode (`768/768`) with exact Cb-only decoded-plane SAD (`64 * popcount(mask)`, `V_SAD=0`).
+- The dense Cb+Cr AC guard remains strict under both one-byte substitutions with `U_SAD=256 V_SAD=256`, separating the useful first-byte correction family from the later arithmetic/output-state side effect that makes the global queue shift unsafe.
+- Next repair target: scoped CABAC first-payload generation/alignment for the chroma-AC residual path while preserving the existing later arithmetic state that keeps dense Cb+Cr AC strict-decodable.
