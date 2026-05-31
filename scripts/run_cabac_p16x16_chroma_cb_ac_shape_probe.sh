@@ -92,8 +92,12 @@ CASES = [
 
 # Diagonal +5 samples quantize below the current Cb-AC emission threshold and
 # collapse to the no-residual CABAC P-slice tail.  Use the already-probed +32
-# chroma step for a diagonal-only lock so this diagnostic distinguishes
-# coefficient shape/order from the low-amplitude quantizer cutoff.
+# chroma step for diagonal and axis-shape locks so this diagnostic distinguishes
+# coefficient shape/order/arithmetic-tail failures from the low-amplitude
+# quantizer cutoff.  The +32 axis cases are especially useful because their +5
+# counterparts include several strict-decode passes; at higher amplitude all
+# single-block axis patterns short-decode, so the remaining blocker is tied to
+# multi-bin level/suffix emission rather than only sparse CBF context selection.
 DIAG32_CASES = [
     (0, "diag_main", False, "bytestream -15", "0000000141d008086beb31d8697707c50a"),
     (0, "diag_anti", False, "bytestream -15", "0000000141d008086beb31d8697707c53d"),
@@ -104,12 +108,33 @@ DIAG32_CASES = [
     (3, "diag_main", False, "bytestream -13", "0000000141d008086beb31d87ae4c8b5f3"),
     (3, "diag_anti", False, "bytestream -15", "0000000141d008086beb31d87ae4c8b5f4"),
 ]
+AXIS32_CASES = [
+    (0, "vert_left", False, "bytestream -20", "0000000141d008086beb31d5c0ac"),
+    (0, "vert_right", False, "bytestream -20", "0000000141d008086beb31d5c0ac"),
+    (0, "horiz_top", False, "bytestream -21", "0000000141d008086beb31d5c008ac"),
+    (0, "horiz_bottom", False, "bytestream -17", "0000000141d008086beb31d5c008a0"),
+    (1, "vert_left", False, "bytestream -27", "0000000141d008086beb31d69a089c"),
+    (1, "vert_right", False, "bytestream -31", "0000000141d008086beb31d69a0897"),
+    (1, "horiz_top", False, "bytestream -26", "0000000141d008086beb31d699cf"),
+    (1, "horiz_bottom", False, "bytestream -26", "0000000141d008086beb31d699cf"),
+    (2, "vert_left", False, "bytestream -18", "0000000141d008086beb31d6bc93"),
+    (2, "vert_right", False, "bytestream -18", "0000000141d008086beb31d6bc93"),
+    (2, "horiz_top", False, "bytestream -16", "0000000141d008086beb31d6bc73"),
+    (2, "horiz_bottom", False, "bytestream -16", "0000000141d008086beb31d6bc73"),
+    (3, "vert_left", False, "bytestream -27", "0000000141d008086beb31d5f798e9"),
+    (3, "vert_right", False, "bytestream -27", "0000000141d008086beb31d5f798e9"),
+    (3, "horiz_top", False, "bytestream -19", "0000000141d008086beb31d5f795ab"),
+    (3, "horiz_bottom", False, "bytestream -19", "0000000141d008086beb31d5f795ab"),
+]
 ALL_CASES = [
     (block, pattern_name, pattern_name, 133, expect_full, short_signature, expected_final_slice)
     for block, pattern_name, expect_full, short_signature, expected_final_slice in CASES
 ] + [
     (block, pattern_name, f"{pattern_name}_a32", 160, expect_full, short_signature, expected_final_slice)
     for block, pattern_name, expect_full, short_signature, expected_final_slice in DIAG32_CASES
+] + [
+    (block, pattern_name, f"{pattern_name}_a32", 160, expect_full, short_signature, expected_final_slice)
+    for block, pattern_name, expect_full, short_signature, expected_final_slice in AXIS32_CASES
 ]
 
 
@@ -218,5 +243,5 @@ for block, pattern_name, test_name, cb_value, expect_full, short_signature, expe
 
     raw_yuv.unlink(missing_ok=True)
 
-print("[PASS] CABAC P16x16 sparse Cb AC shape probe locks coefficient-shape-sensitive strict/miss partition, exact final-slice tails, and high-amplitude diagonal all-miss signatures under common first payload byte eb; repair target is residual coefficient emission/order/arithmetic tail, not only top-row block placement or the P-slice boundary")
+print("[PASS] CABAC P16x16 sparse Cb AC shape probe locks coefficient-shape-sensitive strict/miss partition, exact final-slice tails, and high-amplitude diagonal/axis all-miss signatures under common first payload byte eb; repair target is residual coefficient level/suffix emission/order/arithmetic tail, not only top-row block placement, sparse CBF context selection, or the P-slice boundary")
 PY
