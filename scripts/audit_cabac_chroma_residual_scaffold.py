@@ -143,12 +143,17 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "gate_generates_cr_ac_strict_fixture",
         "scripts/run_cabac_p16x16_chroma_residual_red_check.sh",
-        r"INPUT_CR_AC=.*?smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_ac\.yuv.*?'cr_ac':.*?run_case \"cr_ac\" \"\$INPUT_CR_AC\" 2",
+        r"INPUT_CR_AC=.*?smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_ac\.yuv.*?'cr_ac':.*?run_case \"cr_ac\" \"\$INPUT_CR_AC\" 2 0 1 0 4",
     ),
     (
         "gate_checks_cb_vs_cr_ac_plane_counters",
         "scripts/run_cabac_p16x16_chroma_residual_red_check.sh",
         r"cb_ac_mbs=1\s+cr_ac_mbs=0.*?cb_ac_mbs=0\s+cr_ac_mbs=1",
+    ),
+    (
+        "gate_checks_chroma_dc_ac_block_plane_counters",
+        "scripts/run_cabac_p16x16_chroma_residual_red_check.sh",
+        r"expected_cb_dc_mbs=.*?expected_cr_dc_mbs=.*?expected_cb_ac_blocks=.*?expected_cr_ac_blocks=.*?cb_dc_mbs=\$\{expected_cb_dc_mbs\}\s+cr_dc_mbs=\$\{expected_cr_dc_mbs\}.*?cb_ac_blocks=\$\{expected_cb_ac_blocks\}\s+cr_ac_blocks=\$\{expected_cr_ac_blocks\}.*?run_case \"cb_dc\" \"\$INPUT_CB_DC\" 1 1 0 0 0.*?run_case \"cb_ac\" \"\$INPUT_CB_AC\" 2 1 0 4 0.*?run_case \"cr_dc\" \"\$INPUT_CR_DC\" 1 0 1 0 0.*?run_case \"cr_ac\" \"\$INPUT_CR_AC\" 2 0 1 0 4",
     ),
     (
         "gate_checks_decoded_chroma_plane_sanity",
@@ -158,7 +163,7 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "gate_promotes_cr_ac_strict_decode",
         "scripts/run_cabac_p16x16_chroma_residual_red_check.sh",
-        r"run_case \"cr_ac\" \"\$INPUT_CR_AC\" 2\s+echo \"\[PASS\] CABAC P16x16 Cb/Cr DC-only and DC\+AC chroma residual smoke streams strict-decoded\"",
+        r"run_case \"cr_ac\" \"\$INPUT_CR_AC\" 2 0 1 0 4\s+echo \"\[PASS\] CABAC P16x16 Cb/Cr DC-only and DC\+AC chroma residual smoke streams strict-decoded\"",
     ),
     (
         "probe_promotes_both_plane_ac_strict_pass",

@@ -56,7 +56,11 @@ run_case() {
   local name="$1"
   local input="$2"
   local want_cbp_chroma="$3"
-  local expect_ffmpeg_fail="${4:-0}"
+  local expected_cb_dc_mbs="$4"
+  local expected_cr_dc_mbs="$5"
+  local expected_cb_ac_blocks="$6"
+  local expected_cr_ac_blocks="$7"
+  local expect_ffmpeg_fail="${8:-0}"
   local h264="output/cabac_p16x16_chroma_residual_${name}.h264"
   local sim_log="output/validation_cabac_p16x16_chroma_residual_${name}.sim.log"
   local ffmpeg_log="output/validation_cabac_p16x16_chroma_residual_${name}.ffmpeg.log"
@@ -79,14 +83,14 @@ run_case() {
     exit 1
   fi
   if [ "$want_cbp_chroma" = "1" ]; then
-    if ! grep -q '\[CABAC_CHROMA\].*cabac_chroma_dc_mbs=1 cabac_chroma_ac_mbs=0' "$sim_log"; then
-      echo "[FAIL] chroma residual ${name} did not preserve DC-only coded_block_pattern_chroma=1"
+    if ! grep -q "\\[CABAC_CHROMA\\].*cabac_chroma_dc_mbs=1 cabac_chroma_ac_mbs=0 cb_dc_mbs=${expected_cb_dc_mbs} cr_dc_mbs=${expected_cr_dc_mbs} cb_ac_mbs=0 cr_ac_mbs=0 cb_ac_blocks=0 cr_ac_blocks=0" "$sim_log"; then
+      echo "[FAIL] chroma residual ${name} did not preserve DC-only coded_block_pattern_chroma=1 with plane-local DC counters"
       tail -80 "$sim_log"
       exit 1
     fi
   else
-    if ! grep -q '\[CABAC_CHROMA\].*cabac_chroma_dc_mbs=0 cabac_chroma_ac_mbs=1' "$sim_log"; then
-      echo "[FAIL] chroma residual ${name} did not preserve DC+AC coded_block_pattern_chroma=2"
+    if ! grep -q "\\[CABAC_CHROMA\\].*cabac_chroma_dc_mbs=0 cabac_chroma_ac_mbs=1 cb_dc_mbs=${expected_cb_dc_mbs} cr_dc_mbs=${expected_cr_dc_mbs} .*cb_ac_blocks=${expected_cb_ac_blocks} cr_ac_blocks=${expected_cr_ac_blocks}" "$sim_log"; then
+      echo "[FAIL] chroma residual ${name} did not preserve DC+AC coded_block_pattern_chroma=2 with plane-local AC block counters"
       tail -80 "$sim_log"
       exit 1
     fi
@@ -194,10 +198,10 @@ PY
   fi
 }
 
-run_case "cb_dc" "$INPUT_CB_DC" 1
-run_case "cb_ac" "$INPUT_CB_AC" 2
-run_case "cr_dc" "$INPUT_CR_DC" 1
+run_case "cb_dc" "$INPUT_CB_DC" 1 1 0 0 0
+run_case "cb_ac" "$INPUT_CB_AC" 2 1 0 4 0
+run_case "cr_dc" "$INPUT_CR_DC" 1 0 1 0 0
 
-run_case "cr_ac" "$INPUT_CR_AC" 2
+run_case "cr_ac" "$INPUT_CR_AC" 2 0 1 0 4
 
 echo "[PASS] CABAC P16x16 Cb/Cr DC-only and DC+AC chroma residual smoke streams strict-decoded"
