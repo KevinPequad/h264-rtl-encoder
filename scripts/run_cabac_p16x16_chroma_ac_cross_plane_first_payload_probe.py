@@ -30,7 +30,8 @@ EXPECTED_HEADER_TAIL = 0x6B
 # Representative cross-plane cases: sparse/sparse top-row, diagonal, split-row,
 # orthogonal axis-pair, bottom/top mirror pairs, bottom-row cross-corners,
 # sparse-Cb plus dense-Cr / dense-Cb plus sparse-Cr right-column and bottom-row
-# controls, dense-Cr, dense-Cb, same-diagonal dense, asymmetric three-block, and dense-both controls.  This is
+# controls, dense-Cr, dense-Cb, same-diagonal dense, asymmetric three-block,
+# its reciprocal mirror, and dense-both controls.  This is
 # deliberately smaller than the full 15x15 lattice
 # so the cron gate stays
 # bounded while still covering the combinations that used to expose short-decode
@@ -47,6 +48,7 @@ TAILS = {
     (0xC, 0xC): "0000000141d008086b3acc626e3a52133cb094a23a",
     (0xA, 0xA): "0000000141d008086b3acc707c6a06d40d584aefd500",
     (0x7, 0xB): "0000000141d008086b3acc36849d0ec2488aacde0d00000300",
+    (0xB, 0x7): "0000000141d008086b3acc36849d0ec24af9158f060000",
     (0x3, 0xC): "0000000141d008086b3acc614c37df50ec24aaa82a",
     (0xC, 0x3): "0000000141d008086b3acc626e1472133cb0958454",
     (0x1, 0xF): "0000000141d008086b3acbf59d7451ccca22bad74d",
@@ -288,7 +290,8 @@ def main() -> int:
         "[PASS] CABAC P16x16 cross-plane chroma-AC gate promoted: representative "
         "sparse/sparse, mirror, split-row, bottom-row cross-corner, "
         "orthogonal axis-pair, sparse+dense right-column/bottom-row, same-diagonal dense, "
-        "asymmetric three-block, dense-Cb, dense-Cr, and dense-both Cb+Cr AC masks "
+        "asymmetric three-block plus reciprocal mirror, dense-Cb, dense-Cr, "
+        "and dense-both Cb+Cr AC masks "
         "plus positive, reciprocal, and mixed-sign "
         "high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
         "checked-in -7 CABAC queue initializer"
