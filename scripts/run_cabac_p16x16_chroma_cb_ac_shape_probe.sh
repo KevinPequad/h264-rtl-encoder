@@ -50,6 +50,8 @@ PATTERNS = {
     "vert_right": lambda x, y: x >= 2,
     "horiz_top": lambda x, y: y < 2,
     "horiz_bottom": lambda x, y: y >= 2,
+    "diag_main": lambda x, y: x == y,
+    "diag_anti": lambda x, y: x + y == 3,
 }
 CASES = [
     # block, pattern, expect_full_decode, short FFmpeg signature when not full,
@@ -88,8 +90,30 @@ CASES = [
     (3, "horiz_bottom", False, "bytestream -18", "0000000141d008086beb2fc5"),
 ]
 
+# Diagonal +5 samples quantize below the current Cb-AC emission threshold and
+# collapse to the no-residual CABAC P-slice tail.  Use the already-probed +32
+# chroma step for a diagonal-only lock so this diagnostic distinguishes
+# coefficient shape/order from the low-amplitude quantizer cutoff.
+DIAG32_CASES = [
+    (0, "diag_main", False, "bytestream -15", "0000000141d008086beb31d8697707c50a"),
+    (0, "diag_anti", False, "bytestream -15", "0000000141d008086beb31d8697707c53d"),
+    (1, "diag_main", False, "bytestream -11", "0000000141d008086beb31d8e37a23e285"),
+    (1, "diag_anti", False, "bytestream -15", "0000000141d008086beb31d8e37a23e29e"),
+    (2, "diag_main", False, "bytestream -11", "0000000141d008086beb31d8f0eab89b5f"),
+    (2, "diag_anti", False, "bytestream -17", "0000000141d008086beb31d8f0eab89b6f"),
+    (3, "diag_main", False, "bytestream -13", "0000000141d008086beb31d87ae4c8b5f3"),
+    (3, "diag_anti", False, "bytestream -15", "0000000141d008086beb31d87ae4c8b5f4"),
+]
+ALL_CASES = [
+    (block, pattern_name, pattern_name, 133, expect_full, short_signature, expected_final_slice)
+    for block, pattern_name, expect_full, short_signature, expected_final_slice in CASES
+] + [
+    (block, pattern_name, f"{pattern_name}_a32", 160, expect_full, short_signature, expected_final_slice)
+    for block, pattern_name, expect_full, short_signature, expected_final_slice in DIAG32_CASES
+]
 
-def make_fixture(block: int, pattern_name: str) -> Path:
+
+def make_fixture(block: int, pattern_name: str, test_name: str, cb_value: int) -> Path:
     bx = (block & 1) * 4
     by = (block >> 1) * 4
     cb = bytearray(flat_chroma)
@@ -97,10 +121,10 @@ def make_fixture(block: int, pattern_name: str) -> Path:
     for ly in range(4):
         for lx in range(4):
             if pattern(lx, ly):
-                cb[(by + ly) * (width // 2) + (bx + lx)] = 133
-    out = root / "data" / f"smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_ac_shape_blk{block}_{pattern_name}.yuv"
+                cb[(by + ly) * (width // 2) + (bx + lx)] = cb_value
+    out = root / "data" / f"smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_ac_shape_blk{block}_{test_name}.yuv"
     out.write_bytes(y0 + flat_chroma + flat_chroma + y1 + bytes(cb) + flat_chroma)
-    print(f"[INFO] CB_AC_SHAPE block={block} pattern={pattern_name} fixture {out.relative_to(root)} size={out.stat().st_size}")
+    print(f"[INFO] CB_AC_SHAPE block={block} pattern={test_name} fixture {out.relative_to(root)} size={out.stat().st_size}")
     return out
 
 
@@ -125,12 +149,12 @@ def final_nal_hex(path: Path) -> str:
     return data[starts[-1]:].hex()
 
 
-for block, pattern_name, expect_full, short_signature, expected_final_slice in CASES:
-    input_path = make_fixture(block, pattern_name)
-    h264 = root / "output" / "cabac_cb_ac_shape_probe" / f"blk{block}_{pattern_name}.h264"
-    sim_log = root / "output" / "cabac_cb_ac_shape_probe" / f"blk{block}_{pattern_name}.sim.log"
-    ffmpeg_log = root / "output" / "cabac_cb_ac_shape_probe" / f"blk{block}_{pattern_name}.ffmpeg.log"
-    raw_yuv = Path(f"/tmp/h264_cabac_cb_ac_shape_blk{block}_{pattern_name}.raw.yuv")
+for block, pattern_name, test_name, cb_value, expect_full, short_signature, expected_final_slice in ALL_CASES:
+    input_path = make_fixture(block, pattern_name, test_name, cb_value)
+    h264 = root / "output" / "cabac_cb_ac_shape_probe" / f"blk{block}_{test_name}.h264"
+    sim_log = root / "output" / "cabac_cb_ac_shape_probe" / f"blk{block}_{test_name}.sim.log"
+    ffmpeg_log = root / "output" / "cabac_cb_ac_shape_probe" / f"blk{block}_{test_name}.ffmpeg.log"
+    raw_yuv = Path(f"/tmp/h264_cabac_cb_ac_shape_blk{block}_{test_name}.raw.yuv")
 
     with sim_log.open("w", encoding="utf-8") as log:
         subprocess.run(
@@ -143,7 +167,7 @@ for block, pattern_name, expect_full, short_signature, expected_final_slice in C
     sim_text = sim_log.read_text(errors="ignore")
     for needle in ("cabac_p16x16_mbs=1", "cabac_chroma_ac_mbs=1", "cb_ac_mbs=1", "cb_ac_blocks=1", "cr_ac_mbs=0", "cr_ac_blocks=0"):
         if needle not in sim_text:
-            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} sim log missing {needle}")
+            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={test_name} sim log missing {needle}")
 
     with ffmpeg_log.open("w", encoding="utf-8") as log:
         subprocess.run(
@@ -158,20 +182,20 @@ for block, pattern_name, expect_full, short_signature, expected_final_slice in C
     final_slice = final_nal_hex(h264)
     if final_slice != expected_final_slice:
         raise SystemExit(
-            f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} final slice changed: "
+            f"[FAIL] CB_AC_SHAPE block={block} pattern={test_name} final slice changed: "
             f"got {final_slice}, expected {expected_final_slice}"
         )
     if not final_slice.startswith("0000000141d008086beb"):
         raise SystemExit(
-            f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} lost locked "
+            f"[FAIL] CB_AC_SHAPE block={block} pattern={test_name} lost locked "
             f"P-slice header tail / first residual byte in {final_slice}"
         )
 
     if expect_full:
         if ff_text.strip():
-            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} expected clean FFmpeg log, got {ff_text.strip()!r}")
+            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={test_name} expected clean FFmpeg log, got {ff_text.strip()!r}")
         if actual_bytes != expected_bytes:
-            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} decoded {actual_bytes}/{expected_bytes}, expected strict full decode")
+            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={test_name} decoded {actual_bytes}/{expected_bytes}, expected strict full decode")
         dec = raw_yuv.read_bytes()
         src = input_path.read_bytes()
         u0 = frame_size + width * height
@@ -179,20 +203,20 @@ for block, pattern_name, expect_full, short_signature, expected_final_slice in C
         u_sad = sum(abs(dec[u0 + i] - src[u0 + i]) for i in range(chroma_size))
         v_sad = sum(abs(dec[v0 + i] - src[v0 + i]) for i in range(chroma_size))
         if u_sad == 0 or v_sad != 0:
-            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} expected Cb-only decoded delta, got U_SAD={u_sad} V_SAD={v_sad}")
-        print(f"[PASS] CB_AC_SHAPE block={block} pattern={pattern_name} strict-decodes {actual_bytes}/{expected_bytes} final_slice={final_slice} with Cb-only U_SAD={u_sad}")
+            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={test_name} expected Cb-only decoded delta, got U_SAD={u_sad} V_SAD={v_sad}")
+        print(f"[PASS] CB_AC_SHAPE block={block} pattern={test_name} strict-decodes {actual_bytes}/{expected_bytes} final_slice={final_slice} with Cb-only U_SAD={u_sad}")
     else:
         if actual_bytes != frame_size:
-            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} decoded {actual_bytes}/{expected_bytes}, expected one-frame miss")
+            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={test_name} decoded {actual_bytes}/{expected_bytes}, expected one-frame miss")
         signature = extract_signature(ff_text)
         if short_signature not in signature:
             raise SystemExit(
-                f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} expected FFmpeg signature "
+                f"[FAIL] CB_AC_SHAPE block={block} pattern={test_name} expected FFmpeg signature "
                 f"{short_signature!r}, got {ff_text.strip()!r}"
             )
-        print(f"[PASS] CB_AC_SHAPE block={block} pattern={pattern_name} remains one-frame miss {actual_bytes}/{expected_bytes} final_slice={final_slice} with FFmpeg signature {short_signature}")
+        print(f"[PASS] CB_AC_SHAPE block={block} pattern={test_name} remains one-frame miss {actual_bytes}/{expected_bytes} final_slice={final_slice} with FFmpeg signature {short_signature}")
 
     raw_yuv.unlink(missing_ok=True)
 
-print("[PASS] CABAC P16x16 sparse Cb AC shape probe locks coefficient-shape-sensitive strict/miss partition and exact final-slice tails under common first payload byte eb across a complete vertical/horizontal block sweep; repair target is residual coefficient emission/order/arithmetic tail, not only top-row block placement or the P-slice boundary")
+print("[PASS] CABAC P16x16 sparse Cb AC shape probe locks coefficient-shape-sensitive strict/miss partition, exact final-slice tails, and high-amplitude diagonal all-miss signatures under common first payload byte eb; repair target is residual coefficient emission/order/arithmetic tail, not only top-row block placement or the P-slice boundary")
 PY
