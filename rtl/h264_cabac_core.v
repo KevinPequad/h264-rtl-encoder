@@ -335,7 +335,7 @@ module h264_cabac_core (
         if (!rst_n) begin
             cod_i_low         <= 64'd0;
             cod_i_range       <= 9'd510;
-            cod_i_queue       <= -8'sd9;
+            cod_i_queue       <= -8'sd7;
             outstanding_count <= 8'd0;
             pending_byte_valid <= 1'b0;
             pending_byte      <= 8'd0;
@@ -359,7 +359,7 @@ module h264_cabac_core (
             if (start) begin
                 cod_i_low         <= 64'd0;
                 cod_i_range       <= 9'd510;
-                cod_i_queue       <= -8'sd9;
+                cod_i_queue       <= -8'sd7;
                 outstanding_count <= 8'd0;
                 pending_byte_valid <= 1'b0;
                 pending_byte      <= 8'd0;

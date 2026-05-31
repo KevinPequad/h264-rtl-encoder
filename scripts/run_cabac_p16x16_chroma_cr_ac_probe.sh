@@ -32,8 +32,8 @@ patterns = {
     "single_br": (flat_chroma, single_br),
     "both_planes": (checker, checker),
     # Cb-only mirrors of the single-block Cr probes keep the blocker from being
-    # misattributed to the Cr plane alone: bottom-row sparse Cb now strict-decodes,
-    # while top-row sparse Cb remains signature-locked.
+    # misattributed to the Cr plane alone: the -7 CABAC queue initializer now
+    # promotes all four sparse Cb singleton quadrants to strict two-frame decode.
     "cb_mirror_single_tl": (single_tl, flat_chroma),
     "cb_mirror_single_tr": (single_tr, flat_chroma),
     "cb_mirror_single_bl": (single_bl, flat_chroma),
@@ -260,9 +260,9 @@ run_strict_pass single_tr 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'c
 run_strict_pass single_bl 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
 run_strict_pass single_br 'cabac_chroma_cb_ac_mbs=0 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=0 cabac_chroma_cr_ac_blocks=1'
 run_strict_pass both_planes 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=1' 'cabac_chroma_cb_ac_blocks=4 cabac_chroma_cr_ac_blocks=4'
-run_expected_miss cb_mirror_single_tl 'bytestream -19' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
-run_expected_miss cb_mirror_single_tr 'bytestream -21' 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
+run_strict_pass cb_mirror_single_tl 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
+run_strict_pass cb_mirror_single_tr 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
 run_strict_pass cb_mirror_single_bl 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
 run_strict_pass cb_mirror_single_br 'cabac_chroma_cb_ac_mbs=1 cabac_chroma_cr_ac_mbs=0' 'cabac_chroma_cb_ac_blocks=1 cabac_chroma_cr_ac_blocks=0'
 
-echo "[PASS] CABAC P16x16 sparse chroma AC strict-decode blocker is narrowed: dense Cr, Cr single_tl/single_tr/single_bl/single_br, dense both-plane AC, and bottom-row sparse Cb mirror strict-decode, while top-row sparse Cb mirrors remain signature-locked expected misses"
+echo "[PASS] CABAC P16x16 sparse chroma AC singleton probe strict-decodes dense Cb, dense Cr, all sparse Cr singletons, dense both-plane AC, and all sparse Cb mirror singletons under the -7 CABAC queue initializer"
