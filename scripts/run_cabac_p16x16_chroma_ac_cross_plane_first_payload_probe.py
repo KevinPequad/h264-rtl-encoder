@@ -48,6 +48,14 @@ CASES = {
 }
 BASELINE_STRICT = {(0xF, 0x1), (0x8, 0x2), (0xF, 0xF)}
 
+# Some mixed-plane masks already produce two decoded frames, but with wrong
+# chroma-plane reconstruction. Keep one of those as a quality guard: the
+# first-payload correction family must repair decoded-plane contents too, not
+# merely paper over FFmpeg bytestream errors.
+BASELINE_BAD_PLANES = {
+    (0xE, 0x1): (240, 192),
+}
+
 
 def checker_chroma(mask: int) -> bytes:
     out = []
@@ -227,13 +235,19 @@ def mutate_first_payload(stream: bytes, first_idx: int, value: int) -> bytes:
     return bytes(mutated)
 
 
-def check_case(sim: Path, cb_mask: int, cr_mask: int, expected_short: str | None) -> None:
+def check_case(
+    sim: Path,
+    cb_mask: int,
+    cr_mask: int,
+    expected_short: str | None,
+    expected_bad_planes: tuple[int, int] | None = None,
+) -> None:
     fixture = make_fixture(cb_mask, cr_mask)
     stream, _sim_text = run_case(sim, cb_mask, cr_mask, fixture)
     first_idx = first_payload_index(stream, f"cb=0x{cb_mask:x} cr=0x{cr_mask:x}")
 
     baseline_raw, baseline_err = decode_raw(stream)
-    if expected_short is None:
+    if expected_short is None and expected_bad_planes is None:
         if baseline_err.strip():
             raise SystemExit(
                 f"[FAIL] CROSS_PLANE_FIRST_PAYLOAD cb=0x{cb_mask:x} cr=0x{cr_mask:x} "
@@ -241,7 +255,46 @@ def check_case(sim: Path, cb_mask: int, cr_mask: int, expected_short: str | None
             )
         base_u, base_v = assert_planes(cb_mask, cr_mask, fixture, baseline_raw, "baseline")
         baseline = f"strict U_SAD={base_u} V_SAD={base_v}"
+    elif expected_bad_planes is not None:
+        if baseline_err.strip():
+            raise SystemExit(
+                f"[FAIL] CROSS_PLANE_FIRST_PAYLOAD cb=0x{cb_mask:x} cr=0x{cr_mask:x} "
+                f"baseline quality guard FFmpeg log {baseline_err.strip()!r}"
+            )
+        if len(baseline_raw) != EXPECTED_BYTES:
+            raise SystemExit(
+                f"[FAIL] CROSS_PLANE_FIRST_PAYLOAD cb=0x{cb_mask:x} cr=0x{cr_mask:x} "
+                f"baseline quality guard decoded {len(baseline_raw)}/{EXPECTED_BYTES}"
+            )
+        src = fixture.read_bytes()
+        if baseline_raw[:FRAME_SIZE] != src[:FRAME_SIZE]:
+            raise SystemExit(
+                f"[FAIL] CROSS_PLANE_FIRST_PAYLOAD cb=0x{cb_mask:x} cr=0x{cr_mask:x} "
+                "baseline quality guard changed IDR reference"
+            )
+        u0 = FRAME_SIZE + LUMA_SIZE
+        v0 = u0 + CHROMA_SIZE
+        base_u = sum(abs(baseline_raw[u0 + i] - src[u0 + i]) for i in range(CHROMA_SIZE))
+        base_v = sum(abs(baseline_raw[v0 + i] - src[v0 + i]) for i in range(CHROMA_SIZE))
+        if (base_u, base_v) != expected_bad_planes:
+            raise SystemExit(
+                f"[FAIL] CROSS_PLANE_FIRST_PAYLOAD cb=0x{cb_mask:x} cr=0x{cr_mask:x} "
+                f"baseline quality drift U_SAD={base_u} V_SAD={base_v}, "
+                f"expected U_SAD={expected_bad_planes[0]} V_SAD={expected_bad_planes[1]}"
+            )
+        expected_u = cb_mask.bit_count() * 64
+        expected_v = cr_mask.bit_count() * 64
+        if (base_u, base_v) == (expected_u, expected_v):
+            raise SystemExit(
+                f"[FAIL] CROSS_PLANE_FIRST_PAYLOAD cb=0x{cb_mask:x} cr=0x{cr_mask:x} "
+                "baseline quality guard unexpectedly matches source-plane SAD"
+            )
+        baseline = (
+            f"strict-bad-plane U_SAD={base_u} V_SAD={base_v} "
+            f"expected U_SAD={expected_u} V_SAD={expected_v}"
+        )
     else:
+        assert expected_short is not None
         if len(baseline_raw) != FRAME_SIZE or expected_short not in baseline_err:
             raise SystemExit(
                 f"[FAIL] CROSS_PLANE_FIRST_PAYLOAD cb=0x{cb_mask:x} cr=0x{cr_mask:x} baseline drift: "
@@ -269,12 +322,14 @@ def main() -> None:
         check_case(sim, cb_mask, cr_mask, signature)
     for cb_mask, cr_mask in BASELINE_STRICT:
         check_case(sim, cb_mask, cr_mask, None)
+    for (cb_mask, cr_mask), bad_planes in BASELINE_BAD_PLANES.items():
+        check_case(sim, cb_mask, cr_mask, None, bad_planes)
     print(
         "[PASS] CABAC P16x16 cross-plane chroma-AC first-payload probe: representative sparse, "
         "bottom/top mirror, split-row, and dense/sparse Cb+Cr masks preserve their locked baseline "
         "outcomes, while exact 0xeb->0x75 and bit7 0xeb->0x6b first-payload substitutions promote "
-        "the sparse miss cases to strict two-frame decode with expected plane-local SAD and preserve "
-        "the strict dense controls."
+        "the sparse miss cases and the strict-but-wrong-plane quality guard to strict two-frame decode "
+        "with expected plane-local SAD while preserving the strict dense controls."
     )
 
 
