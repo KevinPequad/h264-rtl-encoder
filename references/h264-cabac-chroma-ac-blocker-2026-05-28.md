@@ -328,3 +328,11 @@ Next useful probe:
 - The baseline partition remains unchanged (`0x1/0x2/0x5/0x6/0x9/0xa/0xc` one-frame misses; all other masks strict-decode). The generated first CABAC payload byte is locked as `0xeb` for every mask.
 - Flipping bit7 (`0xeb -> 0x6b`) strict-decodes every mask with byte-identical IDR and expected Cb-only second-frame SAD. Flipping bit0 (`0xeb -> 0xea`) only promotes high-density masks `0x7/0x9/0xb/0xd/0xe/0xf`, and flipping bit2 (`0xeb -> 0xef`) only additionally promotes mask `0x2`; all other first-byte bit flips remain isolated one-frame bytestream misses.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_first_cabac_bitflip_sweep.sh` passes; this moves the next repair target onto the first CABAC payload arithmetic/output decision, below the already-classified header-tail parser-realignment flips and away from more CBF selector remaps.
+
+## 2026-05-30 staged CABAC core queue-alignment probe
+
+- Added `scripts/run_cabac_p16x16_chroma_cb_ac_queue_align_probe.py`, which keeps the canonical source untouched, builds a baseline staged workspace, then builds a second staged workspace that changes only the two `h264_cabac_core` initial `cod_i_queue` assignments from `-8'sd9` to `-8'sd8`.
+- The baseline half preserves the current Cb-only AC mask lattice (`0x1/0x2/0x5/0x6/0x9/0xa/0xc` short at one decoded frame with locked FFmpeg bytestream signatures, all other nonzero masks strict-decode).
+- The `queue_m8` staged variant promotes all 15 nonzero Cb-only chroma-AC masks to clean two-frame FFmpeg decode (`768/768`) with a byte-identical IDR frame, first CABAC payload byte `0x75`, and exact Cb-only decoded-plane SAD (`64 * popcount(mask)`, `V_SAD=0`).
+- This is the first single-source-line class candidate that promotes the full Cb-only AC mask lattice without changing CBF selectors or residual binarization. Next repair should land the queue alignment in `rtl/h264_cabac_core.v`, then refresh the stale expected-miss diagnostics and run the broader CABAC P16x16/luma/chroma gates before claiming the sparse-Cb blocker closed.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_queue_align_probe.py` passes.
