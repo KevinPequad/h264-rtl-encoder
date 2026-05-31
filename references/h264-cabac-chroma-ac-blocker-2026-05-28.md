@@ -403,3 +403,9 @@ Next useful probe:
 - The baseline Cr phase lattice remains strict two-frame decode across all quadrants, with exact final P-slice tails and exact Cr-only decoded-plane SAD.
 - Mutating only the first CABAC payload byte from `0xeb` to either `0x75` or `0x6b` now must preserve strict two-frame decode, byte-identical IDR, and exact Cr-only `V_SAD` for every AC phase/sign case, matching the shape and Cb-phase first-payload repair family without weakening Cr controls.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cr_ac_phase_probe.sh` passes. This keeps the next source fix scoped to first-payload CABAC arithmetic/renormalization or residual-tail state while explicitly guarding the Cr low-amplitude phase lane.
+
+## 2026-05-31 mixed-plane quality-guard first-payload value sweep
+
+- Extended `scripts/run_cabac_p16x16_chroma_ac_first_payload_value_sweep.py` with the mixed Cb/Cr quality guard (`Cb mask 0xe`, `Cr mask 0x1`) that currently strict-decodes but reconstructs the wrong chroma-plane deltas under the baseline first payload `0xeb`.
+- The guard has 190 single-byte first-payload values that strict-decode with the expected plane-local SAD (`U_SAD=192`, `V_SAD=64`); the known repair-family substitutions `0xeb->0x75` and `0xeb->0x6b` are inside that class, while baseline `0xeb` is not.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_first_payload_value_sweep.py` passes. This keeps the next source repair focused on first-payload CABAC arithmetic/renormalization and requires it to repair decoded-plane quality, not only FFmpeg bytestream short-decodes.

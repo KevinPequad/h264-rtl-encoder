@@ -5,7 +5,8 @@ The earlier substitution probes proved that changing only the first CABAC byte
 after the locked P-slice header tail from 0xeb to 0x75 or 0x6b can promote the
 current sparse chroma-AC short-decode cases.  This bounded sweep keeps the RTL
 checkout unchanged and mutates that single byte through all 256 values for a few
-representative Cb-only, Cr-only, and Cb+Cr cases.
+representative Cb-only, Cr-only, and Cb+Cr cases, including a mixed-plane
+case that already strict-decodes with the wrong chroma reconstruction.
 
 The goal is not to endorse byte patching.  It locks that the promotion is a wide
 arithmetic-decode equivalence class rather than a unique 0x75/0x6b signature, so
@@ -42,6 +43,7 @@ CASES = {
     "cr_mask3": {"cb_mask": 0x0, "cr_mask": 0x3, "u_sad": 0, "v_sad": 128, "pass_count": 181, "baseline_strict": False},
     "cr_mask5": {"cb_mask": 0x0, "cr_mask": 0x5, "u_sad": 0, "v_sad": 128, "pass_count": 185, "baseline_strict": False},
     "cbcr_dense": {"cb_mask": 0xF, "cr_mask": 0xF, "u_sad": 256, "v_sad": 256, "pass_count": 174, "baseline_strict": True},
+    "cbcr_quality_guard": {"cb_mask": 0xE, "cr_mask": 0x1, "u_sad": 192, "v_sad": 64, "pass_count": 190, "baseline_strict": False},
 }
 
 
@@ -233,8 +235,9 @@ def main() -> None:
         check_case(sim, name, spec)
     print(
         "[PASS] CABAC P16x16 chroma-AC first-payload value sweep locks broad decode-equivalence classes "
-        "for representative Cb-only, Cr-only, and dense Cb+Cr cases; 0x6b/0x75 remain promoted controls, "
-        "but baseline sparse Cb/Cr 0xeb stays outside the short-case classes"
+        "for representative Cb-only, Cr-only, dense Cb+Cr, and mixed-plane quality-guard cases; "
+        "0x6b/0x75 remain promoted controls, but baseline sparse Cb/Cr 0xeb stays outside the "
+        "short/strict-but-wrong-plane repair classes"
     )
 
 
