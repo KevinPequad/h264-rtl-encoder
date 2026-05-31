@@ -52,12 +52,17 @@ TAILS = {
 # Cross-plane high-amplitude guards.  The mask lattice above uses value 136
 # (one checkerboard block contributes SAD=64).  Single-plane amplitude probes
 # cover Cb-only/Cr-only value 160, but a combined Cb+Cr macroblock also needs a
-# bounded guard because it shares residual level contexts across both planes.
-# Keep this to a small Cb/Cr/both-plane sample so the cron gate remains bounded.
+# bounded guard because it shares residual level/sign contexts across both
+# planes.  Keep this to a small positive/mixed-sign Cb/Cr sample so the cron
+# gate remains bounded.
 AMPLITUDE_TAILS = {
     (0x5, 0xA, 160, 136): "0000000141d008086b",
     (0x5, 0xA, 136, 160): "0000000141d008086b",
     (0x5, 0xA, 160, 160): "0000000141d008086b7fff",
+    (0x5, 0xA, 96, 136): "0000000141d008086b",
+    (0x5, 0xA, 136, 96): "0000000141d008086b",
+    (0xA, 0x5, 96, 136): "0000000141d008086b3acc6e110591f10a4804a1da00000300",
+    (0xA, 0x5, 136, 96): "0000000141d008086b",
 }
 
 
@@ -256,7 +261,7 @@ def main() -> int:
     print(
         "[PASS] CABAC P16x16 cross-plane chroma-AC gate promoted: representative "
         "sparse/sparse, mirror, split-row, dense-Cb, dense-Cr, and dense-both Cb+Cr "
-        "AC masks plus mixed high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
+        "AC masks plus positive and mixed-sign high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
         "checked-in -7 CABAC queue initializer"
     )
     return 0
