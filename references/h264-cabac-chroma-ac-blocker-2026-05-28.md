@@ -449,3 +449,11 @@ Next useful probe:
 - The fourth-byte equivalence classes tighten further for the Cb-only and sparse mixed-plane cases: only `0xe5` and `0x7e` respectively strict-decode with byte-identical IDR and exact expected plane-local SAD, while the Cr-only case still has a narrow non-unique 30-value class.
 - The generated baseline fourth bytes (`0x26`, `0xa0`, and `0xd4`) stay outside those strict expected-SAD classes. Together with the first/second/third-payload sweeps, this keeps the repair target on CABAC arithmetic/renormalization/output-byte state instead of a CBF selector remap or literal bytestream patch.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_fourth_payload_value_sweep.py` passes.
+
+## 2026-05-31 fifth-payload value/boundary probe
+
+- Added `scripts/run_cabac_p16x16_chroma_ac_fifth_payload_value_sweep.py` to extend the payload-byte diagnostics one byte further where the generated stream has a fifth residual payload byte.
+- The representative Cb-only mask `0x1` stream now has an explicit boundary lock: its final P-slice tail ends immediately after the fourth payload byte `0x26`, so there is no fifth byte to mutate for that case.
+- For the continuation cases, mutating only the fifth residual payload byte gives narrow strict expected-SAD classes: Cr-only mask `0x3` has 16 passing values (`0x0d,0x0f,0x18-0x19,0x48,0x4d-0x4e,0x54,0x65,0x8e,0x9a,0xbf,0xd4,0xdf,0xe7,0xf0`) and sparse Cb+Cr `0x1/0x1` has only two (`0x2b,0xf6`).
+- The generated baseline fifth bytes (`0xab` and `0x5e`) stay outside those classes, reinforcing that the source repair should target CABAC arithmetic/renormalization/output-byte state rather than bytestream literal patching.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_fifth_payload_value_sweep.py` passes.
