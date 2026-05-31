@@ -46,23 +46,27 @@ y1 = bytes([64]) * (width * height)
 # repair focused below static CBF selector choice and on residual
 # payload/arithmetic-state interaction.
 CASES = [
-    # name, block, delta, checker_parity, expect_full, expected FFmpeg signature when short
-    ("top_left_pos_even", 0, 5, 0, False, "bytestream -19"),
-    ("top_left_pos_odd", 0, 5, 1, False, "bytestream -19"),
-    ("top_left_neg_even", 0, -5, 0, False, "bytestream -19"),
-    ("top_left_neg_odd", 0, -5, 1, False, "bytestream -19"),
-    ("top_right_pos_even", 1, 5, 0, False, "bytestream -21"),
-    ("top_right_pos_odd", 1, 5, 1, False, "bytestream -21"),
-    ("top_right_neg_even", 1, -5, 0, False, "bytestream -21"),
-    ("top_right_neg_odd", 1, -5, 1, False, "bytestream -21"),
-    ("bottom_left_pos_even", 2, 5, 0, False, "bytestream -5"),
-    ("bottom_left_pos_odd", 2, 5, 1, True, ""),
-    ("bottom_left_neg_even", 2, -5, 0, True, ""),
-    ("bottom_left_neg_odd", 2, -5, 1, False, "bytestream -5"),
-    ("bottom_right_pos_even", 3, 5, 0, True, ""),
-    ("bottom_right_pos_odd", 3, 5, 1, True, ""),
-    ("bottom_right_neg_even", 3, -5, 0, True, ""),
-    ("bottom_right_neg_odd", 3, -5, 1, True, ""),
+    # name, block, delta, checker_parity, expect_full, expected FFmpeg signature
+    # when short, exact current final P-slice hex.  These tails match the shape
+    # probe's checker tails, so the phase/polarity split is now locked at the
+    # bytestream boundary and cannot silently drift while preserving the same
+    # coarse strict-vs-miss outcome.
+    ("top_left_pos_even", 0, 5, 0, False, "bytestream -19", "0000000141d008086beb2ed226"),
+    ("top_left_pos_odd", 0, 5, 1, False, "bytestream -19", "0000000141d008086beb2ed226"),
+    ("top_left_neg_even", 0, -5, 0, False, "bytestream -19", "0000000141d008086beb2ed226"),
+    ("top_left_neg_odd", 0, -5, 1, False, "bytestream -19", "0000000141d008086beb2ed226"),
+    ("top_right_pos_even", 1, 5, 0, False, "bytestream -21", "0000000141d008086beb2f6b5d"),
+    ("top_right_pos_odd", 1, 5, 1, False, "bytestream -21", "0000000141d008086beb2f6b5d"),
+    ("top_right_neg_even", 1, -5, 0, False, "bytestream -21", "0000000141d008086beb2f6b5d"),
+    ("top_right_neg_odd", 1, -5, 1, False, "bytestream -21", "0000000141d008086beb2f6b5d"),
+    ("bottom_left_pos_even", 2, 5, 0, False, "bytestream -5", "0000000141d008086beb2fa1d4"),
+    ("bottom_left_pos_odd", 2, 5, 1, True, "", "0000000141d008086beb2fa1d5"),
+    ("bottom_left_neg_even", 2, -5, 0, True, "", "0000000141d008086beb2fa1d5"),
+    ("bottom_left_neg_odd", 2, -5, 1, False, "bytestream -5", "0000000141d008086beb2fa1d4"),
+    ("bottom_right_pos_even", 3, 5, 0, True, "", "0000000141d008086beb2fc5f8"),
+    ("bottom_right_pos_odd", 3, 5, 1, True, "", "0000000141d008086beb2fc5f8"),
+    ("bottom_right_neg_even", 3, -5, 0, True, "", "0000000141d008086beb2fc5f8"),
+    ("bottom_right_neg_odd", 3, -5, 1, True, "", "0000000141d008086beb2fc5f8"),
 ]
 
 def make_fixture(name: str, block: int, delta: int, parity: int) -> Path:
@@ -80,7 +84,23 @@ def make_fixture(name: str, block: int, delta: int, parity: int) -> Path:
     print(f"[INFO] CB_AC_PHASE {name} fixture {out.relative_to(root)} size={out.stat().st_size}")
     return out
 
-for name, block, delta, parity, expect_full, short_signature in CASES:
+
+def final_nal_hex(path: Path) -> str:
+    data = path.read_bytes()
+    starts = []
+    offset = 0
+    while True:
+        pos = data.find(b"\x00\x00\x00\x01", offset)
+        if pos < 0:
+            break
+        starts.append(pos)
+        offset = pos + 4
+    if not starts:
+        raise SystemExit(f"[FAIL] CB_AC_PHASE {path} has no Annex-B start code")
+    return data[starts[-1]:].hex()
+
+
+for name, block, delta, parity, expect_full, short_signature, expected_final_slice in CASES:
     input_path = make_fixture(name, block, delta, parity)
     h264 = root / "output" / "cabac_cb_ac_phase_probe" / f"{name}.h264"
     sim_log = root / "output" / "cabac_cb_ac_phase_probe" / f"{name}.sim.log"
@@ -110,6 +130,14 @@ for name, block, delta, parity, expect_full, short_signature in CASES:
         )
     actual_bytes = raw_yuv.stat().st_size if raw_yuv.exists() else 0
     ff_text = ffmpeg_log.read_text(errors="ignore")
+    final_slice = final_nal_hex(h264)
+    if final_slice != expected_final_slice:
+        raise SystemExit(
+            f"[FAIL] CB_AC_PHASE {name} final slice changed: "
+            f"got {final_slice}, expected {expected_final_slice}"
+        )
+    if not final_slice.startswith("0000000141d008086beb"):
+        raise SystemExit(f"[FAIL] CB_AC_PHASE {name} lost locked P-slice header/payload prefix in {final_slice}")
 
     if expect_full:
         if ff_text.strip():
@@ -125,7 +153,7 @@ for name, block, delta, parity, expect_full, short_signature in CASES:
         v_sad = sum(abs(dec[v0 + i] - src[v0 + i]) for i in range(chroma_size))
         if u_sad == 0 or v_sad != 0:
             raise SystemExit(f"[FAIL] CB_AC_PHASE {name} expected Cb-only decoded delta, got U_SAD={u_sad} V_SAD={v_sad}")
-        print(f"[PASS] CB_AC_PHASE {name} strict-decodes {actual_bytes}/{expected_bytes} with Cb AC U_SAD={u_sad} V_SAD={v_sad}")
+        print(f"[PASS] CB_AC_PHASE {name} strict-decodes {actual_bytes}/{expected_bytes} final_slice={final_slice} with Cb AC U_SAD={u_sad} V_SAD={v_sad}")
     else:
         if actual_bytes != frame_size:
             raise SystemExit(f"[FAIL] CB_AC_PHASE {name} decoded {actual_bytes}/{expected_bytes}, expected locked one-frame miss")
@@ -133,9 +161,9 @@ for name, block, delta, parity, expect_full, short_signature in CASES:
             m = re.search(r"bytestream -\d+", ff_text)
             got_sig = m.group(0) if m else ff_text.strip()
             raise SystemExit(f"[FAIL] CB_AC_PHASE {name} expected FFmpeg signature {short_signature!r}, got {got_sig!r}")
-        print(f"[PASS] CB_AC_PHASE {name} remains isolated one-frame miss {actual_bytes}/{expected_bytes} with FFmpeg signature {short_signature}")
+        print(f"[PASS] CB_AC_PHASE {name} remains isolated one-frame miss {actual_bytes}/{expected_bytes} final_slice={final_slice} with FFmpeg signature {short_signature}")
 
     raw_yuv.unlink(missing_ok=True)
 
-print("[PASS] CABAC P16x16 Cb-only chroma AC phase/polarity probe locks top-row parity/sign misses, bottom-left phase/sign split, and bottom-right +5/-5 strict controls")
+print("[PASS] CABAC P16x16 Cb-only chroma AC phase/polarity probe locks top-row parity/sign misses, bottom-left phase/sign split, bottom-right +5/-5 strict controls, and exact final P-slice tails")
 PY

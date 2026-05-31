@@ -210,6 +210,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         "scripts/run_cabac_p16x16_chroma_cb_ac_shape_probe.sh",
         r"d0 08 08 6b header tail and first residual payload byte eb.*?complete vertical/horizontal sweep.*?\(0, \"checker_odd\", False, \"bytestream -19\", \"0000000141d008086beb2ed226\"\).*?\(0, \"checker_even\", False, \"bytestream -19\", \"0000000141d008086beb2ed226\"\).*?\(0, \"vert_right\", True, \"\", \"0000000141d008086beb2f\"\).*?\(0, \"horiz_bottom\", False, \"bytestream -23\", \"0000000141d008086beb2e\"\).*?\(1, \"checker_even\", False, \"bytestream -21\", \"0000000141d008086beb2f6b5d\"\).*?\(1, \"horiz_bottom\", True, \"\", \"0000000141d008086beb2f\"\).*?\(2, \"checker_even\", False, \"bytestream -5\", \"0000000141d008086beb2fa1d4\"\).*?\(2, \"vert_left\", True, \"\", \"0000000141d008086beb2f\"\).*?\(2, \"horiz_top\", True, \"\", \"0000000141d008086beb2f\"\).*?\(3, \"checker_even\", True, \"\", \"0000000141d008086beb2fc5f8\"\).*?\(3, \"vert_right\", False, \"bytestream -6\", \"0000000141d008086beb2fc7\"\).*?\(3, \"horiz_top\", False, \"bytestream -18\", \"0000000141d008086beb2fc5\"\).*?\(3, \"horiz_bottom\", False, \"bytestream -18\", \"0000000141d008086beb2fc5\"\).*?CHECKER32_CASES.*?\(0, \"checker_odd\", False, \"bytestream -32\", \"0000000141d008086beb31d5c0504295\"\).*?\(1, \"checker_even\", False, \"bytestream -26\", \"0000000141d008086beb31d699eb0f52\"\).*?\(2, \"checker_even\", False, \"bytestream -14\", \"0000000141d008086beb31d6bc810001\"\).*?\(3, \"checker_odd\", False, \"bytestream -22\", \"0000000141d008086beb31d5f79710f5\"\).*?AXIS32_CASES.*?\(0, \"vert_left\", False, \"bytestream -20\", \"0000000141d008086beb31d5c0ac\"\).*?\(1, \"vert_right\", False, \"bytestream -31\", \"0000000141d008086beb31d69a0897\"\).*?\(2, \"horiz_top\", False, \"bytestream -16\", \"0000000141d008086beb31d6bc73\"\).*?\(3, \"horiz_bottom\", False, \"bytestream -19\", \"0000000141d008086beb31d5f795ab\"\).*?final_slice\.startswith\(\"0000000141d008086beb\"\).*?repair target is residual coefficient level/suffix emission/order/arithmetic tail",
     ),
+    (
+        "probe_locks_cb_ac_phase_tail_partition",
+        "scripts/run_cabac_p16x16_chroma_cb_ac_phase_probe.sh",
+        r"phase/polarity split is now locked at the\s+.*?bytestream boundary.*?\(\"top_left_pos_even\", 0, 5, 0, False, \"bytestream -19\", \"0000000141d008086beb2ed226\"\).*?\(\"top_right_neg_odd\", 1, -5, 1, False, \"bytestream -21\", \"0000000141d008086beb2f6b5d\"\).*?\(\"bottom_left_pos_even\", 2, 5, 0, False, \"bytestream -5\", \"0000000141d008086beb2fa1d4\"\).*?\(\"bottom_left_neg_even\", 2, -5, 0, True, \"\", \"0000000141d008086beb2fa1d5\"\).*?\(\"bottom_right_neg_odd\", 3, -5, 1, True, \"\", \"0000000141d008086beb2fc5f8\"\).*?final_slice\.startswith\(\"0000000141d008086beb\"\).*?exact final P-slice tails",
+    ),
 )
 
 
@@ -238,7 +243,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, Cr AC mask-lattice signatures, Cr AC first-payload substitution coverage, and Cb AC shape/tail partition coverage")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, Cr AC mask-lattice signatures, Cr AC first-payload substitution coverage, Cb AC shape/tail partition coverage, and Cb AC phase/polarity tail coverage")
     return 0
 
 
