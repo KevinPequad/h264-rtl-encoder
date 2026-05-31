@@ -208,6 +208,19 @@ def assert_planes(cb_mask: int, cr_mask: int, fixture: Path, raw: bytes, label: 
     return u_sad, v_sad
 
 
+def assert_idr_reference(fixture: Path, raw: bytes, label: str) -> None:
+    if len(raw) < FRAME_SIZE:
+        raise SystemExit(
+            f"[FAIL] CROSS_PLANE_FIRST_PAYLOAD {label} decoded only {len(raw)} bytes, "
+            f"expected at least the {FRAME_SIZE}-byte IDR frame"
+        )
+    src = fixture.read_bytes()
+    if raw[:FRAME_SIZE] != src[:FRAME_SIZE]:
+        raise SystemExit(
+            f"[FAIL] CROSS_PLANE_FIRST_PAYLOAD {label} changed IDR reference frame"
+        )
+
+
 def mutate_first_payload(stream: bytes, first_idx: int, value: int) -> bytes:
     mutated = bytearray(stream)
     mutated[first_idx] = value
@@ -234,6 +247,7 @@ def check_case(sim: Path, cb_mask: int, cr_mask: int, expected_short: str | None
                 f"[FAIL] CROSS_PLANE_FIRST_PAYLOAD cb=0x{cb_mask:x} cr=0x{cr_mask:x} baseline drift: "
                 f"decoded={len(baseline_raw)}/{EXPECTED_BYTES} err={baseline_err.strip()!r}"
             )
+        assert_idr_reference(fixture, baseline_raw, "baseline-short")
         baseline = f"short/{expected_short}"
 
     for label, value in (("queue_m8_payload_0x75", QUEUE_M8_FIRST_PAYLOAD), ("bit7_payload_0x6b", BIT7_PROMOTED_PAYLOAD)):

@@ -350,3 +350,9 @@ Next useful probe:
 - Re-ran `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` and hit a local execution blocker where the C++ testbench frame-complete stdout line split the blk5 CHRAC_CBF debug row for split masks `0x5`/`0x6`.
 - Hardened the diagnostic to tolerate only that known non-atomic missing CBF/order row while preserving the full expected trail, residual byte chunks, emitted stream tails, terminate pre-state, FFmpeg signatures, and decoded-plane SAD locks.
 - Verification now passes again with the same baseline partition: masks `0x1`, `0x2`, `0x5`, `0x6`, and `0xc` remain one-frame `384/768` misses, while `0x3`, `0x4`, and `0x8` strict-decode full `768/768`.
+
+## 2026-05-31 cross-plane first-payload IDR integrity lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py` so each expected-short mixed Cb+Cr chroma-AC baseline must still decode a byte-identical IDR frame before failing on the P residual.
+- This keeps the cross-plane first-payload repair target scoped below SPS/PPS/IDR/header framing: the sparse mixed-plane misses are now locked as P-residual CABAC failures, while the `0xeb->0x75` and bit7 `0xeb->0x6b` one-byte substitutions still promote them to strict two-frame decode with expected plane-local SAD and preserve the strict dense controls.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py` passes.
