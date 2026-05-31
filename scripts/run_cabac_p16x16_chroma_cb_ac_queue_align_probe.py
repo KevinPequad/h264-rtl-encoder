@@ -111,6 +111,16 @@ def decode_raw(h264_path: Path) -> tuple[bytes, str]:
         raw_path.unlink(missing_ok=True)
 
 
+def decode_stream_bytes(stream: bytes, label: str) -> tuple[bytes, str]:
+    with tempfile.NamedTemporaryFile(prefix=f"h264_cb_ac_queue_align_{label}_", suffix=".h264", delete=False) as h264_tmp:
+        h264_path = Path(h264_tmp.name)
+        h264_tmp.write(stream)
+    try:
+        return decode_raw(h264_path)
+    finally:
+        h264_path.unlink(missing_ok=True)
+
+
 def build_candidate(name: str, patch_queue: bool) -> Path:
     workspace = Path(stage_workspace(f"h264_cabac_cb_ac_queue_align_{name}_"))
     if patch_queue:
@@ -365,6 +375,9 @@ def check_queue_m8(
             f"decoded={len(raw)}/{EXPECTED_BYTES} err={err.strip()!r}"
         )
     queue_stream = h264.read_bytes()
+    queue_last_start = queue_stream.rfind(b"\x00\x00\x00\x01")
+    if queue_last_start < 0:
+        raise SystemExit("[FAIL] CB_AC_QUEUE_ALIGN queue_m8 both-plane guard missing final Annex-B start code")
     baseline_tail = final_slice(baseline_both_stream, "baseline both-plane guard")
     queue_tail = final_slice(queue_stream, "queue_m8 both-plane guard")
     expected_baseline_tail = bytes.fromhex("0000000141d008086beb")
@@ -381,10 +394,45 @@ def check_queue_m8(
             "[FAIL] CB_AC_QUEUE_ALIGN queue_m8 both-plane diff drift: "
             f"diffs={[(idx, hex(a), hex(b)) for idx, a, b in diffs]} extra={queue_tail[common:].hex()}"
         )
+    trim_only_stream = queue_stream[:-1]
+    trim_raw, trim_err = decode_stream_bytes(trim_only_stream, "trim_only")
+    if len(trim_raw) != FRAME_SIZE or "bytestream -14" not in trim_err:
+        raise SystemExit(
+            "[FAIL] CB_AC_QUEUE_ALIGN queue_m8 both-plane trim-only mutation drifted: "
+            f"decoded={len(trim_raw)}/{EXPECTED_BYTES} err={trim_err.strip()!r}"
+        )
+    for byte_value, byte_name in ((0xEB, "eb"), (0x75, "75")):
+        patched_stream = bytearray(queue_stream)
+        patched_stream[queue_last_start + 9] = byte_value
+        patched_raw, patched_err = decode_stream_bytes(bytes(patched_stream), f"first_payload_{byte_name}")
+        if patched_err.strip():
+            raise SystemExit(
+                f"[FAIL] CB_AC_QUEUE_ALIGN queue_m8 both-plane first-payload 0x{byte_value:02x} "
+                f"expected clean FFmpeg log, got {patched_err.strip()!r}"
+            )
+        u_sad, v_sad = assert_both_planes(
+            both_plane_fixture,
+            patched_raw,
+            f"queue_m8 both-plane first-payload 0x{byte_value:02x}",
+        )
+        patched_tail = final_slice(bytes(patched_stream), f"queue_m8 both-plane first-payload 0x{byte_value:02x}")
+        expected_tail = bytearray(expected_queue_tail)
+        expected_tail[9] = byte_value
+        if patched_tail != bytes(expected_tail):
+            raise SystemExit(
+                f"[FAIL] CB_AC_QUEUE_ALIGN queue_m8 both-plane first-payload 0x{byte_value:02x} "
+                f"tail {patched_tail.hex()}, expected {bytes(expected_tail).hex()}"
+            )
+        print(
+            f"[PASS] CB_AC_QUEUE_ALIGN queue_m8 both-plane first-payload 0x{byte_value:02x} "
+            f"mutation strict-decodes despite retained trailing 0x99: decoded={len(patched_raw)}/{EXPECTED_BYTES} "
+            f"tail={patched_tail.hex()} U_SAD={u_sad} V_SAD={v_sad}"
+        )
     print(
         "[PASS] CB_AC_QUEUE_ALIGN queue_m8 both-plane guard confirms global -8 remains non-committable: "
         f"decoded={len(raw)}/{EXPECTED_BYTES} with bytestream -9; final_slice {baseline_tail.hex()} -> "
-        f"{queue_tail.hex()} (first residual byte 0xeb->0xf5 plus trailing 0x99)"
+        f"{queue_tail.hex()} (first residual byte 0xeb->0xf5 plus trailing 0x99); "
+        "trimming only the trailing byte still fails, while first-payload 0xf5->0xeb/0x75 substitutions restore strict decode"
     )
 
 
@@ -400,7 +448,8 @@ def main() -> None:
         "cod_i_queue initialization from -9 to -8 promotes all 15 Cb-only and all 15 Cr-only AC masks "
         "to strict two-frame FFmpeg decode, but is explicitly blocked from source promotion by the both-plane "
         "Cb+Cr AC regression guard, now locked to the 0xeb->0xf5 first-residual-byte plus trailing-0x99 "
-        "final-slice mutation"
+        "final-slice mutation; the both-plane queue_m8 stream is rescued by first-payload substitution, not by "
+        "trimming the trailing byte alone"
     )
 
 
