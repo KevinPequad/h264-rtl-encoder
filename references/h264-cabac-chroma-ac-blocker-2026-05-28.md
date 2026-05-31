@@ -442,3 +442,10 @@ Next useful probe:
 - The third-byte equivalence classes are narrow but still non-unique: `16`, `42`, and `23` byte values respectively strict-decode with byte-identical IDR and exact expected plane-local SAD.
 - The generated baseline third bytes (`0xd2`, `0x26`, and `0xe2`) stay outside those strict expected-SAD classes. Together with the first/second-payload sweeps, this keeps the repair target on CABAC arithmetic/renormalization/output-byte state instead of a literal bytestream patch or another CBF selector remap.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_third_payload_value_sweep.py` passes.
+
+## 2026-05-31 fourth-payload value-range probe
+
+- Added `scripts/run_cabac_p16x16_chroma_ac_fourth_payload_value_sweep.py` to mutate the fourth CABAC payload byte after the locked `d0 08 08 6b eb` residual boundary for the same representative Cb-only (`0x1`), Cr-only (`0x3`), and sparse Cb+Cr (`0x1/0x1`) chroma-AC misses.
+- The fourth-byte equivalence classes tighten further for the Cb-only and sparse mixed-plane cases: only `0xe5` and `0x7e` respectively strict-decode with byte-identical IDR and exact expected plane-local SAD, while the Cr-only case still has a narrow non-unique 30-value class.
+- The generated baseline fourth bytes (`0x26`, `0xa0`, and `0xd4`) stay outside those strict expected-SAD classes. Together with the first/second/third-payload sweeps, this keeps the repair target on CABAC arithmetic/renormalization/output-byte state instead of a CBF selector remap or literal bytestream patch.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_fourth_payload_value_sweep.py` passes.
