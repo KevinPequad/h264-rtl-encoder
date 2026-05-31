@@ -380,5 +380,12 @@ Next useful probe:
 ## 2026-05-31 Cr-only high-amplitude shape first-payload lock
 
 - Tightened `scripts/run_cabac_p16x16_chroma_cr_ac_shape_probe.sh` so every high-amplitude (`+32`) Cr-only checker/axis/diagonal shape now validates exact first-CABAC-payload substitutions in addition to its baseline final-slice tail and FFmpeg strict/miss expectation.
-- For every high-amplitude shape case, the baseline first payload remains `0xeb` after the locked `d0 08 08 6b` header tail. Mutating only that byte to either `0x75` or `0x6b` promotes or preserves strict two-frame FFmpeg decode with a byte-identical IDR frame and exact Cr-only SAD (`V_SAD=128` for diagonal four-pixel shapes, `V_SAD=256` for checker/axis eight-pixel shapes).
+- For every high-amplitude shape case, the baseline first payload remains `0xeb` after the locked `d0 08 08 6b` header tail. Mutating only that byte to either `0x75` or `0x6b` promotes or preserves all high-amplitude shapes as strict two-frame FFmpeg decode with a byte-identical IDR frame and exact Cr-only SAD (`V_SAD=128` for diagonal four-pixel shapes, `256` for checker/axis eight-pixel shapes).
 - This brings the Cr high-amplitude coefficient-shape blocker under the same scoped first-payload correction family as the Cb/Cr mask and mixed-plane first-payload probes. The next source repair should target first-payload CABAC arithmetic/renormalization or residual-tail state, not another CBF selector, axis-side polarity, or literal bytestream patch.
+
+## 2026-05-31 Cb-only high-amplitude shape first-payload lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_shape_probe.sh` with the Cb-side counterpart to the Cr shape first-payload substitution lock.
+- The baseline high-amplitude (`+32`) checker/axis/diagonal Cb-only shape cases still remain one-frame misses with their exact final P-slice tails under the shared generated `d0 08 08 6b eb` header/first-payload prefix.
+- Mutating only the first CABAC payload byte from `0xeb` to either `0x75` or `0x6b` promotes every high-amplitude Cb shape to strict two-frame FFmpeg decode with a byte-identical IDR frame and exact Cb-only SAD (`U_SAD=128` for diagonal four-pixel shapes, `256` for checker/axis eight-pixel shapes).
+- This aligns Cb shape failures with the same scoped first-payload/residual-tail arithmetic target as the Cb mask, Cr mask/shape, and mixed-plane probes, rather than a standalone coefficient placement, CBF selector, or P-slice-boundary issue.

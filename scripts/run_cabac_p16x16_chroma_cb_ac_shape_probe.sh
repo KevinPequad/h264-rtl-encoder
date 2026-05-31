@@ -28,6 +28,7 @@ python3 - "$SIM" <<'PY'
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 
 sim = sys.argv[1]
 root = Path.cwd()
@@ -53,6 +54,8 @@ PATTERNS = {
     "diag_main": lambda x, y: x == y,
     "diag_anti": lambda x, y: x + y == 3,
 }
+FIRST_CABAC_PAYLOAD = 0xEB
+PROMOTED_PAYLOADS = (("queue_m8_payload_0x75", 0x75), ("bit7_payload_0x6b", 0x6B))
 CASES = [
     # block, pattern, expect_full_decode, short FFmpeg signature when not full,
     # exact current final P-slice hex.  All cases share the locked
@@ -188,6 +191,86 @@ def final_nal_hex(path: Path) -> str:
     return data[starts[-1]:].hex()
 
 
+def first_payload_index(data: bytes, label: str) -> int:
+    last_start = data.rfind(b"\x00\x00\x00\x01")
+    if last_start < 0:
+        raise SystemExit(f"[FAIL] CB_AC_SHAPE {label} has no final Annex-B start code")
+    header_tail_idx = last_start + 8
+    first_idx = last_start + 9
+    if first_idx >= len(data):
+        raise SystemExit(f"[FAIL] CB_AC_SHAPE {label} has no first CABAC payload byte")
+    if data[header_tail_idx] != 0x6B:
+        raise SystemExit(
+            f"[FAIL] CB_AC_SHAPE {label} header-tail byte 0x{data[header_tail_idx]:02x}, expected 0x6b"
+        )
+    if data[first_idx] != FIRST_CABAC_PAYLOAD:
+        raise SystemExit(
+            f"[FAIL] CB_AC_SHAPE {label} first CABAC payload 0x{data[first_idx]:02x}, expected 0xeb"
+        )
+    return first_idx
+
+
+def decode_h264_bytes(data: bytes) -> tuple[bytes, str]:
+    with tempfile.NamedTemporaryFile(prefix="h264_cabac_cb_ac_shape_sub_", suffix=".h264", delete=False) as h264_tmp:
+        h264_tmp.write(data)
+        h264_path = Path(h264_tmp.name)
+    with tempfile.NamedTemporaryFile(prefix="h264_cabac_cb_ac_shape_sub_", suffix=".yuv", delete=False) as raw_tmp:
+        raw_path = Path(raw_tmp.name)
+    try:
+        proc = subprocess.run(
+            ["ffmpeg", "-y", "-v", "error", "-xerror", "-i", str(h264_path), "-f", "rawvideo", "-pix_fmt", "yuv420p", str(raw_path)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        raw = raw_path.read_bytes() if raw_path.exists() else b""
+        return raw, proc.stderr.decode("utf-8", "replace")
+    finally:
+        h264_path.unlink(missing_ok=True)
+        raw_path.unlink(missing_ok=True)
+
+
+def mutate_first_payload(data: bytes, first_idx: int, value: int) -> bytes:
+    mutated = bytearray(data)
+    mutated[first_idx] = value
+    return bytes(mutated)
+
+
+def pattern_pixel_count(pattern_name: str) -> int:
+    pattern = PATTERNS[pattern_name]
+    return sum(1 for ly in range(4) for lx in range(4) if pattern(lx, ly))
+
+
+def assert_first_payload_substitutions(h264: Path, input_path: Path, block: int, pattern_name: str, test_name: str, cb_value: int) -> None:
+    stream = h264.read_bytes()
+    first_idx = first_payload_index(stream, f"block={block} pattern={test_name}")
+    expected_u_sad = pattern_pixel_count(pattern_name) * abs(cb_value - 128)
+    src = input_path.read_bytes()
+    u0 = frame_size + width * height
+    v0 = u0 + chroma_size
+    for label, value in PROMOTED_PAYLOADS:
+        raw, err = decode_h264_bytes(mutate_first_payload(stream, first_idx, value))
+        if err.strip():
+            raise SystemExit(f"[FAIL] CB_AC_SHAPE {label} block={block} pattern={test_name} FFmpeg log {err.strip()!r}")
+        if len(raw) != expected_bytes:
+            raise SystemExit(
+                f"[FAIL] CB_AC_SHAPE {label} block={block} pattern={test_name} decoded {len(raw)}/{expected_bytes}"
+            )
+        if raw[:frame_size] != src[:frame_size]:
+            raise SystemExit(f"[FAIL] CB_AC_SHAPE {label} block={block} pattern={test_name} changed IDR reference")
+        u_sad = sum(abs(raw[u0 + i] - src[u0 + i]) for i in range(chroma_size))
+        v_sad = sum(abs(raw[v0 + i] - src[v0 + i]) for i in range(chroma_size))
+        if u_sad != expected_u_sad or v_sad != 0:
+            raise SystemExit(
+                f"[FAIL] CB_AC_SHAPE {label} block={block} pattern={test_name} SAD U={u_sad} V={v_sad}, "
+                f"expected U={expected_u_sad} V=0"
+            )
+        print(
+            f"[PASS] CB_AC_SHAPE {label} block={block} pattern={test_name} promotes/stays strict "
+            f"at {len(raw)}/{expected_bytes} with exact Cb-only U_SAD={u_sad}"
+        )
+
+
 for block, pattern_name, test_name, cb_value, expected_u_sad, expect_full, short_signature, expected_final_slice in ALL_CASES:
     input_path = make_fixture(block, pattern_name, test_name, cb_value)
     h264 = root / "output" / "cabac_cb_ac_shape_probe" / f"blk{block}_{test_name}.h264"
@@ -229,6 +312,8 @@ for block, pattern_name, test_name, cb_value, expected_u_sad, expect_full, short
             f"[FAIL] CB_AC_SHAPE block={block} pattern={test_name} lost locked "
             f"P-slice header tail / first residual byte in {final_slice}"
         )
+    if cb_value == 160:
+        assert_first_payload_substitutions(h264, input_path, block, pattern_name, test_name, cb_value)
 
     if expect_full:
         if ff_text.strip():
@@ -262,5 +347,5 @@ for block, pattern_name, test_name, cb_value, expected_u_sad, expect_full, short
 
     raw_yuv.unlink(missing_ok=True)
 
-print("[PASS] CABAC P16x16 sparse Cb AC shape probe locks coefficient-shape-sensitive strict/miss partition, exact strict-pass Cb-only U_SAD values, exact final-slice tails, and high-amplitude checker/diagonal/axis all-miss signatures under common first payload byte eb; repair target is residual coefficient level/suffix emission/order/arithmetic tail, not only top-row block placement, sparse CBF context selection, low-amplitude checker parity, or the P-slice boundary")
+print("[PASS] CABAC P16x16 sparse Cb AC shape probe locks coefficient-shape-sensitive strict/miss partition, exact strict-pass Cb-only U_SAD values, exact final-slice tails, and high-amplitude checker/diagonal/axis first-payload substitution promotion under common generated byte eb; repair target is scoped CABAC first-payload/residual-tail arithmetic, not only top-row block placement, sparse CBF context selection, low-amplitude checker parity, or the P-slice boundary")
 PY
