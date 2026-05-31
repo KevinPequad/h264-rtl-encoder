@@ -37,6 +37,13 @@ BASELINE_SHORT = {
     0xA: "bytestream -20",
     0xC: "bytestream -18",
 }
+QUEUE_M8_MIXED_BOTH_PLANE_PASS = (
+    (0x1, 0x1),
+    (0x1, 0xF),
+    (0xF, 0x1),
+    (0x3, 0x3),
+    (0x5, 0xA),
+)
 QUEUE_ANCHOR = "cod_i_queue       <= -8'sd9;"
 QUEUE_CANDIDATE = "cod_i_queue       <= -8'sd8;"
 
@@ -50,7 +57,7 @@ def checker_chroma(mask: int = 0xF) -> bytes:
     return bytes(out)
 
 
-def make_fixtures() -> tuple[dict[int, Path], dict[int, Path], Path]:
+def make_fixtures() -> tuple[dict[int, Path], dict[int, Path], Path, dict[tuple[int, int], Path]]:
     y0 = bytes([64]) * LUMA_SIZE
     y1 = bytes([64]) * LUMA_SIZE
     flat = bytes([128]) * CHROMA_SIZE
@@ -70,7 +77,19 @@ def make_fixtures() -> tuple[dict[int, Path], dict[int, Path], Path]:
     both = out_dir / "smoke_16x16_2f_cabac_p16x16_chroma_residual_cbcr_ac_queue_align_guard.yuv"
     both.write_bytes(y0 + flat + flat + y1 + checker_chroma(0xF) + checker_chroma(0xF))
     print(f"[INFO] CB_AC_QUEUE_ALIGN both-plane guard fixture {both} size={both.stat().st_size}")
-    return fixtures, cr_fixtures, both
+    mixed_both: dict[tuple[int, int], Path] = {}
+    for cb_mask, cr_mask in QUEUE_M8_MIXED_BOTH_PLANE_PASS:
+        mixed_path = out_dir / (
+            "smoke_16x16_2f_cabac_p16x16_chroma_residual_"
+            f"cb_{cb_mask:x}_cr_{cr_mask:x}_queue_align_guard.yuv"
+        )
+        mixed_path.write_bytes(y0 + flat + flat + y1 + checker_chroma(cb_mask) + checker_chroma(cr_mask))
+        mixed_both[(cb_mask, cr_mask)] = mixed_path
+        print(
+            f"[INFO] CB_AC_QUEUE_ALIGN mixed both-plane fixture cb=0x{cb_mask:x} cr=0x{cr_mask:x} "
+            f"{mixed_path} size={mixed_path.stat().st_size}"
+        )
+    return fixtures, cr_fixtures, both, mixed_both
 
 
 def patch_queue_alignment(workspace: Path) -> None:
@@ -236,6 +255,32 @@ def assert_both_planes(fixture: Path, raw: bytes, label: str) -> tuple[int, int]
     return u_sad, v_sad
 
 
+def assert_masked_both_planes(
+    cb_mask: int,
+    cr_mask: int,
+    fixture: Path,
+    raw: bytes,
+    label: str,
+) -> tuple[int, int]:
+    if len(raw) != EXPECTED_BYTES:
+        raise SystemExit(f"[FAIL] CB_AC_QUEUE_ALIGN {label} decoded {len(raw)}/{EXPECTED_BYTES} bytes")
+    src = fixture.read_bytes()
+    if raw[:FRAME_SIZE] != src[:FRAME_SIZE]:
+        raise SystemExit(f"[FAIL] CB_AC_QUEUE_ALIGN {label} changed the IDR reference frame")
+    u0 = FRAME_SIZE + LUMA_SIZE
+    v0 = u0 + CHROMA_SIZE
+    u_sad = sum(abs(raw[u0 + i] - src[u0 + i]) for i in range(CHROMA_SIZE))
+    v_sad = sum(abs(raw[v0 + i] - src[v0 + i]) for i in range(CHROMA_SIZE))
+    expected_u = cb_mask.bit_count() * 64
+    expected_v = cr_mask.bit_count() * 64
+    if u_sad != expected_u or v_sad != expected_v:
+        raise SystemExit(
+            f"[FAIL] CB_AC_QUEUE_ALIGN {label} decoded-plane SAD "
+            f"U={u_sad} V={v_sad}, expected U={expected_u} V={expected_v}"
+        )
+    return u_sad, v_sad
+
+
 def assert_both_plane_counters(sim_text: str, label: str) -> None:
     for needle in (
         "cabac_p16x16_mbs=1",
@@ -303,6 +348,7 @@ def check_queue_m8(
     fixtures: dict[int, Path],
     cr_fixtures: dict[int, Path],
     both_plane_fixture: Path,
+    mixed_both_fixtures: dict[tuple[int, int], Path],
     baseline_both_stream: bytes,
 ) -> None:
     first_payload_bytes: set[int] = set()
@@ -365,6 +411,39 @@ def check_queue_m8(
     if cr_first_payload_bytes != {0x75}:
         raise SystemExit(
             f"[FAIL] CR_AC_QUEUE_ALIGN queue_m8 first payload bytes {sorted(cr_first_payload_bytes)}, expected [0x75]"
+        )
+
+    for (cb_mask, cr_mask), fixture in mixed_both_fixtures.items():
+        raw, err, h264, sim_text = run_case(sim, "queue_m8", f"cb_{cb_mask:x}_cr_{cr_mask:x}", fixture)
+        for needle in (
+            "cabac_p16x16_mbs=1",
+            "cb_ac_mbs=1",
+            "cr_ac_mbs=1",
+            f"cb_ac_blocks={cb_mask.bit_count()}",
+            f"cr_ac_blocks={cr_mask.bit_count()}",
+        ):
+            if needle not in sim_text:
+                raise SystemExit(
+                    f"[FAIL] CB_AC_QUEUE_ALIGN queue_m8 cb=0x{cb_mask:x} cr=0x{cr_mask:x} "
+                    f"sim log missing {needle}"
+                )
+        if err.strip():
+            raise SystemExit(
+                f"[FAIL] CB_AC_QUEUE_ALIGN queue_m8 cb=0x{cb_mask:x} cr=0x{cr_mask:x} "
+                f"expected clean FFmpeg log, got {err.strip()!r}"
+            )
+        u_sad, v_sad = assert_masked_both_planes(
+            cb_mask,
+            cr_mask,
+            fixture,
+            raw,
+            f"queue_m8 mixed both-plane cb=0x{cb_mask:x} cr=0x{cr_mask:x}",
+        )
+        tail = final_slice(h264.read_bytes(), f"queue_m8 mixed both-plane cb=0x{cb_mask:x} cr=0x{cr_mask:x}")
+        print(
+            f"[PASS] CB_AC_QUEUE_ALIGN queue_m8 mixed both-plane cb=0x{cb_mask:x} cr=0x{cr_mask:x} "
+            f"strict-decodes {len(raw)}/{EXPECTED_BYTES} size={h264.stat().st_size} final_slice={tail.hex()} "
+            f"U_SAD={u_sad} V_SAD={v_sad}"
         )
 
     raw, err, h264, sim_text = run_case(sim, "queue_m8", "both_planes_guard", both_plane_fixture)
@@ -432,23 +511,25 @@ def check_queue_m8(
         "[PASS] CB_AC_QUEUE_ALIGN queue_m8 both-plane guard confirms global -8 remains non-committable: "
         f"decoded={len(raw)}/{EXPECTED_BYTES} with bytestream -9; final_slice {baseline_tail.hex()} -> "
         f"{queue_tail.hex()} (first residual byte 0xeb->0xf5 plus trailing 0x99); "
+        "mixed both-plane masks stay strict, but the dense Cb+Cr guard still fails; "
         "trimming only the trailing byte still fails, while first-payload 0xf5->0xeb/0x75 substitutions restore strict decode"
     )
 
 
 def main() -> None:
-    fixtures, cr_fixtures, both_plane_fixture = make_fixtures()
+    fixtures, cr_fixtures, both_plane_fixture, mixed_both_fixtures = make_fixtures()
     baseline = build_candidate("baseline", patch_queue=False)
     baseline_both_stream = check_baseline(baseline, fixtures, both_plane_fixture)
     queue_m8 = build_candidate("queue_m8", patch_queue=True)
-    check_queue_m8(queue_m8, fixtures, cr_fixtures, both_plane_fixture, baseline_both_stream)
+    check_queue_m8(queue_m8, fixtures, cr_fixtures, both_plane_fixture, mixed_both_fixtures, baseline_both_stream)
     print(
         "[PASS] CABAC P16x16 chroma-AC queue-alignment staged probe: "
         "baseline sparse-Cb partition is unchanged; globally changing h264_cabac_core "
         "cod_i_queue initialization from -9 to -8 promotes all 15 Cb-only and all 15 Cr-only AC masks "
-        "to strict two-frame FFmpeg decode, but is explicitly blocked from source promotion by the both-plane "
-        "Cb+Cr AC regression guard, now locked to the 0xeb->0xf5 first-residual-byte plus trailing-0x99 "
-        "final-slice mutation; the both-plane queue_m8 stream is rescued by first-payload substitution, not by "
+        "to strict two-frame FFmpeg decode, but is explicitly blocked from source promotion by the dense "
+        "Cb+Cr AC regression guard while representative mixed both-plane masks remain strict; the dense "
+        "queue_m8 guard is now locked to the 0xeb->0xf5 first-residual-byte plus trailing-0x99 "
+        "final-slice mutation and is rescued by first-payload substitution, not by "
         "trimming the trailing byte alone"
     )
 
