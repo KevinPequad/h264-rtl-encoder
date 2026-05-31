@@ -422,3 +422,9 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_ac_first_payload_value_sweep.py` so the representative first-payload byte sweep now locks the exact pass-value ranges for each Cb-only, Cr-only, sparse/dense mixed-plane, and strict-but-wrong-quality guard case, not just the pass counts plus the known `0x75`/`0x6b` promoted values.
 - This makes the diagnostic sensitive to equivalence-class drift: a future arithmetic/renormalization source change must either preserve the current first-payload decode/quality classes or deliberately update the expected ranges with stronger evidence, rather than accidentally swapping one passing value set for another with the same count.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_first_payload_value_sweep.py` passes with the exact ranges locked for all nine cases.
+
+## 2026-05-31 first-payload baseline stream-tail lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_first_payload_value_sweep.py` again so each representative baseline stream now locks its generated H.264 length and final 16-byte tail before the single-byte first-payload mutation sweep runs.
+- This keeps the first-payload repair family scoped to the already-characterized `d0 08 08 6b eb` residual boundary: a future source repair cannot silently move the second-slice tail/framing while preserving the same decode-equivalence class ranges.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_first_payload_value_sweep.py` passes with stream lengths, final tails, exact pass-value ranges, and known `0xeb->0x75` / bit7 `0xeb->0x6b` promoted controls locked for all nine cases.

@@ -59,6 +59,18 @@ EXPECTED_PASS_RANGES = {
     "cbcr_quality_guard": "0x00-0xa9,0xaf,0xb1,0xb5-0xb6,0xb9-0xba,0xc3-0xc4,0xc6-0xc7,0xcc,0xd3,0xe0,0xe9,0xed-0xee,0xf5-0xf6,0xf9,0xfc",
 }
 
+EXPECTED_BASELINE_STREAMS = {
+    "cb_mask1": (449, "8080800000000141d008086beb2ed226"),
+    "cb_mask2": (449, "8080800000000141d008086beb2f6b5d"),
+    "cb_maskc": (452, "0000000141d008086beb3189943a6990"),
+    "cr_mask1": (449, "8080800000000141d008086beb2f99af"),
+    "cr_mask3": (452, "0000000141d008086beb3026a0abd3f7"),
+    "cr_mask5": (452, "0000000141d008086beb30431d5bd40a"),
+    "cbcr_sparse_pair": (451, "800000000141d008086beb2ee2d45ea4"),
+    "cbcr_dense": (446, "8080808080800000000141d008086beb"),
+    "cbcr_quality_guard": (455, "0141d008086beb30d80b4fd63286ced3"),
+}
+
 
 def checker_chroma(mask: int) -> bytes:
     return bytes(
@@ -124,6 +136,21 @@ def run_case(sim: Path, name: str, fixture: Path) -> bytes:
         if needle not in sim_text:
             raise SystemExit(f"[FAIL] CHRAC_FIRST_PAYLOAD_VALUE {name} sim log missing {needle}")
     return h264.read_bytes()
+
+
+def check_baseline_stream(stream: bytes, name: str) -> None:
+    expected_len, expected_tail_hex = EXPECTED_BASELINE_STREAMS[name]
+    actual_tail = stream[-16:].hex()
+    if len(stream) != expected_len:
+        raise SystemExit(
+            f"[FAIL] CHRAC_FIRST_PAYLOAD_VALUE {name} stream length {len(stream)}, expected {expected_len}"
+        )
+    if actual_tail != expected_tail_hex:
+        raise SystemExit(
+            f"[FAIL] CHRAC_FIRST_PAYLOAD_VALUE {name} final tail drifted:\n"
+            f"  got      {actual_tail}\n"
+            f"  expected {expected_tail_hex}"
+        )
 
 
 def first_payload_index(stream: bytes, name: str) -> int:
@@ -209,6 +236,7 @@ def compact_ranges(values: list[int]) -> str:
 def check_case(sim: Path, name: str, spec: dict[str, int | bool]) -> None:
     fixture = make_fixture(name, int(spec["cb_mask"]), int(spec["cr_mask"]))
     stream = run_case(sim, name, fixture)
+    check_baseline_stream(stream, name)
     first_idx = first_payload_index(stream, name)
 
     pass_values: list[int] = []
@@ -257,8 +285,8 @@ def main() -> None:
     print(
         "[PASS] CABAC P16x16 chroma-AC first-payload value sweep locks broad decode-equivalence classes "
         "for representative Cb-only, Cr-only, sparse/dense Cb+Cr, and mixed-plane quality-guard cases; "
-        "0x6b/0x75 remain promoted controls, but baseline sparse Cb/Cr 0xeb stays outside the "
-        "short/strict-but-wrong-plane repair classes"
+        "baseline stream lengths/final tails and 0x6b/0x75 promoted controls are stable, but baseline sparse "
+        "Cb/Cr 0xeb stays outside the short/strict-but-wrong-plane repair classes"
     )
 
 
