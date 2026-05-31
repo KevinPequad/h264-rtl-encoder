@@ -61,7 +61,13 @@ def patch_terminate_wait(workspace: Path) -> None:
                                     `endif
                                     end
                                 cabac_slice_active <= 1'b0;
+                                if (DEBUG_CABAC_P16X16)
+                                    $display(\"[CABACTERM] mb=%0d count=%0d bits=%024x bit_cnt=%0d ari_low=%0h ari_range=%0d ari_queue=%0d ari_outstanding=%0d ari_pending=%0d ari_pbyte=%0h\",
+                                             cabac_mb_counter, cabac_bits_count, cabac_bits_out[127:32], bit_cnt,
+                                             cabac_debug_low, cabac_debug_range, cabac_debug_queue,
+                                             cabac_debug_outstanding, cabac_debug_pending_valid, cabac_debug_pending_byte);
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
@@ -76,7 +82,13 @@ def patch_terminate_wait(workspace: Path) -> None:
                                     `endif
                                     end
                                 cabac_slice_active <= 1'b0;
+                                if (DEBUG_CABAC_P16X16)
+                                    $display(\"[CABACTERM] mb=%0d count=%0d bits=%024x bit_cnt=%0d ari_low=%0h ari_range=%0d ari_queue=%0d ari_outstanding=%0d ari_pending=%0d ari_pbyte=%0h\",
+                                             cabac_mb_counter, cabac_bits_count, cabac_bits_out[127:32], bit_cnt,
+                                             cabac_debug_low, cabac_debug_range, cabac_debug_queue,
+                                             cabac_debug_outstanding, cabac_debug_pending_valid, cabac_debug_pending_byte);
                                 if (cabac_bits_valid) begin
+                                    cabac_debug_header_bits();
                                     bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
                                     bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
                                     state <= S_EMIT;
@@ -87,7 +99,7 @@ def patch_terminate_wait(workspace: Path) -> None:
                                 end
                             end"""
     if old not in text:
-        raise RuntimeError("terminate-wait probe patch anchor not found")
+        raise RuntimeError("terminate-wait probe patch anchor not found; update the staged patch for current terminate debug instrumentation")
     path.write_text(text.replace(old, new), encoding="utf-8")
 
 
