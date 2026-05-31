@@ -47,24 +47,37 @@ PATTERNS = {
     "checker_odd": lambda x, y: (x + y) & 1,
     "checker_even": lambda x, y: ((x + y) & 1) ^ 1,
     "vert_left": lambda x, y: x < 2,
+    "vert_right": lambda x, y: x >= 2,
     "horiz_top": lambda x, y: y < 2,
+    "horiz_bottom": lambda x, y: y >= 2,
 }
 CASES = [
     # block, pattern, expect_full_decode, short FFmpeg signature when not full,
     # exact current final P-slice hex.  All cases share the locked
-    # d0 08 08 6b header tail and first residual payload byte eb; the strict vs
-    # miss partition is in the following residual tail, not a one-byte header or
-    # payload-boundary classification artifact.
+    # d0 08 08 6b header tail and first residual payload byte eb when the
+    # quantized AC residual is nonzero; the strict vs miss partition is in the
+    # following residual tail, not a one-byte header or payload-boundary
+    # classification artifact.  The complementary vertical/horizontal shapes
+    # lock that the remaining short-decodes are coefficient-shape/tail sensitive,
+    # not simply top-vs-bottom or left-vs-right block placement.
     (0, "checker_odd", False, "bytestream -19", "0000000141d008086beb2ed226"),
     (0, "vert_left", True, "", "0000000141d008086beb2f"),
+    (0, "vert_right", True, "", "0000000141d008086beb2f"),
     (0, "horiz_top", False, "bytestream -23", "0000000141d008086beb2e"),
+    (0, "horiz_bottom", False, "bytestream -23", "0000000141d008086beb2e"),
     (1, "checker_odd", False, "bytestream -21", "0000000141d008086beb2f6b5d"),
     (1, "vert_left", True, "", "0000000141d008086beb2f"),
+    (1, "vert_right", True, "", "0000000141d008086beb2f"),
     (1, "horiz_top", True, "", "0000000141d008086beb2f"),
+    (1, "horiz_bottom", True, "", "0000000141d008086beb2f"),
     (2, "checker_odd", True, "", "0000000141d008086beb2fa1d5"),
     (2, "checker_even", False, "bytestream -5", "0000000141d008086beb2fa1d4"),
+    (2, "vert_right", True, "", "0000000141d008086beb2f"),
+    (2, "horiz_bottom", True, "", "0000000141d008086beb2f"),
     (3, "checker_odd", True, "", "0000000141d008086beb2fc5f8"),
     (3, "vert_left", False, "bytestream -6", "0000000141d008086beb2fc7"),
+    (3, "vert_right", False, "bytestream -6", "0000000141d008086beb2fc7"),
+    (3, "horiz_bottom", False, "bytestream -18", "0000000141d008086beb2fc5"),
 ]
 
 

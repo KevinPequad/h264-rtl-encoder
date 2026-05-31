@@ -208,7 +208,7 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "probe_locks_cb_ac_shape_tail_partition",
         "scripts/run_cabac_p16x16_chroma_cb_ac_shape_probe.sh",
-        r"d0 08 08 6b header tail and first residual payload byte eb.*?\(0, \"checker_odd\", False, \"bytestream -19\", \"0000000141d008086beb2ed226\"\).*?\(0, \"vert_left\", True, \"\", \"0000000141d008086beb2f\"\).*?\(1, \"horiz_top\", True, \"\", \"0000000141d008086beb2f\"\).*?\(2, \"checker_even\", False, \"bytestream -5\", \"0000000141d008086beb2fa1d4\"\).*?\(3, \"vert_left\", False, \"bytestream -6\", \"0000000141d008086beb2fc7\"\).*?final_slice\.startswith\(\"0000000141d008086beb\"\).*?repair target is residual coefficient emission/order/arithmetic tail",
+        r"d0 08 08 6b header tail and first residual payload byte eb.*?complementary vertical/horizontal shapes.*?\(0, \"checker_odd\", False, \"bytestream -19\", \"0000000141d008086beb2ed226\"\).*?\(0, \"vert_right\", True, \"\", \"0000000141d008086beb2f\"\).*?\(0, \"horiz_bottom\", False, \"bytestream -23\", \"0000000141d008086beb2e\"\).*?\(1, \"horiz_bottom\", True, \"\", \"0000000141d008086beb2f\"\).*?\(2, \"checker_even\", False, \"bytestream -5\", \"0000000141d008086beb2fa1d4\"\).*?\(3, \"vert_right\", False, \"bytestream -6\", \"0000000141d008086beb2fc7\"\).*?\(3, \"horiz_bottom\", False, \"bytestream -18\", \"0000000141d008086beb2fc5\"\).*?final_slice\.startswith\(\"0000000141d008086beb\"\).*?repair target is residual coefficient emission/order/arithmetic tail",
     ),
 )
 
