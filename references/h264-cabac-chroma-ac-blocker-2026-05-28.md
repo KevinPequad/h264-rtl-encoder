@@ -301,3 +301,10 @@ Next useful probe:
 - Rejected a local source trial that replaced the sparse Cb-only special CBF selector table with the direct plane-local neighbor derivation for all four Cb AC blocks (`block0=0`, `block1=left`, `block2=top`, `block3=left+top`) while leaving dense/Cr paths unchanged.
 - The trial did not promote the remaining top-row Cb mirrors and regressed both bottom-row sparse-Cb controls: `cb_mirror_single_tl`, `cb_mirror_single_tr`, `cb_mirror_single_bl`, and `cb_mirror_single_br` all emitted only `384/768` decoded bytes; dense `cb_checker` stayed strict at `768/768`.
 - The source was restored and the canonical chroma-residual gates passed afterward. This keeps the next repair below another sparse-Cb selector remap and on the prefix/residual-tail arithmetic decisions locked by the recent `[CABACEMIT]`, `[CABACBITS]`, and bitflip probes.
+
+## 2026-05-30 all-mask P-slice prefix bitflip sweep
+
+- Added `scripts/run_cabac_p16x16_chroma_cb_ac_prefix_bitflip_sweep.sh` to extend the earlier representative tail-bitflip result across all 15 nonzero Cb-only chroma-AC masks.
+- The probe preserves the current baseline partition (`0x1/0x2/0x5/0x6/0x9/0xa/0xc` short at one frame with locked FFmpeg signatures, all other masks strict-decodable) and then flips only the common first post-slice-header CABAC prefix byte.
+- Both common mutations, `0x6b -> 0x4b` (bit 5) and `0x6b -> 0xeb` (bit 7), strict-decode every mask while preserving the expected Cb-only decoded-plane SAD (`64 * popcount(mask)`, `V_SAD=0`), including masks that already strict-decode at baseline.
+- This moves the next repair target away from per-mask CBF selectors and toward the shared arithmetic decision that produces the `0x6b` prefix byte before residual chunks begin; future source fixes should make that byte/renormalization state match the reference rather than patching individual sparse masks.
