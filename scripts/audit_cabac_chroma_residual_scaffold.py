@@ -205,6 +205,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         "scripts/run_cabac_p16x16_chroma_cr_ac_first_payload_substitution_probe.py",
         r"EXPECTED_FIRST_PAYLOAD\s*=\s*0xEB.*?QUEUE_M8_FIRST_PAYLOAD\s*=\s*0x75.*?BIT7_PROMOTED_PAYLOAD\s*=\s*0x6B.*?STRICT_MASKS\s*=\s*\{0x1,\s*0x2,\s*0x4,\s*0x6,\s*0x8,\s*0x9,\s*0xF\}.*?MISS_SIGNATURES\s*=\s*\{.*?0x3:\s*\"bytestream -6\".*?0xE:\s*\"bytestream -7\".*?for label, value in \(\(\"queue_m8_payload_0x75\", QUEUE_M8_FIRST_PAYLOAD\), \(\"bit7_payload_0x6b\", BIT7_PROMOTED_PAYLOAD\)\).*?assert_cr_only\(mask, fixture, raw, label\).*?check_both_plane_guard",
     ),
+    (
+        "probe_locks_cb_ac_shape_tail_partition",
+        "scripts/run_cabac_p16x16_chroma_cb_ac_shape_probe.sh",
+        r"d0 08 08 6b header tail and first residual payload byte eb.*?\(0, \"checker_odd\", False, \"bytestream -19\", \"0000000141d008086beb2ed226\"\).*?\(0, \"vert_left\", True, \"\", \"0000000141d008086beb2f\"\).*?\(1, \"horiz_top\", True, \"\", \"0000000141d008086beb2f\"\).*?\(2, \"checker_even\", False, \"bytestream -5\", \"0000000141d008086beb2fa1d4\"\).*?\(3, \"vert_left\", False, \"bytestream -6\", \"0000000141d008086beb2fc7\"\).*?final_slice\.startswith\(\"0000000141d008086beb\"\).*?repair target is residual coefficient emission/order/arithmetic tail",
+    ),
 )
 
 
@@ -233,7 +238,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, Cr AC mask-lattice signatures, and Cr AC first-payload substitution coverage")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, Cr AC mask-lattice signatures, Cr AC first-payload substitution coverage, and Cb AC shape/tail partition coverage")
     return 0
 
 
