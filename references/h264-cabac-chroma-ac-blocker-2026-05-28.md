@@ -271,3 +271,9 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` again so the representative sparse-Cb arithmetic gate now locks the early CABAC header debug trail before residual emission: skip, mb-type, MVD, luma CBP, chroma CBP, and the chroma-AC CBP handoff states.
 - The locked trail is identical for failing sparse masks `0x1`, `0x2`, and `0xc` and strict-pass controls `0x3`, `0x4`, and `0x8`, so the remaining decode split is still below these header context states and at/after the shared P-slice prefix byte plus residual tail.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` passes with early header debug state, P-slice prefix emission, residual output/emit chunks, stream tails, terminate pre-state, FFmpeg signatures, and decoded-plane sanity locked.
+
+## 2026-05-30 P-slice prefix emit-row lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` so the common P-slice prefix is locked as full `[CABACEMIT]` rows, not only emitted byte values: `(mb=0, return_state=S_SLICE, return_sub=7, byte=d0/08/08/6b, bit_cnt=32/24/16/8, pending_kind=0, pending_sel=0)`.
+- This keeps future prefix-byte experiments honest about where the shared `0x6b` byte is produced and whether any pending residual context state leaks into the pre-residual emission point.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` passes with the stricter P-slice emit-row lock; sparse masks `0x1`, `0x2`, and `0xc` remain short at `384/768`, while controls `0x3`, `0x4`, and `0x8` remain strict `768/768`.
