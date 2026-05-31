@@ -164,10 +164,10 @@ FRAME_SIZE = 16 * 16 * 3 // 2
 LUMA_SIZE = 16 * 16
 CHROMA_SIZE = 16 * 16 // 4
 P_SLICE_EMIT_TAIL = [
-    (0, 3, 7, "d0", 32, 0, 0),
-    (0, 3, 7, "08", 24, 0, 0),
-    (0, 3, 7, "08", 16, 0, 0),
-    (0, 3, 7, "6b", 8, 0, 0),
+    (0, 3, 7, "d0", 32, "d008086b0000000000000000", 0, 0),
+    (0, 3, 7, "08", 24, "08086b000000000000000000", 0, 0),
+    (0, 3, 7, "08", 16, "086b00000000000000000000", 0, 0),
+    (0, 3, 7, "6b", 8, "6b0000000000000000000000", 0, 0),
 ]
 HEADER_DEBUG_TRAIL = [
     (33, "skip ctx=0 state=115 bin=0"),
@@ -214,10 +214,10 @@ for mask, exp in EXPECTED.items():
                 line,
             )
             if m_emit:
-                mb, return_state, return_sub, byte, emit_bit_cnt, _bit_buf, pending_kind, pending_sel = m_emit.groups()
+                mb, return_state, return_sub, byte, emit_bit_cnt, bit_buf_hex, pending_kind, pending_sel = m_emit.groups()
                 emit.append((
                     int(mb), int(return_state), int(return_sub), byte[:2],
-                    int(emit_bit_cnt), int(pending_kind), int(pending_sel),
+                    int(emit_bit_cnt), bit_buf_hex, int(pending_kind), int(pending_sel),
                 ))
             continue
         if "[CABACTERM]" in line:
@@ -330,8 +330,8 @@ for mask, exp in EXPECTED.items():
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} first payload arithmetic row {first_payload}, expected {exp['first_payload']}")
     print(
         f"[PASS] CB_AC_ARITH mask=0x{mask} decoded {got_bytes}/768, "
-        f"early header trail, P-slice emit tail, CBF arithmetic trail, output/emit byte chunks, stream tail, terminate pre-state, and first-payload state locked"
+        f"early header trail, P-slice emit tail/bit-buffer rows, CBF arithmetic trail, output/emit byte chunks, stream tail, terminate pre-state, and first-payload state locked"
     )
 
-print("[PASS] CABAC P16x16 Cb-only chroma AC arithmetic trace probe locks failing top/split masks against passing top-pair and bottom-single controls, including early header debug state, P-slice emit tail rows, residual output/emit byte chunks, stream tails, and terminate pre-state")
+print("[PASS] CABAC P16x16 Cb-only chroma AC arithmetic trace probe locks failing top/split masks against passing top-pair and bottom-single controls, including early header debug state, P-slice emit tail/bit-buffer rows, residual output/emit byte chunks, stream tails, and terminate pre-state")
 PY
