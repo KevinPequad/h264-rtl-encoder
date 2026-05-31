@@ -283,3 +283,9 @@ Next useful probe:
 - Tightened the same arithmetic trace probe to include the full `bit_buf` contents for the common P-slice `[CABACEMIT]` tail rows, locking the exact `d008086b`, `08086b`, `086b`, and `6b` progression that produces the shared pre-residual prefix byte.
 - This keeps the prefix-byte repair target below whole-stream framing and prevents a future experiment from preserving the emitted byte sequence while silently moving the bit-buffer alignment that feeds the failing sparse-Cb masks.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` passes with the stricter P-slice emit-tail/bit-buffer rows; sparse masks `0x1`, `0x2`, and `0xc` remain short at `384/768`, while controls `0x3`, `0x4`, and `0x8` remain strict `768/768`.
+
+## 2026-05-30 full plane-local sparse-Cb CBF trial
+
+- Rejected a local source trial that replaced the sparse Cb-only special CBF selector table with the direct plane-local neighbor derivation for all four Cb AC blocks (`block0=0`, `block1=left`, `block2=top`, `block3=left+top`) while leaving dense/Cr paths unchanged.
+- The trial did not promote the remaining top-row Cb mirrors and regressed both bottom-row sparse-Cb controls: `cb_mirror_single_tl`, `cb_mirror_single_tr`, `cb_mirror_single_bl`, and `cb_mirror_single_br` all emitted only `384/768` decoded bytes; dense `cb_checker` stayed strict at `768/768`.
+- The source was restored and the canonical chroma-residual gates passed afterward. This keeps the next repair below another sparse-Cb selector remap and on the prefix/residual-tail arithmetic decisions locked by the recent `[CABACEMIT]`, `[CABACBITS]`, and bitflip probes.

@@ -15,9 +15,8 @@ python3 - <<'PY'
 from pathlib import Path
 W = H = 16
 # IDR flat, P frames with chroma-only residual. These fixtures cover the
-# reduced strict integrated CABAC P16x16 chroma residual milestone across Cb
-# DC-only, Cb DC+AC, and Cr DC-only. A Cr DC+AC fixture is generated too so
-# the next strict-decode promotion can be enabled with CABAC_CHROMA_INCLUDE_CR_AC=1.
+# reduced strict integrated CABAC P16x16 chroma residual milestone across Cb/Cr
+# DC-only and DC+AC paths; all four rows are expected to strict-decode.
 y0 = bytes([64]) * (W * H)
 flat_chroma = bytes([128]) * ((W // 2) * (H // 2))
 y1 = bytes([64]) * (W * H)
