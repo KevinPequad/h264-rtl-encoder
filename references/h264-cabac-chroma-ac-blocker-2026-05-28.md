@@ -435,3 +435,10 @@ Next useful probe:
 - The second-byte equivalence classes are much narrower than the first-byte classes but still non-unique: `26`, `36`, and `33` values respectively strict-decode with byte-identical IDR and exact expected plane-local SAD.
 - The generated baseline second bytes (`0x2e`, `0x30`, and `0x2e`) stay outside those strict expected-SAD classes, so the residual boundary issue is not just one magic first-byte substitution. The source repair should still target CABAC arithmetic/renormalization/output-byte state, not literal bytestream patching.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_second_payload_value_sweep.py` passes.
+
+## 2026-05-31 third-payload value-range probe
+
+- Added `scripts/run_cabac_p16x16_chroma_ac_third_payload_value_sweep.py` to mutate the third CABAC payload byte after the same locked `d0 08 08 6b eb` boundary for representative Cb-only (`0x1`), Cr-only (`0x3`), and sparse Cb+Cr (`0x1/0x1`) chroma-AC misses.
+- The third-byte equivalence classes are narrow but still non-unique: `16`, `42`, and `23` byte values respectively strict-decode with byte-identical IDR and exact expected plane-local SAD.
+- The generated baseline third bytes (`0xd2`, `0x26`, and `0xe2`) stay outside those strict expected-SAD classes. Together with the first/second-payload sweeps, this keeps the repair target on CABAC arithmetic/renormalization/output-byte state instead of a literal bytestream patch or another CBF selector remap.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_third_payload_value_sweep.py` passes.
