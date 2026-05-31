@@ -41,33 +41,38 @@ y1 = bytes([64]) * (width * height)
 # Cr-only single-block AC does not reproduce the sparse top-row Cb-only
 # short-decode blocker.  Lock the matching first-nonzero residual phase/sign
 # lattice as strict controls so the Cb repair can stay plane/order scoped rather
-# than chasing a generic chroma-AC threshold or singleton issue.
+# than chasing a generic chroma-AC threshold or singleton issue.  The exact
+# final P-slice tails are also locked here: if a later Cb repair perturbs the
+# Cr-only arithmetic/residual payload order while preserving strict decode, this
+# probe should fail at the bytestream boundary instead of only at the decoded
+# plane sanity layer.
 CASES = [
-    # name, block, delta, checker_parity, expect_ac, expected V-plane SAD
-    ("top_left_quantized_even", 0, 4, 0, False, 32),
-    ("top_right_quantized_even", 1, 4, 0, False, 32),
-    ("bottom_left_quantized_even", 2, 4, 0, False, 32),
-    ("bottom_right_quantized_even", 3, 4, 0, False, 32),
-    ("top_left_pos_even", 0, 5, 0, True, 40),
-    ("top_left_pos_odd", 0, 5, 1, True, 40),
-    ("top_left_neg_even", 0, -5, 0, True, 40),
-    ("top_left_neg_odd", 0, -5, 1, True, 40),
-    ("top_right_pos_even", 1, 5, 0, True, 40),
-    ("top_right_pos_odd", 1, 5, 1, True, 40),
-    ("top_right_neg_even", 1, -5, 0, True, 40),
-    ("top_right_neg_odd", 1, -5, 1, True, 40),
-    ("bottom_left_pos_even", 2, 5, 0, True, 40),
-    ("bottom_left_pos_odd", 2, 5, 1, True, 40),
-    ("bottom_left_neg_even", 2, -5, 0, True, 40),
-    ("bottom_left_neg_odd", 2, -5, 1, True, 40),
-    ("bottom_right_pos_even", 3, 5, 0, True, 40),
-    ("bottom_right_pos_odd", 3, 5, 1, True, 40),
-    ("bottom_right_neg_even", 3, -5, 0, True, 40),
-    ("bottom_right_neg_odd", 3, -5, 1, True, 40),
-    ("top_left_pos8_odd", 0, 8, 1, True, 64),
-    ("top_right_pos8_odd", 1, 8, 1, True, 64),
-    ("bottom_left_pos8_odd", 2, 8, 1, True, 64),
-    ("bottom_right_pos8_odd", 3, 8, 1, True, 64),
+    # name, block, delta, checker_parity, expect_ac, expected V-plane SAD,
+    # exact current final P-slice hex
+    ("top_left_quantized_even", 0, 4, 0, False, 32, "0000000141d008086b"),
+    ("top_right_quantized_even", 1, 4, 0, False, 32, "0000000141d008086b"),
+    ("bottom_left_quantized_even", 2, 4, 0, False, 32, "0000000141d008086b"),
+    ("bottom_right_quantized_even", 3, 4, 0, False, 32, "0000000141d008086b"),
+    ("top_left_pos_even", 0, 5, 0, True, 40, "0000000141d008086beb2f99af"),
+    ("top_left_pos_odd", 0, 5, 1, True, 40, "0000000141d008086beb2f99af"),
+    ("top_left_neg_even", 0, -5, 0, True, 40, "0000000141d008086beb2f99af"),
+    ("top_left_neg_odd", 0, -5, 1, True, 40, "0000000141d008086beb2f99af"),
+    ("top_right_pos_even", 1, 5, 0, True, 40, "0000000141d008086beb2f9a24"),
+    ("top_right_pos_odd", 1, 5, 1, True, 40, "0000000141d008086beb2f9a24"),
+    ("top_right_neg_even", 1, -5, 0, True, 40, "0000000141d008086beb2f9a24"),
+    ("top_right_neg_odd", 1, -5, 1, True, 40, "0000000141d008086beb2f9a24"),
+    ("bottom_left_pos_even", 2, 5, 0, True, 40, "0000000141d008086beb2f9860"),
+    ("bottom_left_pos_odd", 2, 5, 1, True, 40, "0000000141d008086beb2f9860"),
+    ("bottom_left_neg_even", 2, -5, 0, True, 40, "0000000141d008086beb2f9860"),
+    ("bottom_left_neg_odd", 2, -5, 1, True, 40, "0000000141d008086beb2f9860"),
+    ("bottom_right_pos_even", 3, 5, 0, True, 40, "0000000141d008086beb2f9986"),
+    ("bottom_right_pos_odd", 3, 5, 1, True, 40, "0000000141d008086beb2f9986"),
+    ("bottom_right_neg_even", 3, -5, 0, True, 40, "0000000141d008086beb2f9986"),
+    ("bottom_right_neg_odd", 3, -5, 1, True, 40, "0000000141d008086beb2f9986"),
+    ("top_left_pos8_odd", 0, 8, 1, True, 64, "0000000141d008086beb2f99af"),
+    ("top_right_pos8_odd", 1, 8, 1, True, 64, "0000000141d008086beb2f9a24"),
+    ("bottom_left_pos8_odd", 2, 8, 1, True, 64, "0000000141d008086beb2f9860"),
+    ("bottom_right_pos8_odd", 3, 8, 1, True, 64, "0000000141d008086beb2f9986"),
 ]
 
 def make_fixture(name: str, block: int, delta: int, parity: int) -> Path:
@@ -85,7 +90,23 @@ def make_fixture(name: str, block: int, delta: int, parity: int) -> Path:
     print(f"[INFO] CR_AC_PHASE {name} fixture {out.relative_to(root)} size={out.stat().st_size}")
     return out
 
-for name, block, delta, parity, expect_ac, expected_v_sad in CASES:
+
+def final_nal_hex(path: Path) -> str:
+    data = path.read_bytes()
+    starts = []
+    offset = 0
+    while True:
+        pos = data.find(b"\x00\x00\x00\x01", offset)
+        if pos < 0:
+            break
+        starts.append(pos)
+        offset = pos + 4
+    if not starts:
+        raise SystemExit(f"[FAIL] CR_AC_PHASE {path} has no Annex-B start code")
+    return data[starts[-1]:].hex()
+
+
+for name, block, delta, parity, expect_ac, expected_v_sad, expected_final_slice in CASES:
     input_path = make_fixture(name, block, delta, parity)
     h264 = root / "output" / "cabac_cr_ac_phase_probe" / f"{name}.h264"
     sim_log = root / "output" / "cabac_cr_ac_phase_probe" / f"{name}.sim.log"
@@ -120,6 +141,14 @@ for name, block, delta, parity, expect_ac, expected_v_sad in CASES:
         )
     actual_bytes = raw_yuv.stat().st_size if raw_yuv.exists() else 0
     ff_text = ffmpeg_log.read_text(errors="ignore")
+    final_slice = final_nal_hex(h264)
+    if final_slice != expected_final_slice:
+        raise SystemExit(
+            f"[FAIL] CR_AC_PHASE {name} final slice changed: "
+            f"got {final_slice}, expected {expected_final_slice}"
+        )
+    if not final_slice.startswith("0000000141d008086b"):
+        raise SystemExit(f"[FAIL] CR_AC_PHASE {name} lost locked P-slice header/payload prefix in {final_slice}")
     if ff_text.strip():
         raise SystemExit(f"[FAIL] CR_AC_PHASE {name} expected clean FFmpeg log, got {ff_text.strip()!r}")
     if actual_bytes != expected_bytes:
@@ -135,11 +164,11 @@ for name, block, delta, parity, expect_ac, expected_v_sad in CASES:
     if u_sad != 0 or v_sad != expected_v_sad:
         raise SystemExit(f"[FAIL] CR_AC_PHASE {name} expected Cr-only decoded delta U_SAD=0 V_SAD={expected_v_sad}, got U_SAD={u_sad} V_SAD={v_sad}")
     if not expect_ac:
-        print(f"[PASS] CR_AC_PHASE {name} quantizes below Cr AC threshold and strict-decodes {actual_bytes}/{expected_bytes} with U_SAD={u_sad} V_SAD={v_sad}")
+        print(f"[PASS] CR_AC_PHASE {name} quantizes below Cr AC threshold and strict-decodes {actual_bytes}/{expected_bytes} final_slice={final_slice} with U_SAD={u_sad} V_SAD={v_sad}")
     else:
-        print(f"[PASS] CR_AC_PHASE {name} strict-decodes {actual_bytes}/{expected_bytes} with Cr AC U_SAD={u_sad} V_SAD={v_sad}")
+        print(f"[PASS] CR_AC_PHASE {name} strict-decodes {actual_bytes}/{expected_bytes} final_slice={final_slice} with Cr AC U_SAD={u_sad} V_SAD={v_sad}")
 
     raw_yuv.unlink(missing_ok=True)
 
-print("[PASS] CABAC P16x16 Cr-only chroma AC phase/polarity probe locks +4 no-AC controls plus +5/+8 singleton strict decodes across all quadrants; sparse top-row short-decode behavior remains Cb/mixed-plane scoped")
+print("[PASS] CABAC P16x16 Cr-only chroma AC phase/polarity probe locks +4 no-AC controls plus +5/+8 singleton strict decodes across all quadrants and exact final P-slice tails; sparse top-row short-decode behavior remains Cb/mixed-plane scoped")
 PY
