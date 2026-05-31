@@ -240,6 +240,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         "scripts/run_cabac_p16x16_chroma_cr_ac_amplitude_probe.sh",
         r"Post-cod_i_queue=-7 promotion gate.*?\+4 checker perturbation.*?no-AC control.*?\+5\) and \+8 now strict-decode.*?\(0, 4, False, 32, \"0000000141d008086b\"\).*?\(3, 4, False, 32, \"0000000141d008086b\"\).*?\(0, 5, True, 40, \"0000000141d008086b3acbe66b\"\).*?\(3, 5, True, 40, \"0000000141d008086b3acbe661\"\).*?\(0, 8, True, 64, \"0000000141d008086b3acbe66b\"\).*?\(3, 8, True, 64, \"0000000141d008086b3acbe661\"\).*?final_slice\.startswith\(\"0000000141d008086b3a\"\).*?CABAC P16x16 sparse Cr AC amplitude gate promoted",
     ),
+    (
+        "gate_locks_combined_luma_chroma_residual_smoke",
+        "scripts/run_cabac_p16x16_luma_chroma_residual_check.py",
+        r"both luma residual and both-plane chroma AC residual.*?EXPECTED_FINAL_SLICE\s*=\s*\"0000000141d008086b3afee9ffdd7d77fdb6f7\".*?EXPECTED_CAVLC_SUPPRESSED_BITS\s*=\s*240.*?EXPECTED_Y_SAD\s*=\s*2048.*?EXPECTED_U_SAD\s*=\s*256.*?EXPECTED_V_SAD\s*=\s*256.*?cabac_chroma_cb_ac_blocks=4.*?cabac_chroma_cr_ac_blocks=4.*?CABAC P16x16 combined luma\+Cb\+Cr AC residual smoke strict-decodes",
+    ),
 )
 
 
@@ -268,7 +273,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, promoted Cb/Cr chroma-AC mask lattices with exact plane-local SAD, promoted cross-plane Cb+Cr AC strict-decode coverage, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, Cr AC first-payload substitution coverage, Cb/Cr AC promoted shape/amplitude strict-decode coverage, Cb AC phase/polarity tail plus first-payload substitution coverage, and Cr AC phase/polarity tail plus first-payload substitution coverage")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, promoted Cb/Cr chroma-AC mask lattices with exact plane-local SAD, promoted cross-plane Cb+Cr AC strict-decode coverage, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, Cr AC first-payload substitution coverage, Cb/Cr AC promoted shape/amplitude strict-decode coverage, Cb AC phase/polarity tail plus first-payload substitution coverage, Cr AC phase/polarity tail plus first-payload substitution coverage, and combined luma+Cb+Cr residual strict-decode smoke coverage with locked current decoded-plane metrics")
     return 0
 
 
