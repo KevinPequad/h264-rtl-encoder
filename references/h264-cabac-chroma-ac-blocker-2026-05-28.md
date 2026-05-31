@@ -321,3 +321,10 @@ Next useful probe:
 - The sweep locks the current mapping `[1,1,3,0]` plus simple unavailable-edge, actual-ish, and all-same selector remaps. None promote the remaining top-row sparse Cb masks `0x1` or `0x2` from the one-frame `384/768` miss state to full `768/768` output.
 - Several variants also regress current strict controls (`0x3`, `0x4`, and/or `0x8`), matching the earlier ad-hoc/static selector probes and turning the no-more-static-selector-remaps conclusion into a checked gate.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_cbf_selector_sweep.py` passes; next repair work should stay focused on the shared CABAC prefix/residual-tail arithmetic decisions rather than another CBF selector table tweak.
+
+## 2026-05-30 first CABAC payload-byte bitflip sweep
+
+- Added `scripts/run_cabac_p16x16_chroma_cb_ac_first_cabac_bitflip_sweep.sh` to sweep single-bit mutations of the first CABAC payload byte after the locked `d0 08 08 6b` P-slice header for all 15 nonzero Cb-only chroma-AC masks.
+- The baseline partition remains unchanged (`0x1/0x2/0x5/0x6/0x9/0xa/0xc` one-frame misses; all other masks strict-decode). The generated first CABAC payload byte is locked as `0xeb` for every mask.
+- Flipping bit7 (`0xeb -> 0x6b`) strict-decodes every mask with byte-identical IDR and expected Cb-only second-frame SAD. Flipping bit0 (`0xeb -> 0xea`) only promotes high-density masks `0x7/0x9/0xb/0xd/0xe/0xf`, and flipping bit2 (`0xeb -> 0xef`) only additionally promotes mask `0x2`; all other first-byte bit flips remain isolated one-frame bytestream misses.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_first_cabac_bitflip_sweep.sh` passes; this moves the next repair target onto the first CABAC payload arithmetic/output decision, below the already-classified header-tail parser-realignment flips and away from more CBF selector remaps.
