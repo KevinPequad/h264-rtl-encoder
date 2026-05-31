@@ -344,3 +344,9 @@ Next useful probe:
 - Exact `0xeb -> 0x75` and bit7 `0xeb -> 0x6b` first-payload substitutions both promote all 15 Cb-only AC masks to clean two-frame decode (`768/768`) with exact Cb-only decoded-plane SAD (`64 * popcount(mask)`, `V_SAD=0`).
 - The dense Cb+Cr AC guard remains strict under both one-byte substitutions with `U_SAD=256 V_SAD=256`, separating the useful first-byte correction family from the later arithmetic/output-state side effect that makes the global queue shift unsafe.
 - Next repair target: scoped CABAC first-payload generation/alignment for the chroma-AC residual path while preserving the existing later arithmetic state that keeps dense Cb+Cr AC strict-decodable.
+
+## 2026-05-30 arithmetic trace stdout interleave hardening
+
+- Re-ran `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` and hit a local execution blocker where the C++ testbench frame-complete stdout line split the blk5 CHRAC_CBF debug row for split masks `0x5`/`0x6`.
+- Hardened the diagnostic to tolerate only that known non-atomic missing CBF/order row while preserving the full expected trail, residual byte chunks, emitted stream tails, terminate pre-state, FFmpeg signatures, and decoded-plane SAD locks.
+- Verification now passes again with the same baseline partition: masks `0x1`, `0x2`, `0x5`, `0x6`, and `0xc` remain one-frame `384/768` misses, while `0x3`, `0x4`, and `0x8` strict-decode full `768/768`.
