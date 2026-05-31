@@ -428,3 +428,10 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_ac_first_payload_value_sweep.py` again so each representative baseline stream now locks its generated H.264 length and final 16-byte tail before the single-byte first-payload mutation sweep runs.
 - This keeps the first-payload repair family scoped to the already-characterized `d0 08 08 6b eb` residual boundary: a future source repair cannot silently move the second-slice tail/framing while preserving the same decode-equivalence class ranges.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_first_payload_value_sweep.py` passes with stream lengths, final tails, exact pass-value ranges, and known `0xeb->0x75` / bit7 `0xeb->0x6b` promoted controls locked for all nine cases.
+
+## 2026-05-31 second-payload value-range probe
+
+- Added `scripts/run_cabac_p16x16_chroma_ac_second_payload_value_sweep.py` to mutate only the byte after the shared baseline `d0 08 08 6b eb` header/first-payload prefix for representative Cb-only (`0x1`), Cr-only (`0x3`), and sparse Cb+Cr (`0x1/0x1`) chroma-AC misses.
+- The second-byte equivalence classes are much narrower than the first-byte classes but still non-unique: `26`, `36`, and `33` values respectively strict-decode with byte-identical IDR and exact expected plane-local SAD.
+- The generated baseline second bytes (`0x2e`, `0x30`, and `0x2e`) stay outside those strict expected-SAD classes, so the residual boundary issue is not just one magic first-byte substitution. The source repair should still target CABAC arithmetic/renormalization/output-byte state, not literal bytestream patching.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_second_payload_value_sweep.py` passes.
