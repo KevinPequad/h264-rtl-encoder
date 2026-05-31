@@ -49,29 +49,41 @@ TAILS = {
     (0xE, 0x1): "0000000141d008086b3acc3602d3f58ca1b3b4",
 }
 
+# Cross-plane high-amplitude guards.  The mask lattice above uses value 136
+# (one checkerboard block contributes SAD=64).  Single-plane amplitude probes
+# cover Cb-only/Cr-only value 160, but a combined Cb+Cr macroblock also needs a
+# bounded guard because it shares residual level contexts across both planes.
+AMPLITUDE_TAILS = {
+    (0x5, 0xA, 160, 136): "0000000141d008086b",
+}
 
-def checker_chroma(mask: int) -> bytes:
+
+def checker_chroma(mask: int, value: int = 136) -> bytes:
     out = []
     for y in range(HEIGHT // 2):
         for x in range(WIDTH // 2):
             block = (1 if x >= 4 else 0) + (2 if y >= 4 else 0)
-            out.append(136 if ((mask >> block) & 1 and ((x + y) % 2)) else 128)
+            out.append(value if ((mask >> block) & 1 and ((x + y) % 2)) else 128)
     return bytes(out)
 
 
-def make_fixture(cb_mask: int, cr_mask: int) -> Path:
+def make_fixture(cb_mask: int, cr_mask: int, cb_value: int = 136, cr_value: int = 136) -> Path:
     y0 = bytes([64]) * LUMA_SIZE
     y1 = bytes([64]) * LUMA_SIZE
     flat = bytes([128]) * CHROMA_SIZE
     data_dir = ROOT / "data"
     data_dir.mkdir(parents=True, exist_ok=True)
+    value_suffix = "" if (cb_value == 136 and cr_value == 136) else f"_cbv{cb_value}_crv{cr_value}"
     path = data_dir / (
         "smoke_16x16_2f_cabac_p16x16_chroma_residual_"
-        f"cbcr_ac_first_payload_cross_cb{cb_mask:x}_cr{cr_mask:x}.yuv"
+        f"cbcr_ac_first_payload_cross_cb{cb_mask:x}_cr{cr_mask:x}{value_suffix}.yuv"
     )
-    path.write_bytes(y0 + flat + flat + y1 + checker_chroma(cb_mask) + checker_chroma(cr_mask))
+    path.write_bytes(
+        y0 + flat + flat + y1 + checker_chroma(cb_mask, cb_value) + checker_chroma(cr_mask, cr_value)
+    )
     print(
         f"[INFO] CROSS_PLANE_AC cb=0x{cb_mask:x} cr=0x{cr_mask:x} "
+        f"cb_value={cb_value} cr_value={cr_value} "
         f"fixture {path} size={path.stat().st_size}"
     )
     return path
@@ -138,10 +150,11 @@ def final_slice_hex(stream: bytes, label: str) -> str:
     return stream[last_start:].hex()
 
 
-def run_case(sim: Path, cb_mask: int, cr_mask: int, fixture: Path) -> Path:
+def run_case(sim: Path, cb_mask: int, cr_mask: int, fixture: Path, cb_value: int = 136, cr_value: int = 136) -> Path:
     out_dir = ROOT / "output" / "cabac_cross_plane_ac_probe"
     out_dir.mkdir(parents=True, exist_ok=True)
-    case_name = f"cb{cb_mask:x}_cr{cr_mask:x}"
+    value_suffix = "" if (cb_value == 136 and cr_value == 136) else f"_cbv{cb_value}_crv{cr_value}"
+    case_name = f"cb{cb_mask:x}_cr{cr_mask:x}{value_suffix}"
     h264 = out_dir / f"{case_name}.h264"
     sim_log = out_dir / f"{case_name}.sim.log"
     with sim_log.open("w", encoding="utf-8") as log:
@@ -174,7 +187,14 @@ def run_case(sim: Path, cb_mask: int, cr_mask: int, fixture: Path) -> Path:
     return h264
 
 
-def assert_planes(cb_mask: int, cr_mask: int, fixture: Path, raw: bytes) -> tuple[int, int]:
+def assert_planes(
+    cb_mask: int,
+    cr_mask: int,
+    fixture: Path,
+    raw: bytes,
+    cb_value: int = 136,
+    cr_value: int = 136,
+) -> tuple[int, int]:
     if len(raw) != EXPECTED_BYTES:
         raise SystemExit(
             f"[FAIL] CROSS_PLANE_AC cb=0x{cb_mask:x} cr=0x{cr_mask:x} decoded {len(raw)}/{EXPECTED_BYTES}"
@@ -186,8 +206,8 @@ def assert_planes(cb_mask: int, cr_mask: int, fixture: Path, raw: bytes) -> tupl
     v0 = u0 + CHROMA_SIZE
     u_sad = sum(abs(raw[u0 + i] - src[u0 + i]) for i in range(CHROMA_SIZE))
     v_sad = sum(abs(raw[v0 + i] - src[v0 + i]) for i in range(CHROMA_SIZE))
-    expected_u = cb_mask.bit_count() * 64
-    expected_v = cr_mask.bit_count() * 64
+    expected_u = cb_mask.bit_count() * 8 * abs(cb_value - 128)
+    expected_v = cr_mask.bit_count() * 8 * abs(cr_value - 128)
     if u_sad != expected_u or v_sad != expected_v:
         raise SystemExit(
             f"[FAIL] CROSS_PLANE_AC cb=0x{cb_mask:x} cr=0x{cr_mask:x} "
@@ -196,21 +216,30 @@ def assert_planes(cb_mask: int, cr_mask: int, fixture: Path, raw: bytes) -> tupl
     return u_sad, v_sad
 
 
-def check_case(sim: Path, cb_mask: int, cr_mask: int, expected_tail: str) -> None:
-    fixture = make_fixture(cb_mask, cr_mask)
-    h264 = run_case(sim, cb_mask, cr_mask, fixture)
+def check_case(
+    sim: Path,
+    cb_mask: int,
+    cr_mask: int,
+    expected_tail: str,
+    cb_value: int = 136,
+    cr_value: int = 136,
+) -> None:
+    fixture = make_fixture(cb_mask, cr_mask, cb_value, cr_value)
+    h264 = run_case(sim, cb_mask, cr_mask, fixture, cb_value, cr_value)
     stream = h264.read_bytes()
-    tail = final_slice_hex(stream, f"cb=0x{cb_mask:x} cr=0x{cr_mask:x}")
+    label = f"cb=0x{cb_mask:x} cr=0x{cr_mask:x} cb_value={cb_value} cr_value={cr_value}"
+    tail = final_slice_hex(stream, label)
     if tail != expected_tail:
         raise SystemExit(
-            f"[FAIL] CROSS_PLANE_AC cb=0x{cb_mask:x} cr=0x{cr_mask:x} tail drift {tail}, expected {expected_tail}"
+            f"[FAIL] CROSS_PLANE_AC {label} tail drift {tail}, expected {expected_tail}"
         )
     raw, err = decode_raw(h264)
     if err.strip():
-        raise SystemExit(f"[FAIL] CROSS_PLANE_AC cb=0x{cb_mask:x} cr=0x{cr_mask:x} FFmpeg log {err.strip()!r}")
-    u_sad, v_sad = assert_planes(cb_mask, cr_mask, fixture, raw)
+        raise SystemExit(f"[FAIL] CROSS_PLANE_AC {label} FFmpeg log {err.strip()!r}")
+    u_sad, v_sad = assert_planes(cb_mask, cr_mask, fixture, raw, cb_value, cr_value)
     print(
-        f"[PASS] CROSS_PLANE_AC cb=0x{cb_mask:x} cr=0x{cr_mask:x} strict-decodes "
+        f"[PASS] CROSS_PLANE_AC cb=0x{cb_mask:x} cr=0x{cr_mask:x} "
+        f"cb_value={cb_value} cr_value={cr_value} strict-decodes "
         f"{len(raw)}/{EXPECTED_BYTES} U_SAD={u_sad} V_SAD={v_sad} tail={tail}"
     )
 
@@ -219,10 +248,12 @@ def main() -> int:
     sim = build_baseline_sim()
     for (cb_mask, cr_mask), tail in TAILS.items():
         check_case(sim, cb_mask, cr_mask, tail)
+    for (cb_mask, cr_mask, cb_value, cr_value), tail in AMPLITUDE_TAILS.items():
+        check_case(sim, cb_mask, cr_mask, tail, cb_value, cr_value)
     print(
         "[PASS] CABAC P16x16 cross-plane chroma-AC gate promoted: representative "
         "sparse/sparse, mirror, split-row, dense-Cb, dense-Cr, and dense-both Cb+Cr "
-        "AC masks strict-decode two frames with exact plane-local SAD under the "
+        "AC masks plus a mixed high-amplitude Cb+Cr case strict-decode two frames with exact plane-local SAD under the "
         "checked-in -7 CABAC queue initializer"
     )
     return 0
