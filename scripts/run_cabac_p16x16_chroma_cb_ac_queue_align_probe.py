@@ -4,15 +4,15 @@
 The current integrated CABAC P16x16 source still has a sparse-Cb AC mask
 partition where several masks short-decode.  This probe keeps the canonical
 checkout untouched, stages an isolated workspace that changes only the CABAC
-core initial output queue from -9 to -8, and verifies whether that candidate
-promotes every 16x16 Cb-only AC mask while preserving the Cb-only decoded-plane
-signature.
+core initial output queue from -9 to -8, and verifies that the candidate
+promotes every 16x16 Cb-only AC mask.  It also locks the important negative
+finding that applying that queue shift globally is not yet committable: the
+same candidate regresses a both-plane Cb+Cr AC control.
 """
 
 from __future__ import annotations
 
 import os
-import re
 import subprocess
 import sys
 import tempfile
@@ -21,6 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.rtl_runner import BuildConfig, build_sim, stage_workspace
+
 WIDTH = HEIGHT = 16
 FRAME_SIZE = WIDTH * HEIGHT * 3 // 2
 LUMA_SIZE = WIDTH * HEIGHT
@@ -40,7 +41,7 @@ QUEUE_ANCHOR = "cod_i_queue       <= -8'sd9;"
 QUEUE_CANDIDATE = "cod_i_queue       <= -8'sd8;"
 
 
-def cb_for_mask(mask: int) -> bytes:
+def checker_chroma(mask: int = 0xF) -> bytes:
     out = []
     for y in range(HEIGHT // 2):
         for x in range(WIDTH // 2):
@@ -49,7 +50,7 @@ def cb_for_mask(mask: int) -> bytes:
     return bytes(out)
 
 
-def make_fixtures() -> dict[int, Path]:
+def make_fixtures() -> tuple[dict[int, Path], Path]:
     y0 = bytes([64]) * LUMA_SIZE
     y1 = bytes([64]) * LUMA_SIZE
     flat = bytes([128]) * CHROMA_SIZE
@@ -58,10 +59,13 @@ def make_fixtures() -> dict[int, Path]:
     fixtures: dict[int, Path] = {}
     for mask in range(1, 16):
         path = out_dir / f"smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_ac_queue_align_mask_{mask:x}.yuv"
-        path.write_bytes(y0 + flat + flat + y1 + cb_for_mask(mask) + flat)
+        path.write_bytes(y0 + flat + flat + y1 + checker_chroma(mask) + flat)
         fixtures[mask] = path
         print(f"[INFO] CB_AC_QUEUE_ALIGN mask=0x{mask:x} fixture {path} size={path.stat().st_size}")
-    return fixtures
+    both = out_dir / "smoke_16x16_2f_cabac_p16x16_chroma_residual_cbcr_ac_queue_align_guard.yuv"
+    both.write_bytes(y0 + flat + flat + y1 + checker_chroma(0xF) + checker_chroma(0xF))
+    print(f"[INFO] CB_AC_QUEUE_ALIGN both-plane guard fixture {both} size={both.stat().st_size}")
+    return fixtures, both
 
 
 def patch_queue_alignment(workspace: Path) -> None:
@@ -121,11 +125,11 @@ def build_candidate(name: str, patch_queue: bool) -> Path:
     return sim
 
 
-def run_case(sim: Path, name: str, mask: int, fixture: Path) -> tuple[bytes, str, Path, str]:
+def run_case(sim: Path, name: str, case_name: str, fixture: Path) -> tuple[bytes, str, Path, str]:
     out_dir = ROOT / "output" / "cabac_cb_ac_queue_align_probe" / name
     out_dir.mkdir(parents=True, exist_ok=True)
-    h264 = out_dir / f"mask_{mask:x}.h264"
-    sim_log = out_dir / f"mask_{mask:x}.sim.log"
+    h264 = out_dir / f"{case_name}.h264"
+    sim_log = out_dir / f"{case_name}.sim.log"
     with sim_log.open("w", encoding="utf-8") as log:
         subprocess.run(
             [
@@ -142,6 +146,12 @@ def run_case(sim: Path, name: str, mask: int, fixture: Path) -> tuple[bytes, str
             check=True,
         )
     sim_text = sim_log.read_text(encoding="utf-8", errors="replace")
+    raw, err = decode_raw(h264)
+    return raw, err, h264, sim_text
+
+
+def run_mask_case(sim: Path, name: str, mask: int, fixture: Path) -> tuple[bytes, str, Path, str]:
+    raw, err, h264, sim_text = run_case(sim, name, f"mask_{mask:x}", fixture)
     expected_blocks = mask.bit_count()
     for needle in (
         "cabac_p16x16_mbs=1",
@@ -152,7 +162,6 @@ def run_case(sim: Path, name: str, mask: int, fixture: Path) -> tuple[bytes, str
     ):
         if needle not in sim_text:
             raise SystemExit(f"[FAIL] CB_AC_QUEUE_ALIGN {name} mask=0x{mask:x} sim log missing {needle}")
-    raw, err = decode_raw(h264)
     return raw, err, h264, sim_text
 
 
@@ -177,7 +186,7 @@ def assert_cb_only(mask: int, fixture: Path, raw: bytes, label: str) -> tuple[in
 
 def check_baseline(sim: Path, fixtures: dict[int, Path]) -> None:
     for mask, fixture in fixtures.items():
-        raw, err, h264, _ = run_case(sim, "baseline", mask, fixture)
+        raw, err, h264, _ = run_mask_case(sim, "baseline", mask, fixture)
         if mask in BASELINE_FULL:
             u_sad, v_sad = assert_cb_only(mask, fixture, raw, "baseline")
             if err.strip():
@@ -199,10 +208,10 @@ def check_baseline(sim: Path, fixtures: dict[int, Path]) -> None:
             )
 
 
-def check_queue_m8(sim: Path, fixtures: dict[int, Path]) -> None:
+def check_queue_m8(sim: Path, fixtures: dict[int, Path], both_plane_fixture: Path) -> None:
     first_payload_bytes: set[int] = set()
     for mask, fixture in fixtures.items():
-        raw, err, h264, _ = run_case(sim, "queue_m8", mask, fixture)
+        raw, err, h264, _ = run_mask_case(sim, "queue_m8", mask, fixture)
         if err.strip():
             raise SystemExit(f"[FAIL] CB_AC_QUEUE_ALIGN queue_m8 mask=0x{mask:x} expected clean FFmpeg log, got {err.strip()!r}")
         u_sad, v_sad = assert_cb_only(mask, fixture, raw, "queue_m8")
@@ -226,18 +235,39 @@ def check_queue_m8(sim: Path, fixtures: dict[int, Path]) -> None:
             f"[FAIL] CB_AC_QUEUE_ALIGN queue_m8 first payload bytes {sorted(first_payload_bytes)}, expected [0x75]"
         )
 
+    raw, err, _h264, sim_text = run_case(sim, "queue_m8", "both_planes_guard", both_plane_fixture)
+    for needle in (
+        "cabac_p16x16_mbs=1",
+        "cb_ac_mbs=1",
+        "cr_ac_mbs=1",
+        "cb_ac_blocks=4",
+        "cr_ac_blocks=4",
+    ):
+        if needle not in sim_text:
+            raise SystemExit(f"[FAIL] CB_AC_QUEUE_ALIGN queue_m8 both-plane guard sim log missing {needle}")
+    if len(raw) != FRAME_SIZE or "bytestream -9" not in err:
+        raise SystemExit(
+            "[FAIL] CB_AC_QUEUE_ALIGN queue_m8 both-plane guard no longer locks the global -8 regression: "
+            f"decoded={len(raw)}/{EXPECTED_BYTES} err={err.strip()!r}"
+        )
+    print(
+        "[PASS] CB_AC_QUEUE_ALIGN queue_m8 both-plane guard confirms global -8 remains non-committable: "
+        f"decoded={len(raw)}/{EXPECTED_BYTES} with bytestream -9"
+    )
+
 
 def main() -> None:
-    fixtures = make_fixtures()
+    fixtures, both_plane_fixture = make_fixtures()
     baseline = build_candidate("baseline", patch_queue=False)
     check_baseline(baseline, fixtures)
     queue_m8 = build_candidate("queue_m8", patch_queue=True)
-    check_queue_m8(queue_m8, fixtures)
+    check_queue_m8(queue_m8, fixtures, both_plane_fixture)
     print(
         "[PASS] CABAC P16x16 Cb-only chroma-AC queue-alignment staged probe: "
-        "baseline sparse-Cb partition is unchanged, while changing only h264_cabac_core "
+        "baseline sparse-Cb partition is unchanged; globally changing h264_cabac_core "
         "cod_i_queue initialization from -9 to -8 promotes all 15 Cb-only AC masks to strict "
-        "two-frame FFmpeg decode with byte-identical IDR and expected Cb-only SAD"
+        "two-frame FFmpeg decode, but is explicitly blocked from source promotion by the both-plane "
+        "Cb+Cr AC regression guard"
     )
 
 
