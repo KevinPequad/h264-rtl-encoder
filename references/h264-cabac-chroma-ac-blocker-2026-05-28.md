@@ -356,3 +356,9 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py` so each expected-short mixed Cb+Cr chroma-AC baseline must still decode a byte-identical IDR frame before failing on the P residual.
 - This keeps the cross-plane first-payload repair target scoped below SPS/PPS/IDR/header framing: the sparse mixed-plane misses are now locked as P-residual CABAC failures, while the `0xeb->0x75` and bit7 `0xeb->0x6b` one-byte substitutions still promote them to strict two-frame decode with expected plane-local SAD and preserve the strict dense controls.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py` passes.
+
+## 2026-05-31 Cb-only first-payload IDR integrity lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_first_payload_substitution_probe.py` so every expected-short Cb-only chroma-AC baseline must still decode the full byte-identical IDR frame before the probe accepts its one-frame P-residual failure signature.
+- The Cb-only first-payload repair target now has the same scope guard as the mixed-plane probe: the short masks remain localized P-residual CABAC failures, not SPS/PPS/IDR/header regressions, while `0xeb->0x75` and bit7 `0xeb->0x6b` still promote all Cb-only AC masks and preserve the dense Cb+Cr guard.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_first_payload_substitution_probe.py` passes.
