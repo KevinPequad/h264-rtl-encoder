@@ -63,6 +63,9 @@ AMPLITUDE_TAILS = {
     (0x5, 0xA, 136, 96): "0000000141d008086b",
     (0xA, 0x5, 96, 136): "0000000141d008086b3acc6e110591f10a4804a1da00000300",
     (0xA, 0x5, 136, 96): "0000000141d008086b",
+    (0xA, 0x5, 160, 136): "0000000141d008086b3acc6e451591f10a562921da00000300",
+    (0xA, 0x5, 136, 160): "0000000141d008086b",
+    (0xA, 0x5, 160, 160): "0000000141d008086b7bef",
 }
 
 
@@ -261,7 +264,7 @@ def main() -> int:
     print(
         "[PASS] CABAC P16x16 cross-plane chroma-AC gate promoted: representative "
         "sparse/sparse, mirror, split-row, dense-Cb, dense-Cr, and dense-both Cb+Cr "
-        "AC masks plus positive and mixed-sign high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
+        "AC masks plus positive, reciprocal, and mixed-sign high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
         "checked-in -7 CABAC queue initializer"
     )
     return 0
