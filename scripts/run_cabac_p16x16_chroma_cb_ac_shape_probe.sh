@@ -50,17 +50,21 @@ PATTERNS = {
     "horiz_top": lambda x, y: y < 2,
 }
 CASES = [
-    # block, pattern, expect_full_decode, short FFmpeg signature when not full
-    (0, "checker_odd", False, "bytestream -19"),
-    (0, "vert_left", True, ""),
-    (0, "horiz_top", False, "bytestream -23"),
-    (1, "checker_odd", False, "bytestream -21"),
-    (1, "vert_left", True, ""),
-    (1, "horiz_top", True, ""),
-    (2, "checker_odd", True, ""),
-    (2, "checker_even", False, "bytestream -5"),
-    (3, "checker_odd", True, ""),
-    (3, "vert_left", False, "bytestream -6"),
+    # block, pattern, expect_full_decode, short FFmpeg signature when not full,
+    # exact current final P-slice hex.  All cases share the locked
+    # d0 08 08 6b header tail and first residual payload byte eb; the strict vs
+    # miss partition is in the following residual tail, not a one-byte header or
+    # payload-boundary classification artifact.
+    (0, "checker_odd", False, "bytestream -19", "0000000141d008086beb2ed226"),
+    (0, "vert_left", True, "", "0000000141d008086beb2f"),
+    (0, "horiz_top", False, "bytestream -23", "0000000141d008086beb2e"),
+    (1, "checker_odd", False, "bytestream -21", "0000000141d008086beb2f6b5d"),
+    (1, "vert_left", True, "", "0000000141d008086beb2f"),
+    (1, "horiz_top", True, "", "0000000141d008086beb2f"),
+    (2, "checker_odd", True, "", "0000000141d008086beb2fa1d5"),
+    (2, "checker_even", False, "bytestream -5", "0000000141d008086beb2fa1d4"),
+    (3, "checker_odd", True, "", "0000000141d008086beb2fc5f8"),
+    (3, "vert_left", False, "bytestream -6", "0000000141d008086beb2fc7"),
 ]
 
 
@@ -85,7 +89,22 @@ def extract_signature(text: str) -> str:
     return text.strip().split("\n")[-1] if text.strip() else ""
 
 
-for block, pattern_name, expect_full, short_signature in CASES:
+def final_nal_hex(path: Path) -> str:
+    data = path.read_bytes()
+    starts = []
+    offset = 0
+    while True:
+        pos = data.find(b"\x00\x00\x00\x01", offset)
+        if pos < 0:
+            break
+        starts.append(pos)
+        offset = pos + 4
+    if not starts:
+        raise SystemExit(f"[FAIL] CB_AC_SHAPE {path} has no Annex-B start code")
+    return data[starts[-1]:].hex()
+
+
+for block, pattern_name, expect_full, short_signature, expected_final_slice in CASES:
     input_path = make_fixture(block, pattern_name)
     h264 = root / "output" / "cabac_cb_ac_shape_probe" / f"blk{block}_{pattern_name}.h264"
     sim_log = root / "output" / "cabac_cb_ac_shape_probe" / f"blk{block}_{pattern_name}.sim.log"
@@ -115,6 +134,17 @@ for block, pattern_name, expect_full, short_signature in CASES:
         )
     actual_bytes = raw_yuv.stat().st_size if raw_yuv.exists() else 0
     ff_text = ffmpeg_log.read_text(errors="ignore")
+    final_slice = final_nal_hex(h264)
+    if final_slice != expected_final_slice:
+        raise SystemExit(
+            f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} final slice changed: "
+            f"got {final_slice}, expected {expected_final_slice}"
+        )
+    if not final_slice.startswith("0000000141d008086beb"):
+        raise SystemExit(
+            f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} lost locked "
+            f"P-slice header tail / first residual byte in {final_slice}"
+        )
 
     if expect_full:
         if ff_text.strip():
@@ -129,7 +159,7 @@ for block, pattern_name, expect_full, short_signature in CASES:
         v_sad = sum(abs(dec[v0 + i] - src[v0 + i]) for i in range(chroma_size))
         if u_sad == 0 or v_sad != 0:
             raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} expected Cb-only decoded delta, got U_SAD={u_sad} V_SAD={v_sad}")
-        print(f"[PASS] CB_AC_SHAPE block={block} pattern={pattern_name} strict-decodes {actual_bytes}/{expected_bytes} with Cb-only U_SAD={u_sad}")
+        print(f"[PASS] CB_AC_SHAPE block={block} pattern={pattern_name} strict-decodes {actual_bytes}/{expected_bytes} final_slice={final_slice} with Cb-only U_SAD={u_sad}")
     else:
         if actual_bytes != frame_size:
             raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} decoded {actual_bytes}/{expected_bytes}, expected one-frame miss")
@@ -139,9 +169,9 @@ for block, pattern_name, expect_full, short_signature in CASES:
                 f"[FAIL] CB_AC_SHAPE block={block} pattern={pattern_name} expected FFmpeg signature "
                 f"{short_signature!r}, got {ff_text.strip()!r}"
             )
-        print(f"[PASS] CB_AC_SHAPE block={block} pattern={pattern_name} remains one-frame miss {actual_bytes}/{expected_bytes} with FFmpeg signature {short_signature}")
+        print(f"[PASS] CB_AC_SHAPE block={block} pattern={pattern_name} remains one-frame miss {actual_bytes}/{expected_bytes} final_slice={final_slice} with FFmpeg signature {short_signature}")
 
     raw_yuv.unlink(missing_ok=True)
 
-print("[PASS] CABAC P16x16 sparse Cb AC shape probe locks coefficient-shape-sensitive strict/miss partition; repair target is residual coefficient emission/order, not only top-row block placement")
+print("[PASS] CABAC P16x16 sparse Cb AC shape probe locks coefficient-shape-sensitive strict/miss partition and exact final-slice tails under common first payload byte eb; repair target is residual coefficient emission/order/arithmetic tail, not only top-row block placement or the P-slice boundary")
 PY
