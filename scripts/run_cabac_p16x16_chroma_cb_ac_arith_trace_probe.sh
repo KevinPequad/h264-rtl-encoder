@@ -164,6 +164,21 @@ FRAME_SIZE = 16 * 16 * 3 // 2
 LUMA_SIZE = 16 * 16
 CHROMA_SIZE = 16 * 16 // 4
 P_SLICE_EMIT_PREFIX = ("d0", "08", "08", "6b")
+HEADER_DEBUG_TRAIL = [
+    (33, "skip ctx=0 state=115 bin=0"),
+    (34, "skip outstate=119 bits_valid=0 bits_count=0"),
+    (36, "mbtype14 state=20"),
+    (37, "mbtype15 state=98"),
+    (38, "mbtype16 state=114"),
+    (39, "mvdx ctx=0 state=127"),
+    (40, "mvdy ctx=0 state=116"),
+    (41, "cbp0 sel=3 state=91"),
+    (42, "cbp1 sel=2 state=104"),
+    (43, "cbp2 sel=1 state=120"),
+    (44, "cbp3 state=58"),
+    (45, "cbpchroma state=72"),
+    (64, "cbpchroma_ac state=122"),
+]
 
 for mask, exp in EXPECTED.items():
     sim_log = ROOT / f"mask_{mask}.sim.log"
@@ -178,7 +193,15 @@ for mask, exp in EXPECTED.items():
     first_payload = None
     term = []
     emit = []
+    header_debug = []
     for line in text.splitlines():
+        if "[CABACDBG]" in line:
+            m_dbg = re.search(r"\[CABACDBG\] mb=(\d+) sub=(\d+) (.*)", line)
+            if m_dbg:
+                mb, sub_i, rest = m_dbg.groups()
+                if mb == "0":
+                    header_debug.append((int(sub_i), rest))
+            continue
         if "[CABACEMIT]" in line:
             m_emit = re.search(
                 r"mb=(\d+) return_state=(\d+) return_sub=(\d+) byte=([0-9a-f]+) "
@@ -267,6 +290,11 @@ for mask, exp in EXPECTED.items():
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} expected clean FFmpeg log, got {ffmpeg_text.strip()!r}")
     if cbf != exp["cbf"]:
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} CBF arithmetic trail {cbf}, expected {exp['cbf']}")
+    if header_debug != HEADER_DEBUG_TRAIL:
+        raise SystemExit(
+            f"[FAIL] CB_AC_ARITH mask=0x{mask} early CABAC header debug trail "
+            f"{header_debug}, expected {HEADER_DEBUG_TRAIL}"
+        )
     if bits_chunks != exp["bits"] and bits_chunks != exp.get("bits_alt"):
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} CABAC output byte chunks {bits_chunks}, expected {exp['bits']}")
     p_slice_emit = tuple(item[3] for item in emit if item[1] == 3)
@@ -298,8 +326,8 @@ for mask, exp in EXPECTED.items():
         raise SystemExit(f"[FAIL] CB_AC_ARITH mask=0x{mask} first payload arithmetic row {first_payload}, expected {exp['first_payload']}")
     print(
         f"[PASS] CB_AC_ARITH mask=0x{mask} decoded {got_bytes}/768, "
-        f"CBF arithmetic trail, output/emit byte chunks, stream tail, terminate pre-state, and first-payload state locked"
+        f"early header trail, CBF arithmetic trail, output/emit byte chunks, stream tail, terminate pre-state, and first-payload state locked"
     )
 
-print("[PASS] CABAC P16x16 Cb-only chroma AC arithmetic trace probe locks failing top/split masks against passing top-pair and bottom-single controls, including P-slice prefix emission, residual output/emit byte chunks, stream tails, and terminate pre-state")
+print("[PASS] CABAC P16x16 Cb-only chroma AC arithmetic trace probe locks failing top/split masks against passing top-pair and bottom-single controls, including early header debug state, P-slice prefix emission, residual output/emit byte chunks, stream tails, and terminate pre-state")
 PY

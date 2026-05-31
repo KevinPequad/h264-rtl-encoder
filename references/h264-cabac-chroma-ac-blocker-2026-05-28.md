@@ -265,3 +265,9 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` to lock the common P-slice prefix emission tail (`d0 08 08 6b`) separately from the residual emitted byte tail for representative Cb-only AC masks `0x1`, `0x2`, `0x3`, `0x4`, `0x8`, and `0xc`.
 - Result: no promotion yet. Sparse masks `0x1`, `0x2`, and `0xc` remain short `384/768` one-frame outputs, while controls `0x3`, `0x4`, and `0x8` remain strict `768/768` decodes. The useful next repair target is now explicitly the arithmetic/byte decision that produces the shared `0x6b` prefix byte or the immediately following residual tail, with both emission points locked by the diagnostic gate.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` passes with P-slice prefix emission, residual output/emit chunks, stream tails, terminate pre-state, FFmpeg signatures, and decoded-plane sanity locked.
+
+## 2026-05-30 early-header debug-state lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` again so the representative sparse-Cb arithmetic gate now locks the early CABAC header debug trail before residual emission: skip, mb-type, MVD, luma CBP, chroma CBP, and the chroma-AC CBP handoff states.
+- The locked trail is identical for failing sparse masks `0x1`, `0x2`, and `0xc` and strict-pass controls `0x3`, `0x4`, and `0x8`, so the remaining decode split is still below these header context states and at/after the shared P-slice prefix byte plus residual tail.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` passes with early header debug state, P-slice prefix emission, residual output/emit chunks, stream tails, terminate pre-state, FFmpeg signatures, and decoded-plane sanity locked.
