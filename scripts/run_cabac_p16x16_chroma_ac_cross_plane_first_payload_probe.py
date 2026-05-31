@@ -28,8 +28,9 @@ EXPECTED_BYTES = FRAME_SIZE * 2
 EXPECTED_HEADER_TAIL = 0x6B
 
 # Representative cross-plane cases: sparse/sparse top-row, diagonal, split-row,
-# bottom/top mirror pairs, dense-Cr, dense-Cb, and dense-both controls.  This is
-# deliberately smaller than the full 15x15 lattice so the cron gate stays
+# orthogonal axis-pair, bottom/top mirror pairs, dense-Cr, dense-Cb, and
+# dense-both controls.  This is deliberately smaller than the full 15x15 lattice
+# so the cron gate stays
 # bounded while still covering the combinations that used to expose short-decode
 # and wrong-plane quality failures before the `cod_i_queue=-7` promotion.
 TAILS = {
@@ -39,6 +40,8 @@ TAILS = {
     (0x3, 0x3): "0000000141d008086b3acc614c11ff50ec24abcc54",
     (0x4, 0x1): "0000000141d008086b3acbdfe134e8",
     (0x5, 0x5): "0000000141d008086b3acc6f8c40ff5158a92c2c76",
+    (0x6, 0x9): "0000000141d008086b3acc6941a435899e104b1c8a00",
+    (0x9, 0x6): "0000000141d008086b3acc68c9ae34745f6b095dfa00",
     (0xC, 0xC): "0000000141d008086b3acc626e3a52133cb094a23a",
     (0x3, 0xC): "0000000141d008086b3acc614c37df50ec24aaa82a",
     (0xC, 0x3): "0000000141d008086b3acc626e1472133cb0958454",
@@ -66,6 +69,8 @@ AMPLITUDE_TAILS = {
     (0xA, 0x5, 160, 136): "0000000141d008086b3acc6e451591f10a562921da00000300",
     (0xA, 0x5, 136, 160): "0000000141d008086b",
     (0xA, 0x5, 160, 160): "0000000141d008086b7bef",
+    (0x6, 0x9, 96, 160): "0000000141d008086b7ffeef",
+    (0x9, 0x6, 160, 96): "0000000141d008086b7ade",
     (0xC, 0x3, 96, 160): "0000000141d008086bbaff",
 }
 
@@ -264,8 +269,9 @@ def main() -> int:
         check_case(sim, cb_mask, cr_mask, tail, cb_value, cr_value)
     print(
         "[PASS] CABAC P16x16 cross-plane chroma-AC gate promoted: representative "
-        "sparse/sparse, mirror, split-row, dense-Cb, dense-Cr, and dense-both Cb+Cr "
-        "AC masks plus positive, reciprocal, and mixed-sign high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
+        "sparse/sparse, mirror, split-row, orthogonal axis-pair, dense-Cb, dense-Cr, "
+        "and dense-both Cb+Cr AC masks plus positive, reciprocal, and mixed-sign "
+        "high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
         "checked-in -7 CABAC queue initializer"
     )
     return 0
