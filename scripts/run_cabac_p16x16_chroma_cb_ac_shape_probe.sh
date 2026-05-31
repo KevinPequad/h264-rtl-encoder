@@ -138,16 +138,16 @@ AXIS32_CASES = [
     (3, "horiz_bottom", False, "bytestream -19", "0000000141d008086beb31d5f795ab"),
 ]
 ALL_CASES = [
-    (block, pattern_name, pattern_name, 133, expect_full, short_signature, expected_final_slice)
+    (block, pattern_name, pattern_name, 133, 40, expect_full, short_signature, expected_final_slice)
     for block, pattern_name, expect_full, short_signature, expected_final_slice in CASES
 ] + [
-    (block, pattern_name, f"{pattern_name}_a32", 160, expect_full, short_signature, expected_final_slice)
+    (block, pattern_name, f"{pattern_name}_a32", 160, None, expect_full, short_signature, expected_final_slice)
     for block, pattern_name, expect_full, short_signature, expected_final_slice in DIAG32_CASES
 ] + [
-    (block, pattern_name, f"{pattern_name}_a32", 160, expect_full, short_signature, expected_final_slice)
+    (block, pattern_name, f"{pattern_name}_a32", 160, None, expect_full, short_signature, expected_final_slice)
     for block, pattern_name, expect_full, short_signature, expected_final_slice in CHECKER32_CASES
 ] + [
-    (block, pattern_name, f"{pattern_name}_a32", 160, expect_full, short_signature, expected_final_slice)
+    (block, pattern_name, f"{pattern_name}_a32", 160, None, expect_full, short_signature, expected_final_slice)
     for block, pattern_name, expect_full, short_signature, expected_final_slice in AXIS32_CASES
 ]
 
@@ -188,7 +188,7 @@ def final_nal_hex(path: Path) -> str:
     return data[starts[-1]:].hex()
 
 
-for block, pattern_name, test_name, cb_value, expect_full, short_signature, expected_final_slice in ALL_CASES:
+for block, pattern_name, test_name, cb_value, expected_u_sad, expect_full, short_signature, expected_final_slice in ALL_CASES:
     input_path = make_fixture(block, pattern_name, test_name, cb_value)
     h264 = root / "output" / "cabac_cb_ac_shape_probe" / f"blk{block}_{test_name}.h264"
     sim_log = root / "output" / "cabac_cb_ac_shape_probe" / f"blk{block}_{test_name}.sim.log"
@@ -241,9 +241,14 @@ for block, pattern_name, test_name, cb_value, expect_full, short_signature, expe
         v0 = u0 + chroma_size
         u_sad = sum(abs(dec[u0 + i] - src[u0 + i]) for i in range(chroma_size))
         v_sad = sum(abs(dec[v0 + i] - src[v0 + i]) for i in range(chroma_size))
-        if u_sad == 0 or v_sad != 0:
-            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={test_name} expected Cb-only decoded delta, got U_SAD={u_sad} V_SAD={v_sad}")
-        print(f"[PASS] CB_AC_SHAPE block={block} pattern={test_name} strict-decodes {actual_bytes}/{expected_bytes} final_slice={final_slice} with Cb-only U_SAD={u_sad}")
+        if expected_u_sad is None:
+            if u_sad == 0:
+                raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={test_name} expected nonzero Cb decoded delta, got U_SAD={u_sad}")
+        elif u_sad != expected_u_sad:
+            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={test_name} expected U_SAD={expected_u_sad}, got U_SAD={u_sad}")
+        if v_sad != 0:
+            raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={test_name} expected no Cr decoded delta, got V_SAD={v_sad}")
+        print(f"[PASS] CB_AC_SHAPE block={block} pattern={test_name} strict-decodes {actual_bytes}/{expected_bytes} final_slice={final_slice} with exact Cb-only U_SAD={u_sad}")
     else:
         if actual_bytes != frame_size:
             raise SystemExit(f"[FAIL] CB_AC_SHAPE block={block} pattern={test_name} decoded {actual_bytes}/{expected_bytes}, expected one-frame miss")
@@ -257,5 +262,5 @@ for block, pattern_name, test_name, cb_value, expect_full, short_signature, expe
 
     raw_yuv.unlink(missing_ok=True)
 
-print("[PASS] CABAC P16x16 sparse Cb AC shape probe locks coefficient-shape-sensitive strict/miss partition, exact final-slice tails, and high-amplitude checker/diagonal/axis all-miss signatures under common first payload byte eb; repair target is residual coefficient level/suffix emission/order/arithmetic tail, not only top-row block placement, sparse CBF context selection, low-amplitude checker parity, or the P-slice boundary")
+print("[PASS] CABAC P16x16 sparse Cb AC shape probe locks coefficient-shape-sensitive strict/miss partition, exact strict-pass Cb-only U_SAD values, exact final-slice tails, and high-amplitude checker/diagonal/axis all-miss signatures under common first payload byte eb; repair target is residual coefficient level/suffix emission/order/arithmetic tail, not only top-row block placement, sparse CBF context selection, low-amplitude checker parity, or the P-slice boundary")
 PY
