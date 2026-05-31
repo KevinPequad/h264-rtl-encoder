@@ -190,6 +190,12 @@ Next useful probe:
 - The staged wait does not promote the remaining sparse Cb AC masks: representative failing masks `0x1`, `0x2`, and `0xc` still emit one decoded frame (`384/768`), while strict-pass controls `0x3` and `0x4` remain full `768/768`.
 - The wait changes the failing FFmpeg bytestream signatures (`0x1:-24`, `0x2:-22`, `0xc:-15`) without producing a strict decode, so the next repair should stay below simple terminate-tail waiting and compare residual CABAC arithmetic/output state around the Cb AC coded/zero block transitions.
 
+## 2026-05-30 sparse-Cb neighbor-CBF restoration rejection
+
+- Added `scripts/run_cabac_p16x16_chroma_cb_ac_neighbor_cbf_probe.py`, which patches only a staged RTL workspace to replace the current sparse-Cb-only synthetic CBF walk with direct plane-local-neighbor CBF derivation.
+- The staged neighbor walk does not promote the remaining sparse Cb AC masks and also regresses former strict controls: representative masks `0x1`, `0x2`, `0x3`, `0x4`, `0x8`, and `0xc` all stop at one decoded frame (`384/768`) with locked FFmpeg signatures (`-9`, `-15`, `-6`, `-15`, `-23`, `-22`).
+- This rules out simply restoring neighbor-derived Cb AC CBF selectors as the repair. The next repair should keep the current control-pass constraints visible while comparing CABAC arithmetic/output decisions around the early prefix/residual-tail bits.
+
 ## 2026-05-30 Cb-only AC phase/polarity probe
 
 - Added `scripts/run_cabac_p16x16_chroma_cb_ac_phase_probe.sh` to lock a small parity/sign lattice at the first nonzero sparse Cb AC residual step (`±5`) without changing RTL.
