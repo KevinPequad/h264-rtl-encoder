@@ -362,3 +362,11 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_first_payload_substitution_probe.py` so every expected-short Cb-only chroma-AC baseline must still decode the full byte-identical IDR frame before the probe accepts its one-frame P-residual failure signature.
 - The Cb-only first-payload repair target now has the same scope guard as the mixed-plane probe: the short masks remain localized P-residual CABAC failures, not SPS/PPS/IDR/header regressions, while `0xeb->0x75` and bit7 `0xeb->0x6b` still promote all Cb-only AC masks and preserve the dense Cb+Cr guard.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_first_payload_substitution_probe.py` passes.
+
+## 2026-05-31 Cr-only coefficient-shape partition lock
+
+- Added `scripts/run_cabac_p16x16_chroma_cr_ac_shape_probe.sh`, a Cr-only counterpart to the Cb AC coefficient-shape probe.
+- Low-amplitude (`+5`) checker, vertical, and horizontal Cr-only shapes strict-decode across all four chroma AC blocks with exact `U_SAD=0 V_SAD=40` and exact final P-slice tails.
+- High-amplitude (`+32`) shapes now expose a Cr-specific residual-tail partition: most checker/axis/diagonal cases remain one-frame `384/768` misses with exact FFmpeg signatures and final tails, but block-1 anti-diagonal and block-2 main/anti diagonals strict-decode with exact `V_SAD=128`.
+- This keeps the next source repair below CBF selector and P-slice-boundary handling. The useful target is residual coefficient level/suffix/order arithmetic that explains high-amplitude shape failures without regressing low-amplitude Cr strict controls or existing Cb/Cb+Cr guards.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cr_ac_shape_probe.sh` passes.
