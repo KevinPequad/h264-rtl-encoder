@@ -32,18 +32,21 @@ BIT7_PROMOTED_PAYLOAD = 0x6B
 EXPECTED_HEADER_TAIL = 0x6B
 
 # Representative cross-plane cases: sparse/sparse top-row, diagonal, split-row,
-# plus dense-Cb/sparse-Cr and sparse-Cb/dense-Cr controls. These are deliberately
-# smaller than the full 15x15 lattice so the cron gate stays bounded.
+# bottom/top mirror pairs, plus dense-Cr and dense-Cb controls. These are
+# deliberately smaller than the full 15x15 lattice so the cron gate stays bounded.
 CASES = {
     (0x1, 0x1): "bytestream -13",
     (0x1, 0x2): "bytestream -9",
     (0x2, 0x1): "bytestream -27",
     (0x3, 0x3): "bytestream -15",
+    (0x4, 0x1): "bytestream -13",
     (0x5, 0x5): "bytestream -9",
     (0xC, 0xC): "bytestream -17",
+    (0x3, 0xC): "bytestream -7",
+    (0xC, 0x3): "bytestream -21",
     (0x1, 0xF): "bytestream -5",
 }
-BASELINE_STRICT = {(0xF, 0x1)}
+BASELINE_STRICT = {(0xF, 0x1), (0x8, 0x2), (0xF, 0xF)}
 
 
 def checker_chroma(mask: int) -> bytes:
@@ -253,10 +256,11 @@ def main() -> None:
     for cb_mask, cr_mask in BASELINE_STRICT:
         check_case(sim, cb_mask, cr_mask, None)
     print(
-        "[PASS] CABAC P16x16 cross-plane chroma-AC first-payload probe: representative sparse Cb+Cr "
-        "masks remain current one-frame FFmpeg misses at baseline, while exact 0xeb->0x75 and bit7 "
-        "0xeb->0x6b first-payload substitutions promote them to strict two-frame decode with expected "
-        "plane-local SAD; dense-Cb/sparse-Cr control remains strict under the same substitutions."
+        "[PASS] CABAC P16x16 cross-plane chroma-AC first-payload probe: representative sparse, "
+        "bottom/top mirror, split-row, and dense/sparse Cb+Cr masks preserve their locked baseline "
+        "outcomes, while exact 0xeb->0x75 and bit7 0xeb->0x6b first-payload substitutions promote "
+        "the sparse miss cases to strict two-frame decode with expected plane-local SAD and preserve "
+        "the strict dense controls."
     )
 
 
