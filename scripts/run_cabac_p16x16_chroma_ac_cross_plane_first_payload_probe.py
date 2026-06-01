@@ -155,6 +155,15 @@ AMPLITUDE_TAILS = {
     (0x8, 0x7, 96, 96): "0000000141d008086b7eddf7",
 }
 
+# These are intentionally *not* promoted yet: the opposite sign directions for
+# the Cb0x3/Cr0xC split-row complement still short-decode. Locking the exact
+# miss keeps the successful positive-positive and negative-Cb/positive-Cr guards
+# from being misread as a complete split-row sign matrix.
+EXPECTED_MISSES = {
+    (0x3, 0xC, 160, 96): (FRAME_SIZE, "bytestream -19", "0000000141d008086bbacd"),
+    (0x3, 0xC, 96, 96): (FRAME_SIZE, "bytestream -19", "0000000141d008086bbacd"),
+}
+
 
 def checker_chroma(mask: int, value: int = 136) -> bytes:
     out = []
@@ -342,12 +351,53 @@ def check_case(
     )
 
 
+def check_expected_miss(
+    sim: Path,
+    cb_mask: int,
+    cr_mask: int,
+    cb_value: int,
+    cr_value: int,
+    expected_bytes: int,
+    expected_signature: str,
+    expected_tail: str,
+) -> None:
+    fixture = make_fixture(cb_mask, cr_mask, cb_value, cr_value)
+    h264 = run_case(sim, cb_mask, cr_mask, fixture, cb_value, cr_value)
+    stream = h264.read_bytes()
+    label = f"cb=0x{cb_mask:x} cr=0x{cr_mask:x} cb_value={cb_value} cr_value={cr_value}"
+    tail = final_slice_hex(stream, label)
+    if tail != expected_tail:
+        raise SystemExit(
+            f"[FAIL] CROSS_PLANE_AC_EXPECTED_MISS {label} tail drift {tail}, expected {expected_tail}"
+        )
+    raw, err = decode_raw(h264)
+    if len(raw) != expected_bytes:
+        raise SystemExit(
+            f"[FAIL] CROSS_PLANE_AC_EXPECTED_MISS {label} decoded {len(raw)}/{EXPECTED_BYTES}, "
+            f"expected {expected_bytes}/{EXPECTED_BYTES}"
+        )
+    if expected_signature not in err:
+        raise SystemExit(
+            f"[FAIL] CROSS_PLANE_AC_EXPECTED_MISS {label} FFmpeg signature {err.strip()!r}, "
+            f"expected to contain {expected_signature!r}"
+        )
+    src = fixture.read_bytes()
+    if raw and raw[:FRAME_SIZE] != src[:FRAME_SIZE]:
+        raise SystemExit(f"[FAIL] CROSS_PLANE_AC_EXPECTED_MISS {label} changed IDR reference")
+    print(
+        f"[PASS] CROSS_PLANE_AC_EXPECTED_MISS {label} remains scoped to "
+        f"{len(raw)}/{EXPECTED_BYTES} decoded bytes, signature={expected_signature!r}, tail={tail}"
+    )
+
+
 def main() -> int:
     sim = build_baseline_sim()
     for (cb_mask, cr_mask), tail in TAILS.items():
         check_case(sim, cb_mask, cr_mask, tail)
     for (cb_mask, cr_mask, cb_value, cr_value), tail in AMPLITUDE_TAILS.items():
         check_case(sim, cb_mask, cr_mask, tail, cb_value, cr_value)
+    for (cb_mask, cr_mask, cb_value, cr_value), (expected_bytes, expected_signature, tail) in EXPECTED_MISSES.items():
+        check_expected_miss(sim, cb_mask, cr_mask, cb_value, cr_value, expected_bytes, expected_signature, tail)
     print(
         "[PASS] CABAC P16x16 cross-plane chroma-AC gate promoted: representative "
         "sparse/sparse, mirror, split-row, bottom-row cross-corner, "
@@ -361,6 +411,8 @@ def main() -> int:
         "plus positive, reciprocal, mixed-sign, asymmetric complement, "
         "and complete +/-32 sign matrices for the targeted all-but-one/singleton "
         "complement mirror families "
+        "while keeping the remaining Cb0x3/Cr0xC positive-Cb/negative-Cr split-row "
+        "sign directions locked as known one-frame bytestream -19 misses "
         "high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
         "checked-in -7 CABAC queue initializer"
     )
