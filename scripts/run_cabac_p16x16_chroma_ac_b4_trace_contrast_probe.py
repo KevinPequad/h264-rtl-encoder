@@ -124,6 +124,24 @@ def split_payload_blocks(text: str) -> list[int]:
     return sorted(blocks)
 
 
+def high_payload_ctx_summary(text: str) -> list[tuple[int, int, int, int]]:
+    """Return (block, kind, selector, count) rows for split high-bank payload contexts."""
+    counts: dict[tuple[int, int, int], int] = {}
+    for line in text.splitlines():
+        if "[CABACCTX]" not in line or "cat=2" not in line:
+            continue
+        m = re.search(r"blk=(\d+) kind=(22|23|24) sel=(\d+)", line)
+        if not m:
+            continue
+        block = int(m.group(1))
+        kind = int(m.group(2))
+        selector = int(m.group(3))
+        if selector >= 16:
+            key = (block, kind, selector)
+            counts[key] = counts.get(key, 0) + 1
+    return [(block, kind, selector, count) for (block, kind, selector), count in sorted(counts.items())]
+
+
 def coded_chroma_ac_blocks(text: str) -> list[int]:
     coded: list[int] = []
     for line in text.splitlines():
@@ -144,6 +162,7 @@ def check_case(
     cr_value: int,
     expected_tail: str,
     expect_split_blocks: list[int],
+    expected_high_summary: list[tuple[int, int, int, int]],
     expected_cbf_selects: list[int] | None = None,
 ) -> None:
     case_label = f"{label} cb=0x{cb_mask:x} cr=0x{cr_mask:x} cb_value={cb_value} cr_value={cr_value}"
@@ -168,13 +187,20 @@ def check_case(
         raise SystemExit(
             f"[FAIL] B4_TRACE_CONTRAST {case_label} split payload blocks {split_blocks}, expected {expect_split_blocks}"
         )
+    high_summary = high_payload_ctx_summary(text)
+    if high_summary != expected_high_summary:
+        raise SystemExit(
+            f"[FAIL] B4_TRACE_CONTRAST {case_label} high-bank payload context summary "
+            f"{high_summary}, expected {expected_high_summary}"
+        )
     if expected_cbf_selects is not None:
         selects = cbf_ctx_selects(text)
         if selects != expected_cbf_selects:
             raise SystemExit(f"[FAIL] B4_TRACE_CONTRAST {case_label} CBF selects {selects}, expected {expected_cbf_selects}")
     print(
         f"[PASS] B4_TRACE_CONTRAST {case_label}: strict two-frame decode, "
-        f"coded_blocks={blocks}, split_blocks={split_blocks}, U_SAD={u_sad} V_SAD={v_sad}, tail={tail}"
+        f"coded_blocks={blocks}, split_blocks={split_blocks}, high_payload_ctx={high_summary}, "
+        f"U_SAD={u_sad} V_SAD={v_sad}, tail={tail}"
     )
 
 
@@ -190,6 +216,7 @@ def main() -> int:
             cr_value,
             B4_TAILS[(cb_value, cr_value)],
             expect_split_blocks=[],
+            expected_high_summary=[],
             expected_cbf_selects=EXPECTED_B4_CBF_SELECTS,
         )
         check_case(
@@ -201,6 +228,7 @@ def main() -> int:
             cr_value,
             MIRROR_TAILS[(cb_value, cr_value)],
             expect_split_blocks=[4, 5, 7],
+            expected_high_summary=[(4, 24, 17, 5), (5, 24, 17, 5), (7, 24, 17, 5)],
         )
     print(
         "[PASS] CABAC P16x16 high-amplitude B4 trace contrast: Cb0xb/Cr0x4 now "
