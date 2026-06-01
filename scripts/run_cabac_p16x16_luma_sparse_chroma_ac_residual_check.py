@@ -8,8 +8,8 @@ quadrants, same-plane row/column pairs, same-block Cb+Cr quadrant cases, both
 row-adjacent directions, both column-adjacent directions, opposite-diagonal Cb+Cr pairs,
 and complementary two-block row/column pairs on both chroma planes, plus
 high-amplitude same-quadrant and row/column-complement subsets with luma
-residual present, including the complementary split-row/column +/-32 sign matrix and
-a high-amplitude three-Cb-block / one-Cr-block edge complement.
+residual present, including the complementary split-row/column +/-32 sign matrix
+and mirrored high-amplitude three-plus-one edge complements.
 It locks strict FFmpeg decode, plane-local CABAC counters, CAVLC suppression
 counts, final P-slice bytes, current decoded-plane metrics, and per-4x4
 chroma-block locality so sparse residuals cannot silently land in the wrong
@@ -446,6 +446,18 @@ CASES = (
         expected_y_sad=EXPECTED_Y_SAD,
         expected_u_sad=768,
         expected_v_sad=256,
+        cb_sample_value=160,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m8_7_hi",
+        cb_mask=0x8,
+        cr_mask=0x7,
+        expected_final_slice="0000000141d008086b3abeefbffc7f5f7dbfff6dff",
+        expected_cavlc_suppressed_bits=295,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=256,
+        expected_v_sad=768,
         cb_sample_value=160,
         cr_sample_value=160,
     ),
@@ -890,7 +902,7 @@ def main() -> int:
     sim = build_baseline_sim()
     for case in CASES:
         run_case(sim, case)
-    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, opposite-diagonal mixed-plane pairs, complementary two-block row/column mixed-plane pairs, high-amplitude same-quadrant pairs, a high-amplitude three-Cb-block/one-Cr-block edge complement, and the high-amplitude complementary split-row/column +/-32 sign matrix, strict-decode with plane-local counters and per-block chroma locality")
+    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, opposite-diagonal mixed-plane pairs, complementary two-block row/column mixed-plane pairs, high-amplitude same-quadrant pairs, mirrored high-amplitude three-plus-one edge complements, and the high-amplitude complementary split-row/column +/-32 sign matrix, strict-decode with plane-local counters and per-block chroma locality")
     return 0
 
 
