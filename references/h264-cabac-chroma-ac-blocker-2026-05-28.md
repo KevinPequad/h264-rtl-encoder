@@ -509,3 +509,9 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so the same high-amplitude miss/pass sign-family now also locks the common P-slice `[CABACEMIT]` tail rows and bit-buffer progression: `d0/08/08/6b` with bit counts `32/24/16/8` and no pending residual context.
 - This confirms the remaining high-amplitude split is not caused by earlier P-slice header framing drift; every locked miss and reciprocal strict-pass case reaches the identical pre-residual emit-tail boundary before diverging in the first residual payload bytes and later CABAC arithmetic state.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.
+
+## 2026-06-01 high-amplitude payload emit-row lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so the same sign-family now locks the residual payload `[CABACEMIT]` rows, not only payload byte values and the pre-residual P-slice tail.
+- The failing `Cb0x2/Cr0xd` cases keep pending residual context clear (`pending_kind=0/pending_sel=0`) across the emitted `bb/ec/f7` or `bb/cc/ff` payload bytes, while the reciprocal strict-pass `Cb0xd/Cr0x2` case emits `3a/dd/f5` with `pending_kind=21/pending_sel=6`. This gives the next source repair a precise handoff-row split at the first payload boundary.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.

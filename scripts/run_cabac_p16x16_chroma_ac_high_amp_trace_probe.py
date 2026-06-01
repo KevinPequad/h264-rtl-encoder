@@ -47,6 +47,11 @@ CASES: dict[str, dict[str, Any]] = {
         "cbf_order": [(0, 0), (1, 1), (2, 0), (3, 0), (4, 1), (5, 0), (6, 1), (7, 1)],
         "coded_blocks": [1, 4, 6, 7],
         "payload_bytes": [0xBB, 0xEC, 0xF7],
+        "payload_emit_rows": [
+            (1, 0, 46, "bb", 24, "bbecf7a6b905441e80098403", 0, 0),
+            (1, 0, 46, "ec", 16, "ecf7a6b905441e8009840300", 0, 0),
+            (1, 0, 46, "f7", 8, "f7a6b905441e800984030000", 0, 0),
+        ],
         "residual_chunks": [
             (1, 0x05, 40),
             (1, 0x44, 48),
@@ -99,6 +104,11 @@ CASES: dict[str, dict[str, Any]] = {
         "cbf_order": [(0, 0), (1, 1), (2, 0), (3, 0), (4, 1), (5, 0), (6, 1), (7, 1)],
         "coded_blocks": [1, 4, 6, 7],
         "payload_bytes": [0xBB, 0xEC, 0xF7],
+        "payload_emit_rows": [
+            (1, 0, 46, "bb", 24, "bbecf77c2b85441e80071563", 0, 0),
+            (1, 0, 46, "ec", 16, "ecf77c2b85441e8007156300", 0, 0),
+            (1, 0, 46, "f7", 8, "f77c2b85441e800715630000", 0, 0),
+        ],
         "residual_chunks": [
             (1, 0x85, 40),
             (1, 0x44, 48),
@@ -151,6 +161,11 @@ CASES: dict[str, dict[str, Any]] = {
         "cbf_order": [(0, 0), (1, 1), (2, 0), (3, 0), (4, 1), (5, 0), (6, 1), (7, 1)],
         "coded_blocks": [1, 4, 6, 7],
         "payload_bytes": [0xBB, 0xCC, 0xFF],
+        "payload_emit_rows": [
+            (1, 0, 46, "bb", 24, "bbccffa6b927c7be80098403", 0, 0),
+            (1, 0, 46, "cc", 16, "ccffa6b927c7be8009840300", 0, 0),
+            (1, 0, 46, "ff", 8, "ffa6b927c7be800984030000", 0, 0),
+        ],
         "residual_chunks": [
             (1, 0x27, 40),
             (1, 0xC7, 48),
@@ -203,6 +218,11 @@ CASES: dict[str, dict[str, Any]] = {
         "cbf_order": [(0, 0), (1, 1), (2, 0), (3, 0), (4, 1), (5, 0), (6, 1), (7, 1)],
         "coded_blocks": [1, 4, 6, 7],
         "payload_bytes": [0xBB, 0xCC, 0xFF],
+        "payload_emit_rows": [
+            (1, 0, 46, "bb", 24, "bbccff7c2ba7c7be80071563", 0, 0),
+            (1, 0, 46, "cc", 16, "ccff7c2ba7c7be8007156300", 0, 0),
+            (1, 0, 46, "ff", 8, "ff7c2ba7c7be800715630000", 0, 0),
+        ],
         "residual_chunks": [
             (1, 0xA7, 40),
             (1, 0xC7, 48),
@@ -255,6 +275,11 @@ CASES: dict[str, dict[str, Any]] = {
         "cbf_order": [(0, 1), (1, 0), (2, 1), (3, 1), (4, 0), (5, 1), (6, 0), (7, 0)],
         "coded_blocks": [0, 2, 3, 5],
         "payload_bytes": [0x3A, 0xDD, 0xF5],
+        "payload_emit_rows": [
+            (1, 0, 46, "3a", 24, "3addf57c861a04bc714ac46b", 21, 6),
+            (1, 0, 46, "dd", 16, "ddf57c861a04bc714ac46b00", 21, 6),
+            (1, 0, 46, "f5", 8, "f57c861a04bc714ac46b0000", 21, 6),
+        ],
         "residual_chunks": [
             (0, 0x1A, 40),
             (0, 0x04, 48),
@@ -632,6 +657,13 @@ def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
             f"[FAIL] HIGH_AMP_TRACE {name} payload bytes {payload_bytes}, expected prefix {spec['payload_bytes']}"
         )
 
+    payload_emit_rows = [item for item in emit_rows if item[0] == 1 and item[1] == 0 and item[2] == 46]
+    if payload_emit_rows != spec["payload_emit_rows"]:
+        raise SystemExit(
+            f"[FAIL] HIGH_AMP_TRACE {name} payload emit rows {payload_emit_rows}, "
+            f"expected {spec['payload_emit_rows']}"
+        )
+
     residual_chunks = parse_residual_chunks(text)
     if residual_chunks != spec["residual_chunks"]:
         raise SystemExit(
@@ -669,7 +701,8 @@ def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
     print(
         f"[PASS] HIGH_AMP_TRACE {name}: {status}, tail={tail}, "
         f"CBF={cbf_order}, payload={[f'0x{b:02x}' for b in payload_bytes[:3]]}, "
-        f"p_slice_emit_tail={p_slice_emit_tail}, chunks={chunk_summary}, first_ctx={first_ctx}, "
+        f"p_slice_emit_tail={p_slice_emit_tail}, payload_emit_rows={payload_emit_rows}, "
+        f"chunks={chunk_summary}, first_ctx={first_ctx}, "
         f"payload_final_ctx={payload_final_ctx}, term={term_state}"
     )
 
@@ -681,7 +714,7 @@ def main() -> int:
     print(
         "[PASS] CABAC P16x16 high-amplitude chroma-AC trace probe locks the failing "
         "Cb0x2/Cr0xd sign-family against reciprocal Cb0xd/Cr0x2 strict pass, including "
-        "plane-local CBF walks, P-slice emit-tail bit-buffer rows, residual output chunks, first payload bytes, and "
+        "plane-local CBF walks, P-slice emit-tail bit-buffer rows, payload emit rows, residual output chunks, first payload bytes, and "
         "first/final-payload and terminate arithmetic context state."
     )
     return 0
