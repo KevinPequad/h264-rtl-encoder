@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
-"""Reject the broad CBF-walk repair for high-amplitude checker Cb+Cr AC.
+"""Reject the historical broad CBF-walk repair for checker Cb+Cr AC.
 
 The scoped plane-local CBF walk fixed specific high-amplitude complement lanes,
-but the remaining complementary-checker Cr-negative misses are not repaired by
-simply adding the whole `Cb0x5/Cr0xA` / `Cb0xA/Cr0x5` families to that path.
-This staged probe patches only an isolated workspace and proves that widening
-that selector would regress an already-strict Cr-positive checker lane.
+and the complementary-checker Cr-negative lanes are now strict through a scoped
+split-payload predicate.  Keep this staged probe as a regression guard for the
+discarded broad CBF-walk candidate: it patches only an isolated workspace and
+proves that widening the whole `Cb0x5/Cr0xA` / `Cb0xA/Cr0x5` selector family
+would still regress an already-strict Cr-positive checker lane.
 """
 
 from __future__ import annotations
@@ -119,9 +120,10 @@ def main() -> int:
         )
     print(
         "[PASS] CABAC P16x16 checker high-amplitude broad CBF-walk candidate "
-        "promotes the Cr-negative rows but remains rejected because it regresses "
-        "the Cr-positive checker strict control; next repair must be narrower "
-        "than the whole Cb0x5/Cr0xA + Cb0xA/Cr0x5 selector family"
+        "promotes the Cr-negative rows in isolation but remains rejected because "
+        "it regresses the Cr-positive checker strict control; keep the checked-in "
+        "checker repair scoped narrower than the whole Cb0x5/Cr0xA + Cb0xA/Cr0x5 "
+        "CBF-walk selector family"
     )
     return 0
 
