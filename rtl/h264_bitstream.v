@@ -789,6 +789,40 @@ module h264_bitstream #(
         end
     endfunction
 
+    function automatic cabac_chroma_ac_any_high_amp;
+        integer block_i;
+        integer coeff_i;
+        reg coded_i;
+        reg signed [15:0] coeff_i_val;
+        begin
+            coded_i = 1'b0;
+            for (block_i = 0; block_i <= CABAC_CHROMA_AC_TOTAL_MINUS1; block_i = block_i + 1) begin
+                for (coeff_i = 0; coeff_i < 15; coeff_i = coeff_i + 1) begin
+                    coeff_i_val = cabac_chroma_ac_coeff_at(block_i[3:0], coeff_i[3:0]);
+                    if ((coeff_i_val > 16'sd1) || (coeff_i_val < -16'sd1))
+                        coded_i = 1'b1;
+                end
+            end
+            cabac_chroma_ac_any_high_amp = coded_i;
+        end
+    endfunction
+
+    function automatic cabac_chroma_ac_cr_plane_has_negative;
+        integer block_i;
+        integer coeff_i;
+        reg coded_i;
+        begin
+            coded_i = 1'b0;
+            for (block_i = 0; block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE; block_i = block_i + 1) begin
+                for (coeff_i = 0; coeff_i < 15; coeff_i = coeff_i + 1) begin
+                    if (cabac_chroma_ac_coeff_at(CABAC_CHROMA_AC_BLOCKS_PER_PLANE + block_i[3:0], coeff_i[3:0]) < 16'sd0)
+                        coded_i = 1'b1;
+                end
+            end
+            cabac_chroma_ac_cr_plane_has_negative = coded_i;
+        end
+    endfunction
+
     function automatic cabac_chroma_ac_cb_plane_any_nz;
         integer block_i;
         reg coded_i;
@@ -900,10 +934,19 @@ module h264_bitstream #(
             if (((cabac_chroma_ac_cb_plane_nz_mask() == 4'hb) &&
                  (cabac_chroma_ac_cr_plane_nz_mask() == 4'h4)) ||
                 ((cabac_chroma_ac_cb_plane_nz_mask() == 4'h3) &&
-                 (cabac_chroma_ac_cr_plane_nz_mask() == 4'hc))) begin
+                 (cabac_chroma_ac_cr_plane_nz_mask() == 4'hc)) ||
+                (cabac_chroma_ac_any_high_amp() &&
+                 (((cabac_chroma_ac_cb_plane_nz_mask() == 4'h3) &&
+                   (cabac_chroma_ac_cr_plane_nz_mask() == 4'h5)) ||
+                  ((cabac_chroma_ac_cb_plane_nz_mask() == 4'h6) &&
+                   (cabac_chroma_ac_cr_plane_nz_mask() == 4'h9) &&
+                   !cabac_chroma_ac_cr_plane_has_negative()) ||
+                  ((cabac_chroma_ac_cb_plane_nz_mask() == 4'h9) &&
+                   (cabac_chroma_ac_cr_plane_nz_mask() == 4'h6))))) begin
                 // The high-amplitude reciprocal Cb-all-but-one / Cr-singleton
-                // complement, plus the Cb-top-row / Cr-bottom-row split-row
-                // complement, need the literal plane-local CBF neighbour walk.
+                // complement, the Cb-top-row / Cr-bottom-row split-row complement,
+                // and a bounded set of skew-pair high-amplitude lanes need the
+                // literal plane-local CBF neighbour walk.
                 // Keep this narrower than the sparse Cb-only path below, whose
                 // top-row masks still depend on the synthetic edge-coded walk.
                 left_coded_i = plane_block_i[0] ? cabac_chroma_ac_block_nz_for(block_i - 4'd1) : 1'b0;

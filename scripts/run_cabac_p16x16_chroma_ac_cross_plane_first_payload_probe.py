@@ -112,18 +112,24 @@ AMPLITUDE_TAILS = {
     (0xA, 0x5, 160, 136): "0000000141d008086b3acc6e451591f10a562921da00000300",
     (0xA, 0x5, 136, 160): "0000000141d008086b",
     (0xA, 0x5, 160, 160): "0000000141d008086b7bef",
-    (0x3, 0x5, 96, 96): "0000000141d008086b3fcf",
-    (0x3, 0x5, 160, 96): "0000000141d008086b3fcf",
+    (0x3, 0x5, 96, 96): "0000000141d008086b7bfd",
+    (0x3, 0x5, 160, 160): "0000000141d008086b3add",
+    (0x3, 0x5, 160, 96): "0000000141d008086b7bfd",
+    (0x3, 0x5, 96, 160): "0000000141d008086b3add",
     (0x5, 0x3, 160, 160): "0000000141d008086bbaff",
     (0x5, 0x3, 96, 96): "0000000141d008086b3eff",
     (0x5, 0x3, 160, 96): "0000000141d008086b3eff",
     (0x5, 0x3, 96, 160): "0000000141d008086bbaff",
     (0xC, 0x3, 160, 96): "0000000141d008086b3eff",
     (0xC, 0x3, 96, 96): "0000000141d008086b3eff",
+    (0x6, 0x9, 96, 96): "0000000141d008086b7bfeef",
     (0x6, 0x9, 96, 160): "0000000141d008086b7ffeef",
+    (0x6, 0x9, 160, 96): "0000000141d008086b7bfeef",
     (0x6, 0x9, 160, 160): "0000000141d008086b7ffeef",
-    (0x9, 0x6, 160, 96): "0000000141d008086b7ade",
-    (0x9, 0x6, 96, 96): "0000000141d008086b7ade",
+    (0x9, 0x6, 160, 96): "0000000141d008086b3fdd7e",
+    (0x9, 0x6, 96, 96): "0000000141d008086b3fdd7e",
+    (0x9, 0x6, 160, 160): "0000000141d008086b7bef7e",
+    (0x9, 0x6, 96, 160): "0000000141d008086b7bef7e",
     (0xC, 0x3, 96, 160): "0000000141d008086bbaff",
     (0xC, 0x3, 160, 160): "0000000141d008086bbaff",
     (0x3, 0xC, 160, 160): "0000000141d008086b3ffe",
@@ -165,20 +171,11 @@ AMPLITUDE_TAILS = {
     (0x8, 0x7, 96, 96): "0000000141d008086b7eddf7",
 }
 
-# Split-row Cb0x3/Cr0xC high-amplitude polarity coverage is fully promoted by
-# the scoped plane-local CBF walk in h264_bitstream.v.  The adjacent skew-pair
-# high-amplitude sign partitions below are not promoted by that repair; keep
-# their one-frame miss signatures locked so the next arithmetic/output-state
-# fix has stable negative controls while the passing sign directions remain in
-# AMPLITUDE_TAILS above.
-EXPECTED_MISSES = {
-    (0x3, 0x5, 160, 160): (384, "corrupt decoded frame", "0000000141d008086bfbcf"),
-    (0x3, 0x5, 96, 160): (384, "corrupt decoded frame", "0000000141d008086bfbcf"),
-    (0x6, 0x9, 96, 96): (384, "corrupt decoded frame", "0000000141d008086bbfceef"),
-    (0x6, 0x9, 160, 96): (384, "corrupt decoded frame", "0000000141d008086bbfceef"),
-    (0x9, 0x6, 160, 160): (384, "corrupt decoded frame", "0000000141d008086bbefe"),
-    (0x9, 0x6, 96, 160): (384, "corrupt decoded frame", "0000000141d008086bbefe"),
-}
+# Split-row Cb0x3/Cr0xC and adjacent skew-pair high-amplitude polarity coverage
+# are promoted by the scoped plane-local CBF walk in h264_bitstream.v.  Keep this
+# mapping for future expected-miss families rather than deleting the negative
+# harness; the current bounded skew-pair set has no remaining expected misses.
+EXPECTED_MISSES = {}
 
 
 def checker_chroma(mask: int, value: int = 136) -> bytes:
@@ -421,7 +418,7 @@ def main() -> int:
         "sparse+dense right-column/bottom-row, same-diagonal dense, "
         "complementary checker, "
         "asymmetric three-block plus reciprocal mirror, extra two-/three-block skew pairs, dense-Cb, dense-Cr, "
-        "high-amplitude skew-pair pass/miss sign partitions, "
+        "high-amplitude skew-pair sign partitions, "
         "asymmetric three-plus-one complements, all-but-one reciprocal complements, "
         "same-quadrant all-but-one/singleton mirrors, "
         "and dense-both Cb+Cr AC masks "
@@ -430,8 +427,8 @@ def main() -> int:
         "complement mirror families "
         "including the full Cb0x3/Cr0xC split-row sign matrix "
         "high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
-        "checked-in -7 CABAC queue initializer, with scoped one-frame expected-miss "
-        "signatures locked for the remaining skew-pair high-amplitude directions"
+        "checked-in -7 CABAC queue initializer, with no remaining skew-pair "
+        "high-amplitude expected-miss directions in this bounded gate"
     )
     return 0
 
