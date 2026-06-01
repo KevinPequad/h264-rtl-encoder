@@ -35,7 +35,7 @@ EXPECTED_HEADER_TAIL = 0x6B
 # asymmetric three-block, its reciprocal mirror, extra two-/three-block skew pairs,
 # two-block off-diagonal and diagonal-skew reciprocal pairs,
 # high-amplitude skew-pair sign partitions,
-# asymmetric three-plus-one complements,
+# asymmetric three-plus-one complements, three-block reciprocal complements,
 # all-but-one reciprocal complements including same-quadrant singleton mirrors,
 # and dense-both controls.  This is
 # deliberately smaller than the full 15x15 lattice
@@ -102,6 +102,10 @@ TAILS = {
     (0x2, 0xD): "0000000141d008086b3acbf5cad4097c4d2ada7d",
     (0xD, 0xE): "0000000141d008086b3acc36849d158a9214bf7b590000",
     (0xE, 0xD): "0000000141d008086b3acc36b8ad3f58ca1b3b4eb300000300",
+    (0x7, 0xE): "0000000141d008086b3acc36849d0ec2488aace6b30000",
+    (0xE, 0x7): "0000000141d008086b3acc36b8ad3f58ca1b3b4eb30000",
+    (0xB, 0xD): "0000000141d008086b3acc36849d0ec24af9158f0600000300",
+    (0xD, 0xB): "0000000141d008086b3acc36849d158a9214bf770600000300",
 }
 
 # Cross-plane high-amplitude guards.  The mask lattice above uses value 136
@@ -433,7 +437,8 @@ def main() -> int:
         "asymmetric three-block plus reciprocal mirror, extra two-/three-block skew pairs, "
         "two-block off-diagonal and diagonal-skew reciprocal pairs, dense-Cb, dense-Cr, "
         "high-amplitude skew-pair sign partitions, "
-        "asymmetric three-plus-one complements, all-but-one reciprocal complements, "
+        "asymmetric three-plus-one complements, three-block reciprocal complements, "
+        "all-but-one reciprocal complements, "
         "same-quadrant all-but-one/singleton mirrors, "
         "and dense-both Cb+Cr AC masks "
         "plus positive, reciprocal, mixed-sign, asymmetric complement, "
