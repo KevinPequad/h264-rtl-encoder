@@ -243,7 +243,7 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "probe_rejects_b4_split_context_hypothesis",
         "scripts/run_cabac_p16x16_chroma_ac_b4_split_probe.py",
-        r"CB_MASK\s*=\s*0xB.*?CR_MASK\s*=\s*0x4.*?STAGED_SPLIT_CTX.*?4'hb\)\s*&&.*?4'h4.*?EXPECTED_MISSES\s*=\s*\{.*?\(160,\s*160\):\s*\(\"0000000141d008086bfedffd73\",\s*\"bytestream -3\"\).*?\(96,\s*96\):\s*\(\"0000000141d008086bffef7df2\",\s*\"corrupt decoded frame\"\).*?naive.*?split-context extension",
+        r"CB_MASK\s*=\s*0xB.*?CR_MASK\s*=\s*0x4.*?STAGED_SPLIT_CTX.*?4'hb\)\s*&&.*?4'h4.*?STAGED_CB_PAYLOAD_CTX_COND.*?EXPECTED_MISSES\s*=\s*\{.*?cr_payload_split.*?\(160,\s*160\):\s*\(\"0000000141d008086bfedffd73\",\s*\"bytestream -3\"\).*?\(96,\s*96\):\s*\(\"0000000141d008086bffef7df2\",\s*\"corrupt decoded frame\"\).*?cb_payload_split.*?\(160,\s*160\):\s*\(\"0000000141d008086bfacdf5f7\",\s*\"bytestream -11\"\).*?\(96,\s*96\):\s*\(\"0000000141d008086bfafe77f7\",\s*\"bytestream -23\"\).*?Cr-side and Cb-side split-context extensions",
     ),
     (
         "probe_locks_cross_plane_high_amp_trace_split_bank",
