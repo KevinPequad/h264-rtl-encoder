@@ -546,3 +546,10 @@ Next useful probe:
 - The four remaining `Cb0x2/Cr0xd` sign-family misses keep exact suppressed-bit counts `184/182/182/180` across the `(+,+)/(-,+)/(+,-)/(-,-)` value combinations, while the reciprocal strict-pass `Cb0xd/Cr0x2 +32/+32` lane keeps `(cb_ac_blocks=3, cr_ac_blocks=1, cavlc_suppressed_bits=184)`.
 - This prevents a future first-payload/arithmetic experiment from preserving payload bytes and tails while silently shifting integrated chroma residual ownership or legacy CAVLC suppression accounting.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.
+
+## 2026-06-01 queue-alignment diagnostic refresh
+
+- Repaired stale expectations in `scripts/run_cabac_p16x16_chroma_cb_ac_queue_align_probe.py` after the checked-in CABAC core source had already moved to `cod_i_queue=-7`; the old diagnostic still expected the historic sparse-Cb short partition and a `-9 -> -8` staged patch.
+- The refreshed probe now locks the current source baseline: all 15 Cb-only AC masks strict-decode with exact Cb-plane SAD, and the dense Cb+Cr guard strict-decodes with final slice `0000000141d008086b7acc`.
+- The staged `-7 -> -8` candidate still strict-decodes all 15 Cb-only and all 15 Cr-only masks plus representative mixed masks, but remains explicitly non-committable because the dense Cb+Cr guard short-decodes (`bytestream -9`) with final-slice drift `0000000141d008086b7acc -> 0000000141d008086bf599`.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_cb_ac_queue_align_probe.py` passes, and the broader `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_residual_red_check.sh` still passes.

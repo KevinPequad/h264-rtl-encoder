@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Staged CABAC core queue-alignment probe for sparse chroma AC.
 
-The current integrated CABAC P16x16 source still has sparse chroma-AC mask
-partitions where several masks short-decode.  This probe keeps the canonical
-checkout untouched, stages an isolated workspace that changes only the CABAC
-core initial output queue from -9 to -8, and verifies that the candidate
-promotes every 16x16 Cb-only and Cr-only AC mask.  It also locks the important
-negative finding that applying that queue shift globally is not yet committable:
-the same candidate regresses a both-plane Cb+Cr AC control.
+The current integrated CABAC P16x16 source initializes the CABAC core output
+queue at -7, which promotes the previously short Cb-only mask lattice while
+keeping the dense Cb+Cr guard strict.  This probe keeps the canonical checkout
+untouched, stages an isolated workspace that changes only the CABAC core initial
+output queue from -7 to -8, and locks the negative finding that applying that
+older queue shift globally is not committable: it still regresses a dense
+both-plane Cb+Cr AC control even though representative sparse/mixed masks decode.
 """
 
 from __future__ import annotations
@@ -27,16 +27,8 @@ FRAME_SIZE = WIDTH * HEIGHT * 3 // 2
 LUMA_SIZE = WIDTH * HEIGHT
 CHROMA_SIZE = WIDTH * HEIGHT // 4
 EXPECTED_BYTES = FRAME_SIZE * 2
-BASELINE_FULL = {0x3, 0x4, 0x7, 0x8, 0xB, 0xD, 0xE, 0xF}
-BASELINE_SHORT = {
-    0x1: "bytestream -19",
-    0x2: "bytestream -21",
-    0x5: "bytestream -22",
-    0x6: "bytestream -18",
-    0x9: "bytestream -14",
-    0xA: "bytestream -20",
-    0xC: "bytestream -18",
-}
+BASELINE_FULL = set(range(1, 16))
+BASELINE_SHORT: dict[int, str] = {}
 QUEUE_M8_MIXED_BOTH_PLANE_PASS = (
     (0x1, 0x1),
     (0x1, 0xF),
@@ -44,7 +36,7 @@ QUEUE_M8_MIXED_BOTH_PLANE_PASS = (
     (0x3, 0x3),
     (0x5, 0xA),
 )
-QUEUE_ANCHOR = "cod_i_queue       <= -8'sd9;"
+QUEUE_ANCHOR = "cod_i_queue       <= -8'sd7;"
 QUEUE_CANDIDATE = "cod_i_queue       <= -8'sd8;"
 
 
@@ -330,7 +322,7 @@ def check_baseline(sim: Path, fixtures: dict[int, Path], both_plane_fixture: Pat
     u_sad, v_sad = assert_both_planes(both_plane_fixture, raw, "baseline both-plane guard")
     stream = h264.read_bytes()
     tail = final_slice(stream, "baseline both-plane guard")
-    expected_tail = bytes.fromhex("0000000141d008086beb")
+    expected_tail = bytes.fromhex("0000000141d008086b7acc")
     if tail != expected_tail:
         raise SystemExit(
             f"[FAIL] CB_AC_QUEUE_ALIGN baseline both-plane final slice {tail.hex()}, expected {expected_tail.hex()}"
@@ -459,7 +451,7 @@ def check_queue_m8(
         raise SystemExit("[FAIL] CB_AC_QUEUE_ALIGN queue_m8 both-plane guard missing final Annex-B start code")
     baseline_tail = final_slice(baseline_both_stream, "baseline both-plane guard")
     queue_tail = final_slice(queue_stream, "queue_m8 both-plane guard")
-    expected_baseline_tail = bytes.fromhex("0000000141d008086beb")
+    expected_baseline_tail = bytes.fromhex("0000000141d008086b7acc")
     expected_queue_tail = bytes.fromhex("0000000141d008086bf599")
     if baseline_tail != expected_baseline_tail or queue_tail != expected_queue_tail:
         raise SystemExit(
@@ -468,7 +460,7 @@ def check_queue_m8(
         )
     common = min(len(baseline_tail), len(queue_tail))
     diffs = [(idx, baseline_tail[idx], queue_tail[idx]) for idx in range(common) if baseline_tail[idx] != queue_tail[idx]]
-    if diffs != [(9, 0xEB, 0xF5)] or queue_tail[common:] != b"\x99":
+    if diffs != [(9, 0x7A, 0xF5), (10, 0xCC, 0x99)] or queue_tail[common:] != b"":
         raise SystemExit(
             "[FAIL] CB_AC_QUEUE_ALIGN queue_m8 both-plane diff drift: "
             f"diffs={[(idx, hex(a), hex(b)) for idx, a, b in diffs]} extra={queue_tail[common:].hex()}"
@@ -510,9 +502,9 @@ def check_queue_m8(
     print(
         "[PASS] CB_AC_QUEUE_ALIGN queue_m8 both-plane guard confirms global -8 remains non-committable: "
         f"decoded={len(raw)}/{EXPECTED_BYTES} with bytestream -9; final_slice {baseline_tail.hex()} -> "
-        f"{queue_tail.hex()} (first residual byte 0xeb->0xf5 plus trailing 0x99); "
+        f"{queue_tail.hex()} (first residual bytes 0x7acc->0xf599); "
         "mixed both-plane masks stay strict, but the dense Cb+Cr guard still fails; "
-        "trimming only the trailing byte still fails, while first-payload 0xf5->0xeb/0x75 substitutions restore strict decode"
+        "trimming the final byte still fails, while first-payload 0xf5->0xeb/0x75 substitutions restore strict decode"
     )
 
 
@@ -524,13 +516,13 @@ def main() -> None:
     check_queue_m8(queue_m8, fixtures, cr_fixtures, both_plane_fixture, mixed_both_fixtures, baseline_both_stream)
     print(
         "[PASS] CABAC P16x16 chroma-AC queue-alignment staged probe: "
-        "baseline sparse-Cb partition is unchanged; globally changing h264_cabac_core "
-        "cod_i_queue initialization from -9 to -8 promotes all 15 Cb-only and all 15 Cr-only AC masks "
+        "baseline source -7 queue initialization strict-decodes all 15 Cb-only masks; globally changing h264_cabac_core "
+        "cod_i_queue initialization from -7 to -8 keeps all 15 Cb-only and all 15 Cr-only AC masks "
         "to strict two-frame FFmpeg decode, but is explicitly blocked from source promotion by the dense "
         "Cb+Cr AC regression guard while representative mixed both-plane masks remain strict; the dense "
-        "queue_m8 guard is now locked to the 0xeb->0xf5 first-residual-byte plus trailing-0x99 "
+        "queue_m8 guard is now locked to the 0x7acc->0xf599 residual-byte "
         "final-slice mutation and is rescued by first-payload substitution, not by "
-        "trimming the trailing byte alone"
+        "trimming the final byte alone"
     )
 
 
