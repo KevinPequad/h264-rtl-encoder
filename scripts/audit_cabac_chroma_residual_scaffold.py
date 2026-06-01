@@ -238,7 +238,7 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "probe_locks_cross_plane_mixed_sign_complement_guards",
         "scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py",
-        r"AMPLITUDE_TAILS\s*=\s*\{.*?\(0x1,\s*0xE,\s*96,\s*96\):\s*\"0000000141d008086b3add75\".*?\(0xE,\s*0x1,\s*96,\s*96\):\s*\"0000000141d008086b7fecfff7\".*?\(0xD,\s*0x2,\s*160,\s*96\):\s*\"0000000141d008086b3addf5\".*?\(0xD,\s*0x2,\s*96,\s*96\):\s*\"0000000141d008086b3bed75\".*?\(0x2,\s*0xD,\s*160,\s*160\):\s*\"0000000141d008086b3aec7fe6\".*?\(0x2,\s*0xD,\s*96,\s*96\):\s*\"0000000141d008086b3adefdfc\".*?\(0xB,\s*0x4,\s*160,\s*160\):\s*\"0000000141d008086b7fcf7f7b\".*?\(0x4,\s*0xB,\s*96,\s*96\):\s*\"0000000141d008086b3becf57f\".*?all-negative mixed-sign.*?same-quadrant reciprocal mirror",
+        r"AMPLITUDE_TAILS\s*=\s*\{.*?\(0x1,\s*0xE,\s*96,\s*96\):\s*\"0000000141d008086b3add75\".*?\(0xE,\s*0x1,\s*96,\s*96\):\s*\"0000000141d008086b7fecfff7\".*?\(0xD,\s*0x2,\s*160,\s*96\):\s*\"0000000141d008086b3addf5\".*?\(0xD,\s*0x2,\s*96,\s*96\):\s*\"0000000141d008086b3bed75\".*?\(0x2,\s*0xD,\s*160,\s*160\):\s*\"0000000141d008086b3aec7fe6\".*?\(0x2,\s*0xD,\s*96,\s*160\):\s*\"0000000141d008086b3aec7f7c\".*?\(0x2,\s*0xD,\s*160,\s*96\):\s*\"0000000141d008086b3adefda6\".*?\(0x2,\s*0xD,\s*96,\s*96\):\s*\"0000000141d008086b3adefdfc\".*?\(0xB,\s*0x4,\s*160,\s*160\):\s*\"0000000141d008086b7fcf7f7b\".*?\(0xB,\s*0x4,\s*96,\s*160\):\s*\"0000000141d008086b7edef7fa\".*?\(0x4,\s*0xB,\s*96,\s*96\):\s*\"0000000141d008086b3becf57f\".*?complete \+/-32 sign matrices.*?targeted all-but-one/singleton.*?complement mirror families",
     ),
     (
         "bitstream_scopes_high_amp_cr_payload_context_bank",
