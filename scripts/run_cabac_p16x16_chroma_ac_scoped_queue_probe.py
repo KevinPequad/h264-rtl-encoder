@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 """Staged scoped CABAC queue-init probe for chroma AC.
 
-The global `cod_i_queue` -9 -> -8 staged candidate promotes sparse chroma-AC
-masks but regresses the dense Cb+Cr guard.  This probe checks the tempting
-smaller source repair: add a bitstream-owned `init_queue` port and choose -8
-only when the current chroma-AC scan inputs are sparse/non-dense.  Because the
-CABAC core is started at slice setup, before the P-macroblock residual scan is
-visible in this path, that scoped condition must currently behave like the
-baseline.  Locking that negative result keeps future repair work focused below
-slice-start queue selection and on the CABAC output/renormalization path.
+The current source uses `cod_i_queue=-7`, while the older global `-8` staged
+candidate is still blocked by a dense Cb+Cr guard.  This probe checks the
+tempting smaller source repair: add a bitstream-owned `init_queue` port and
+choose -8 only when the current chroma-AC scan inputs are sparse/non-dense.
+Because the CABAC core is started at slice setup, before the P-macroblock
+residual scan is visible in this path, that scoped condition must currently
+fall back to the checked-in -7 baseline.  Locking that no-op result keeps future
+repair work focused below slice-start queue selection and on the CABAC
+output/renormalization path.
 """
 
 from __future__ import annotations
@@ -63,7 +64,7 @@ def patch_scoped_queue(workspace: Path) -> None:
         "    input  wire         start,\n    input  wire signed [7:0] init_queue,\n\n    input  wire         bin_valid,",
     )
     core_text = core_text.replace(
-        "                cod_i_queue       <= -8'sd9;\n                outstanding_count <= 8'd0;",
+        "                cod_i_queue       <= -8'sd7;\n                outstanding_count <= 8'd0;",
         "                cod_i_queue       <= init_queue;\n                outstanding_count <= 8'd0;",
         1,
     )
@@ -83,10 +84,10 @@ def patch_scoped_queue(workspace: Path) -> None:
     assign_text = """    assign cabac_core_init_queue =
         (cabac_feature_enable && cabac_slice_enable &&
          cabac_chroma_ac_cb_plane_any_nz() && cabac_chroma_ac_cr_plane_any_nz() &&
-         cabac_chroma_ac_cb_plane_full_nz() && cabac_chroma_ac_cr_plane_full_nz()) ? -8'sd9 :
+         cabac_chroma_ac_cb_plane_full_nz() && cabac_chroma_ac_cr_plane_full_nz()) ? -8'sd7 :
         (cabac_feature_enable && cabac_slice_enable &&
          (cabac_chroma_ac_cb_plane_any_nz() || cabac_chroma_ac_cr_plane_any_nz())) ? -8'sd8 :
-        -8'sd9;
+        -8'sd7;
 
 """
     bs_text = bs_text.replace(
@@ -213,16 +214,16 @@ def final_slice(stream: bytes, name: str) -> bytes:
 def main() -> None:
     sim = build_scoped_sim()
     cases = {
-        "cb_mask1": (make_fixture("cb_mask1", 0x1, 0x0), "short", "bytestream -19", 64),
-        "cb_mask2": (make_fixture("cb_mask2", 0x2, 0x0), "short", "bytestream -21", 64),
+        "cb_mask1": (make_fixture("cb_mask1", 0x1, 0x0), "strict_cb", "", 64),
+        "cb_mask2": (make_fixture("cb_mask2", 0x2, 0x0), "strict_cb", "", 64),
         "cb_mask3": (make_fixture("cb_mask3", 0x3, 0x0), "strict_cb", "", 128),
         "dense_both": (make_fixture("dense_both", 0xF, 0xF), "strict_both", "", 0),
     }
     expected_tails = {
-        "cb_mask1": "0000000141d008086beb2ed226",
-        "cb_mask2": "0000000141d008086beb2f6b5d",
-        "cb_mask3": "0000000141d008086beb3184d4899e58",
-        "dense_both": "0000000141d008086beb",
+        "cb_mask1": "0000000141d008086b3acbb489",
+        "cb_mask2": "0000000141d008086b3acbdad7",
+        "cb_mask3": "0000000141d008086b3acc6135226796",
+        "dense_both": "0000000141d008086b7acc",
     }
     for name, (fixture, mode, signature, expected_u) in cases.items():
         raw, err, stream, sim_text = run_case(sim, name, fixture)
@@ -255,8 +256,8 @@ def main() -> None:
             raise SystemExit(f"internal mode error {mode}")
     print(
         "[PASS] CABAC P16x16 chroma-AC scoped queue-init probe: a staged bitstream-selected "
-        "init_queue based on current chroma-AC scan contents behaves like baseline at slice start; "
-        "sparse Cb masks 0x1/0x2 remain one-frame misses while current strict controls stay green, "
+        "init_queue based on current chroma-AC scan contents falls back to the checked-in -7 baseline at slice start; "
+        "sparse Cb masks 0x1/0x2 and current dense controls all stay strict with locked final slices, "
         "so the queue-alignment repair cannot be landed as a simple slice-start conditional on MB residual inputs."
     )
 
