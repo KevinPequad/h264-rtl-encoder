@@ -75,6 +75,17 @@ CASES: dict[str, dict[str, Any]] = {
             "ari_pending": 1,
             "ari_pbyte": "43",
         },
+        "term_state": {
+            "mb": 1,
+            "count": 0,
+            "bits": "000000000000000000000000",
+            "bit_cnt": 0,
+            "ari_low": "620e",
+            "ari_range": 326,
+            "ari_queue": -2,
+            "ari_pending": 1,
+            "ari_pbyte": "dc",
+        },
     },
     "pass_cbd_cr2_160_160": {
         "cb_mask": 0xD,
@@ -115,6 +126,17 @@ CASES: dict[str, dict[str, Any]] = {
             "ari_queue": -8,
             "ari_pending": 1,
             "ari_pbyte": "4",
+        },
+        "term_state": {
+            "mb": 1,
+            "count": 0,
+            "bits": "000000000000000000000000",
+            "bit_cnt": 0,
+            "ari_low": "318",
+            "ari_range": 312,
+            "ari_queue": -8,
+            "ari_pending": 1,
+            "ari_pbyte": "62",
         },
     },
 }
@@ -237,6 +259,32 @@ def parse_first_payload_ctx(text: str, expected_blk: int) -> dict[str, object]:
     raise SystemExit(f"[FAIL] HIGH_AMP_TRACE missing first payload ctx for block {expected_blk}")
 
 
+def parse_terminate_state(text: str) -> dict[str, object]:
+    for line in text.splitlines():
+        if "[CABACTERM]" not in line:
+            continue
+        m = re.search(
+            r"mb=(\d+) count=(\d+) bits=([0-9a-fA-F]+) bit_cnt=(\d+) "
+            r"ari_low=([0-9a-fA-F]+) ari_range=(\d+) ari_queue=(-?\d+) "
+            r"ari_outstanding=(\d+) ari_pending=(\d+) ari_pbyte=([0-9a-fA-F]+)",
+            line,
+        )
+        if not m:
+            continue
+        return {
+            "mb": int(m.group(1)),
+            "count": int(m.group(2)),
+            "bits": m.group(3).lower(),
+            "bit_cnt": int(m.group(4)),
+            "ari_low": m.group(5).lower(),
+            "ari_range": int(m.group(6)),
+            "ari_queue": int(m.group(7)),
+            "ari_pending": int(m.group(9)),
+            "ari_pbyte": m.group(10).lower(),
+        }
+    raise SystemExit("[FAIL] HIGH_AMP_TRACE missing CABACTERM state")
+
+
 def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
     fixture, h264, sim_log = run_rtl_case(sim, name, spec)
     stream = h264.read_bytes()
@@ -299,12 +347,18 @@ def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
             f"[FAIL] HIGH_AMP_TRACE {name} first payload ctx {first_ctx}, expected {spec['first_payload_ctx']}"
         )
 
+    term_state = parse_terminate_state(text)
+    if term_state != spec["term_state"]:
+        raise SystemExit(
+            f"[FAIL] HIGH_AMP_TRACE {name} terminate state {term_state}, expected {spec['term_state']}"
+        )
+
     status = "strict expected-SAD pass" if spec["expected_quality"] else f"bounded one-frame miss {spec['ffmpeg_signature']}"
     chunk_summary = [(blk, f"0x{byte:02x}", bit_cnt) for blk, byte, bit_cnt in residual_chunks]
     print(
         f"[PASS] HIGH_AMP_TRACE {name}: {status}, tail={tail}, "
         f"CBF={cbf_order}, payload={[f'0x{b:02x}' for b in payload_bytes[:3]]}, "
-        f"chunks={chunk_summary}, first_ctx={first_ctx}"
+        f"chunks={chunk_summary}, first_ctx={first_ctx}, term={term_state}"
     )
 
 
@@ -316,7 +370,7 @@ def main() -> int:
         "[PASS] CABAC P16x16 high-amplitude chroma-AC trace probe locks the failing "
         "Cb0x2/Cr0xd lane against reciprocal Cb0xd/Cr0x2 strict pass, including "
         "plane-local CBF walks, residual output chunks, first payload bytes, and "
-        "first payload arithmetic context state."
+        "first-payload and terminate arithmetic context state."
     )
     return 0
 

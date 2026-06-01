@@ -482,3 +482,10 @@ Next useful probe:
 - Failing lane chunk trail: `(1,05,40),(1,44,48),(1,1e,56),(1,80,64),(4,09,72),(4,84,80),(4,03,88),(4,0e,96),(6,d6,104),(6,e9,112),(6,0f,120),(7,b3,0),(7,a4,8),(7,b6,16)`.
 - Reciprocal strict-pass chunk trail: `(0,1a,40),(0,04,48),(0,bc,56),(0,71,64),(2,4a,72),(2,c4,80),(2,6b,88),(2,e5,96),(3,ad,104),(3,ad,112),(3,ae,120),(5,12,0),(5,99,8),(5,b1,16)`.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes. The next repair should use this residual output-byte divergence against the shared first-payload context state and divergent CBF walk, rather than another mask/selector or literal bytestream patch.
+
+## 2026-06-01 high-amplitude terminate pre-state lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` again so the remaining high-amplitude `Cb0x2/Cr0xd +32/+32` miss and reciprocal strict-pass lane now lock the DEBUG_CABAC_P16X16 `[CABACTERM]` pre-flush arithmetic state.
+- The miss reaches terminate with `ari_low=0x620e`, `ari_range=326`, `ari_queue=-2`, pending byte `0xdc`; the reciprocal strict-pass reaches terminate with `ari_low=0x318`, `ari_range=312`, `ari_queue=-8`, pending byte `0x62`.
+- This keeps the next source repair pinned below header/CBF selector changes and on the residual-output/terminate arithmetic boundary: any candidate must explain both the early first-payload split and the final pre-flush divergence without regressing the reciprocal strict lane.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.
