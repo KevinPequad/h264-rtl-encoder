@@ -3,11 +3,10 @@
 
 The Cb singleton + Cr all-but-one high-amplitude complements used to short-decode
 under the shared chroma-AC residual payload context bank.  The RTL now scopes a
-separate Cr payload context bank to these target mask pairs; keep the exact
-promoted strict-decode tails and plane-local SAD locked for those repaired pairs,
-and lock the reciprocal all-but-one + singleton guards that already strict-decode
-on the shared bank so the old negative probes cannot silently regress into a
-different quadrant or direction.
+separate Cr payload context bank to those target mask pairs, and the Cb0xb/Cr0x4
+reciprocal has a narrow CBF-neighbour repair. Keep the exact promoted
+strict-decode tails and plane-local SAD locked so the old negative probes cannot
+silently regress into a different quadrant or direction.
 """
 
 from __future__ import annotations
@@ -41,6 +40,10 @@ PROMOTED_CASES = {
     (0x4, 0xB, 96, 160): "0000000141d008086b3bcf7f7f",
     (0x4, 0xB, 160, 96): "0000000141d008086b3becf5bf",
     (0x4, 0xB, 96, 96): "0000000141d008086b3becf57f",
+    (0xB, 0x4, 160, 160): "0000000141d008086b7fcf7f7b",
+    (0xB, 0x4, 160, 96): "0000000141d008086b7fcf7f7b",
+    (0xB, 0x4, 96, 160): "0000000141d008086b7edef7fa",
+    (0xB, 0x4, 96, 96): "0000000141d008086b7edef7fa",
     (0x8, 0x7, 160, 160): "0000000141d008086b7fcdff",
     (0x8, 0x7, 96, 160): "0000000141d008086b7fcdff",
     (0x8, 0x7, 160, 96): "0000000141d008086b7eddf7",

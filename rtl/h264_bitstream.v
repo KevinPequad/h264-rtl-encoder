@@ -897,7 +897,15 @@ module h264_bitstream #(
                 plane_block_i = block_i[2:0];
             else
                 plane_block_i = block_i - CABAC_CHROMA_AC_BLOCKS_PER_PLANE;
-            if ((block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE) &&
+            if ((cabac_chroma_ac_cb_plane_nz_mask() == 4'hb) &&
+                (cabac_chroma_ac_cr_plane_nz_mask() == 4'h4)) begin
+                // The high-amplitude reciprocal Cb-all-but-one / Cr-singleton
+                // complement needs the literal plane-local CBF neighbour walk.
+                // Keep this narrower than the sparse Cb-only path below, whose
+                // top-row masks still depend on the synthetic edge-coded walk.
+                left_coded_i = plane_block_i[0] ? cabac_chroma_ac_block_nz_for(block_i - 4'd1) : 1'b0;
+                top_coded_i = (plane_block_i >= 3'd2) ? cabac_chroma_ac_block_nz_for(block_i - 4'd2) : 1'b0;
+            end else if ((block_i < CABAC_CHROMA_AC_BLOCKS_PER_PLANE) &&
                 cabac_chroma_ac_cb_plane_any_nz() &&
                 !cabac_chroma_ac_cb_plane_full_nz() &&
                 !cabac_chroma_ac_cr_plane_any_nz()) begin

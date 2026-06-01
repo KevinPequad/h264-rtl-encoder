@@ -106,6 +106,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"cabac_chroma_ac_cb_plane_any_nz.*?cabac_chroma_ac_cb_plane_full_nz.*?cabac_chroma_ac_cr_plane_any_nz.*?cabac_chroma_ac_cr_plane_full_nz.*?cabac_chroma_ac_cb_plane_any_nz\(\) &&\s*!cabac_chroma_ac_cb_plane_full_nz\(\) &&\s*!cabac_chroma_ac_cr_plane_any_nz\(\).*?bottom-row sparse Cb.*?3'd2: begin left_coded_i = 1'b1; top_coded_i = 1'b1; end.*?default: begin left_coded_i = 1'b0; top_coded_i = 1'b0; end.*?cabac_chroma_ac_cr_plane_full_nz\(\).*?cabac_res_chroma_ac_cbf_ctx_sel_for = \{top_coded_i, left_coded_i\}",
     ),
     (
+        "bitstream_repairs_b4_plane_local_cbf_walk",
+        "rtl/h264_bitstream.v",
+        r"cabac_chroma_ac_cb_plane_nz_mask\(\)\s*==\s*4'hb.*?cabac_chroma_ac_cr_plane_nz_mask\(\)\s*==\s*4'h4.*?Cb-all-but-one / Cr-singleton.*?left_coded_i\s*=\s*plane_block_i\[0\].*?block_i - 4'd1.*?top_coded_i\s*=\s*\(plane_block_i >= 3'd2\).*?block_i - 4'd2.*?Sparse Cb-only AC needs a dedicated CBF context walk",
+    ),
+    (
         "bitstream_initializes_chroma_residual_contexts",
         "rtl/h264_bitstream.v",
         r"cabac_res_chroma_dc_cbf_ctx_state\[0\]\s*<=\s*cabac_init_state\(5,\s*54,\s*26\).*?cabac_res_chroma_dc_sig_ctx_state\[0\]\s*<=\s*cabac_init_state\(3,\s*64,\s*26\).*?cabac_res_chroma_dc_last_ctx_state\[0\]\s*<=\s*cabac_init_state\(1,\s*67,\s*26\).*?cabac_res_chroma_dc_level_ctx_state_0\s*<=\s*cabac_init_state\(0,\s*70,\s*26\).*?cabac_res_chroma_ac_cbf_ctx_state\[0\]\s*<=\s*cabac_init_state\(-1,\s*48,\s*26\).*?cabac_res_chroma_ac_cr_cbf_ctx_state\[0\]\s*<=\s*cabac_init_state\(-1,\s*48,\s*26\).*?cabac_res_chroma_ac_sig_ctx_state\[0\]\s*<=\s*cabac_init_state\(7,\s*50,\s*26\).*?cabac_res_chroma_ac_last_ctx_state\[0\]\s*<=\s*cabac_init_state\(16,\s*30,\s*26\).*?cabac_res_chroma_ac_level_ctx_state_0\s*<=\s*cabac_init_state\(0,\s*58,\s*26\)",
@@ -283,7 +288,7 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "probe_locks_b4_trace_contrast",
         "scripts/run_cabac_p16x16_chroma_ac_b4_trace_contrast_probe.py",
-        r"Trace-contrast probe.*?MIRROR_CB_MASK\s*=\s*0x4.*?MIRROR_CR_MASK\s*=\s*0xB.*?MIRROR_TAILS.*?0000000141d008086b3bcf7fbf.*?0000000141d008086b3becf57f.*?EXPECTED_CODED_BLOCKS.*?B4_CB_MASK,\s*B4_CR_MASK.*?\[0,\s*1,\s*3,\s*6\].*?MIRROR_CB_MASK,\s*MIRROR_CR_MASK.*?\[2,\s*4,\s*5,\s*7\].*?split_payload_blocks.*?if any\(sel >= 16 for sel in selects\).*?split payload blocks \{split_blocks\}, expected \[\].*?if not any\(sel >= 16 for sel in selects\).*?expected_split_blocks\s*=\s*\[4,\s*5,\s*7\].*?split_blocks != expected_split_blocks.*?open Cb0xb/Cr0x4.*?Cb0x4/Cr0xb mirror strict-decodes",
+        r"Trace-contrast gate.*?B4_TAILS.*?0000000141d008086b7fcf7f7b.*?0000000141d008086b7edef7fa.*?MIRROR_TAILS.*?0000000141d008086b3bcf7fbf.*?0000000141d008086b3becf57f.*?EXPECTED_CODED_BLOCKS.*?B4_CB_MASK,\s*B4_CR_MASK.*?\[0,\s*1,\s*3,\s*6\].*?MIRROR_CB_MASK,\s*MIRROR_CR_MASK.*?\[2,\s*4,\s*5,\s*7\].*?EXPECTED_B4_CBF_SELECTS\s*=\s*\[0,\s*1,\s*2,\s*2,\s*4,\s*4,\s*4,\s*5\].*?strict-decodes through the scoped plane-local CBF walk.*?Cb0x4/Cr0xb mirror remains strict on the split bank",
     ),
     (
         "probe_locks_cross_plane_high_amp_trace_split_bank",
