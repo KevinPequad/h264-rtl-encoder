@@ -33,7 +33,8 @@ EXPECTED_HEADER_TAIL = 0x6B
 # sparse-Cb plus dense-Cr / dense-Cb plus sparse-Cr right-column and bottom-row
 # controls, dense-Cr, dense-Cb, same-diagonal dense, asymmetric three-block,
 # its reciprocal mirror, asymmetric three-plus-one complements,
-# all-but-one reciprocal complements, and dense-both controls.  This is
+# all-but-one reciprocal complements including same-quadrant singleton mirrors,
+# and dense-both controls.  This is
 # deliberately smaller than the full 15x15 lattice
 # so the cron gate stays
 # bounded while still covering the combinations that used to expose short-decode
@@ -70,6 +71,10 @@ TAILS = {
     (0x7, 0x8): "0000000141d008086b3acc332499ec2488aacd",
     (0x8, 0x7): "0000000141d008086b3acbf588e2699065115d",
     (0xE, 0x1): "0000000141d008086b3acc3602d3f58ca1b3b4",
+    (0xB, 0x4): "0000000141d008086b3acc332499ec24af9157",
+    (0x4, 0xB): "0000000141d008086b3acbf516134e8e9222bb59",
+    (0xD, 0x2): "0000000141d008086b3acc33249a58a9214bf7",
+    (0x2, 0xD): "0000000141d008086b3acbf5cad40984ca9f0eb3",
     (0xD, 0xE): "0000000141d008086b3acc36849d158a9214bf7b590000",
     (0xE, 0xD): "0000000141d008086b3acc36b8ad3f58ca1b3b4eb300000300",
 }
@@ -312,6 +317,7 @@ def main() -> int:
         "sparse+dense right-column/bottom-row, same-diagonal dense, "
         "asymmetric three-block plus reciprocal mirror, dense-Cb, dense-Cr, "
         "asymmetric three-plus-one complements, all-but-one reciprocal complements, "
+        "same-quadrant all-but-one/singleton mirrors, "
         "and dense-both Cb+Cr AC masks "
         "plus positive, reciprocal, mixed-sign, asymmetric complement, "
         "and all-but-one/singleton complement "
