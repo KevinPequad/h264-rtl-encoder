@@ -3,10 +3,10 @@
 
 The promoted high-amplitude cross-plane path currently scopes a separate Cr
 payload context bank only for the Cb-singleton/Cr-all-but-one masks that were
-repaired in the source.  This staged diagnostic patches temporary workspaces to
-first locks the current shared-bank short-decode signature for the reciprocal
-Cb-all-but-one/Cr-singleton `0xb/0x4` mask, then patches temporary workspaces to
-try that mask through the Cr-side, Cb-side, and both-plane payload-bank
+repaired in the source.  This staged diagnostic first locks the current
+shared-bank short-decode signature for the reciprocal Cb-all-but-one/Cr-
+singleton `0xb/0x4` mask, then patches temporary workspaces to try that mask
+through the Cr-side, Cb-side, both-plane, and context-class-only payload-bank
 extensions.  All four +/-32 sign combinations still short-decode in each lane,
 keeping the next repair search from repeating either the baseline observation or
 these too-simple context-bank extensions.
@@ -63,6 +63,46 @@ STAGED_CB_PAYLOAD_CTX_COND = """(((cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS
 
 STAGED_DUAL_PAYLOAD_CTX_COND = "(cabac_chroma_ac_split_plane_ctx())"
 
+SOURCE_LEVEL0_CTX = """                                        cabac_ctx_state_in <= ((cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE) && cabac_chroma_ac_split_plane_ctx()) ? cabac_res_chroma_ac_cr_level_ctx_state_0 : cabac_res_chroma_ac_level_ctx_state_0;
+                                        cabac_pending_ctx_kind <= CABAC_CTX_RES_CHRAC_LEVEL;
+                                        cabac_pending_ctx_sel <= {((cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE) && cabac_chroma_ac_split_plane_ctx()), 4'd0};
+"""
+
+STAGED_LEVEL0_SHARED_CTX = """                                        cabac_ctx_state_in <= cabac_res_chroma_ac_level_ctx_state_0;
+                                        cabac_pending_ctx_kind <= CABAC_CTX_RES_CHRAC_LEVEL;
+                                        cabac_pending_ctx_sel <= {1'b0, 4'd0};
+"""
+
+SOURCE_LEVEL1_CTX = """                                        cabac_ctx_state_in <= ((cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE) && cabac_chroma_ac_split_plane_ctx()) ? cabac_res_chroma_ac_cr_level_ctx_state_1 : cabac_res_chroma_ac_level_ctx_state_1;
+                                        cabac_pending_ctx_kind <= CABAC_CTX_RES_CHRAC_LEVEL;
+                                        cabac_pending_ctx_sel <= {((cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE) && cabac_chroma_ac_split_plane_ctx()), 4'd1};
+"""
+
+STAGED_LEVEL1_SHARED_CTX = """                                        cabac_ctx_state_in <= cabac_res_chroma_ac_level_ctx_state_1;
+                                        cabac_pending_ctx_kind <= CABAC_CTX_RES_CHRAC_LEVEL;
+                                        cabac_pending_ctx_sel <= {1'b0, 4'd1};
+"""
+
+SOURCE_SIG_CTX = """                                            cabac_ctx_state_in <= ((cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE) && cabac_chroma_ac_split_plane_ctx()) ? cabac_res_chroma_ac_cr_sig_ctx_state[cabac_res_bin_ctx_idx - 9'd152] : cabac_res_chroma_ac_sig_ctx_state[cabac_res_bin_ctx_idx - 9'd152];
+                                            cabac_pending_ctx_kind <= CABAC_CTX_RES_CHRAC_SIG;
+                                            cabac_pending_ctx_sel <= {((cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE) && cabac_chroma_ac_split_plane_ctx()), (cabac_res_bin_ctx_idx - 9'd152)};
+"""
+
+STAGED_SIG_SHARED_CTX = """                                            cabac_ctx_state_in <= cabac_res_chroma_ac_sig_ctx_state[cabac_res_bin_ctx_idx - 9'd152];
+                                            cabac_pending_ctx_kind <= CABAC_CTX_RES_CHRAC_SIG;
+                                            cabac_pending_ctx_sel <= {1'b0, (cabac_res_bin_ctx_idx - 9'd152)};
+"""
+
+SOURCE_LAST_CTX = """                                            cabac_ctx_state_in <= ((cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE) && cabac_chroma_ac_split_plane_ctx()) ? cabac_res_chroma_ac_cr_last_ctx_state[cabac_res_bin_ctx_idx - 9'd213] : cabac_res_chroma_ac_last_ctx_state[cabac_res_bin_ctx_idx - 9'd213];
+                                            cabac_pending_ctx_kind <= CABAC_CTX_RES_CHRAC_LAST;
+                                            cabac_pending_ctx_sel <= {((cabac_res_block_idx >= CABAC_CHROMA_AC_BLOCKS_PER_PLANE) && cabac_chroma_ac_split_plane_ctx()), (cabac_res_bin_ctx_idx - 9'd213)};
+"""
+
+STAGED_LAST_SHARED_CTX = """                                            cabac_ctx_state_in <= cabac_res_chroma_ac_last_ctx_state[cabac_res_bin_ctx_idx - 9'd213];
+                                            cabac_pending_ctx_kind <= CABAC_CTX_RES_CHRAC_LAST;
+                                            cabac_pending_ctx_sel <= {1'b0, (cabac_res_bin_ctx_idx - 9'd213)};
+"""
+
 # Exact final-slice tails observed after applying only each staged extension.
 # All cases still produce a one-frame FFmpeg decode miss.
 EXPECTED_BASELINE_MISSES = {
@@ -90,6 +130,30 @@ EXPECTED_MISSES = {
         (160, 96): ("0000000141d008086bfacdf577f4", "corrupt decoded frame"),
         (96, 160): ("0000000141d008086bfafe77f75d", "corrupt decoded frame"),
         (96, 96): ("0000000141d008086bfafe77f75d", "corrupt decoded frame"),
+    },
+    "siglast_only_split": {
+        (160, 160): ("0000000141d008086bfedffd73", "corrupt decoded frame"),
+        (160, 96): ("0000000141d008086bfedffd73", "corrupt decoded frame"),
+        (96, 160): ("0000000141d008086bffef7df2", "corrupt decoded frame"),
+        (96, 96): ("0000000141d008086bffef7df2", "corrupt decoded frame"),
+    },
+    "level_only_split": {
+        (160, 160): ("0000000141d008086bfedff5", "corrupt decoded frame"),
+        (160, 96): ("0000000141d008086bfedff5", "corrupt decoded frame"),
+        (96, 160): ("0000000141d008086bffef75", "corrupt decoded frame"),
+        (96, 96): ("0000000141d008086bffef75", "corrupt decoded frame"),
+    },
+    "sig_only_split": {
+        (160, 160): ("0000000141d008086bfedffd73", "corrupt decoded frame"),
+        (160, 96): ("0000000141d008086bfedffd73", "corrupt decoded frame"),
+        (96, 160): ("0000000141d008086bffef7df0", "corrupt decoded frame"),
+        (96, 96): ("0000000141d008086bffef7df0", "corrupt decoded frame"),
+    },
+    "last_only_split": {
+        (160, 160): ("0000000141d008086bfedff777", "corrupt decoded frame"),
+        (160, 96): ("0000000141d008086bfedff777", "corrupt decoded frame"),
+        (96, 160): ("0000000141d008086bffef77b4", "corrupt decoded frame"),
+        (96, 96): ("0000000141d008086bffef77b4", "corrupt decoded frame"),
     },
 }
 
@@ -132,6 +196,40 @@ def build_staged_sim(variant: str) -> Path:
         if SOURCE_PAYLOAD_CTX_COND not in text:
             raise SystemExit("[FAIL] B4_SPLIT staged payload-context anchor missing")
         text = text.replace(SOURCE_PAYLOAD_CTX_COND, STAGED_DUAL_PAYLOAD_CTX_COND)
+    elif variant == "siglast_only_split":
+        for source, staged in (
+            (SOURCE_LEVEL0_CTX, STAGED_LEVEL0_SHARED_CTX),
+            (SOURCE_LEVEL1_CTX, STAGED_LEVEL1_SHARED_CTX),
+        ):
+            if source not in text:
+                raise SystemExit("[FAIL] B4_SPLIT staged level-context anchor missing")
+            text = text.replace(source, staged)
+    elif variant == "level_only_split":
+        for source, staged in (
+            (SOURCE_SIG_CTX, STAGED_SIG_SHARED_CTX),
+            (SOURCE_LAST_CTX, STAGED_LAST_SHARED_CTX),
+        ):
+            if source not in text:
+                raise SystemExit("[FAIL] B4_SPLIT staged sig/last-context anchor missing")
+            text = text.replace(source, staged)
+    elif variant == "sig_only_split":
+        for source, staged in (
+            (SOURCE_LEVEL0_CTX, STAGED_LEVEL0_SHARED_CTX),
+            (SOURCE_LEVEL1_CTX, STAGED_LEVEL1_SHARED_CTX),
+            (SOURCE_LAST_CTX, STAGED_LAST_SHARED_CTX),
+        ):
+            if source not in text:
+                raise SystemExit("[FAIL] B4_SPLIT staged sig-only context anchor missing")
+            text = text.replace(source, staged)
+    elif variant == "last_only_split":
+        for source, staged in (
+            (SOURCE_LEVEL0_CTX, STAGED_LEVEL0_SHARED_CTX),
+            (SOURCE_LEVEL1_CTX, STAGED_LEVEL1_SHARED_CTX),
+            (SOURCE_SIG_CTX, STAGED_SIG_SHARED_CTX),
+        ):
+            if source not in text:
+                raise SystemExit("[FAIL] B4_SPLIT staged last-only context anchor missing")
+            text = text.replace(source, staged)
     elif variant != "cr_payload_split":
         raise SystemExit(f"[FAIL] B4_SPLIT unknown staged variant {variant!r}")
     rtl.write_text(text, encoding="utf-8")
@@ -182,9 +280,9 @@ def main() -> int:
         check_variant(variant)
     print(
         "[PASS] CABAC P16x16 high-amplitude Cb0xb/Cr0x4 diagnostic locks the baseline "
-        "shared-bank short-decode and rejects the naive Cr-side, Cb-side, and both-plane "
-        "split-context extensions: all four +/-32 reciprocal complement cases remain "
-        "one-frame FFmpeg misses"
+        "shared-bank short-decode and rejects the naive Cr-side, Cb-side, both-plane, "
+        "and context-class-only split-context extensions: all four +/-32 reciprocal "
+        "complement cases remain one-frame FFmpeg misses"
     )
     return 0
 
