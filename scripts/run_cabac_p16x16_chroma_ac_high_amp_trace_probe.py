@@ -33,6 +33,8 @@ OUT_DIR = ROOT / "output" / "cabac_high_amp_trace_probe"
 
 CASES: dict[str, dict[str, Any]] = {
     "shared_cb1_cre_160_160": {"cb_mask": 0x1, "cr_mask": 0xE, "cb_value": 160, "cr_value": 160, "tail": "0000000141d008086b3bcdfd", "split": False},
+    "shared_cb1_cre_096_160": {"cb_mask": 0x1, "cr_mask": 0xE, "cb_value": 96, "cr_value": 160, "tail": "0000000141d008086b3bcdfd", "split": False},
+    "shared_cb1_cre_160_096": {"cb_mask": 0x1, "cr_mask": 0xE, "cb_value": 160, "cr_value": 96, "tail": "0000000141d008086b3add75", "split": False},
     "shared_cb1_cre_096_096": {"cb_mask": 0x1, "cr_mask": 0xE, "cb_value": 96, "cr_value": 96, "tail": "0000000141d008086b3add75", "split": False},
     "promoted_cb2_crd_160_160": {"cb_mask": 0x2, "cr_mask": 0xD, "cb_value": 160, "cr_value": 160, "tail": "0000000141d008086b3aec7fe6", "split": True},
     "promoted_cb2_crd_096_160": {"cb_mask": 0x2, "cr_mask": 0xD, "cb_value": 96, "cr_value": 160, "tail": "0000000141d008086b3aec7f7c", "split": True},
@@ -43,6 +45,8 @@ CASES: dict[str, dict[str, Any]] = {
     "promoted_cb4_crb_160_096": {"cb_mask": 0x4, "cr_mask": 0xB, "cb_value": 160, "cr_value": 96, "tail": "0000000141d008086b3becf5bf", "split": True},
     "promoted_cb4_crb_096_096": {"cb_mask": 0x4, "cr_mask": 0xB, "cb_value": 96, "cr_value": 96, "tail": "0000000141d008086b3becf57f", "split": True},
     "shared_cb8_cr7_160_160": {"cb_mask": 0x8, "cr_mask": 0x7, "cb_value": 160, "cr_value": 160, "tail": "0000000141d008086b7fcdff", "split": False},
+    "shared_cb8_cr7_096_160": {"cb_mask": 0x8, "cr_mask": 0x7, "cb_value": 96, "cr_value": 160, "tail": "0000000141d008086b7fcdff", "split": False},
+    "shared_cb8_cr7_160_096": {"cb_mask": 0x8, "cr_mask": 0x7, "cb_value": 160, "cr_value": 96, "tail": "0000000141d008086b7eddf7", "split": False},
     "shared_cb8_cr7_096_096": {"cb_mask": 0x8, "cr_mask": 0x7, "cb_value": 96, "cr_value": 96, "tail": "0000000141d008086b7eddf7", "split": False},
     "control_cbd_cr2_160_160": {"cb_mask": 0xD, "cr_mask": 0x2, "cb_value": 160, "cr_value": 160, "tail": "0000000141d008086b3addf5", "split": False},
 }
@@ -124,7 +128,7 @@ def main() -> int:
     print(
         "[PASS] CABAC P16x16 high-amplitude chroma-AC trace probe: former Cb0x2/Cr0xd "
         "and Cb0x4/Cr0xb miss families strict-decode through the scoped Cr payload "
-        "context bank while the Cb0x1/Cr0xe, Cb0x8/Cr0x7, and reciprocal controls remain shared."
+        "context bank while the mixed-sign Cb0x1/Cr0xe, Cb0x8/Cr0x7, and reciprocal controls remain shared."
     )
     return 0
 
