@@ -221,6 +221,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"AMPLITUDE_TAILS\s*=\s*\{.*?\(0x6,\s*0x9,\s*160,\s*160\):\s*\"0000000141d008086b7ffeef\".*?\(0xC,\s*0x3,\s*160,\s*160\):\s*\"0000000141d008086bbaff\".*?\(0x3,\s*0xC,\s*160,\s*160\):\s*\"0000000141d008086b7ecd\"",
     ),
     (
+        "probe_locks_cross_plane_mixed_sign_complement_guards",
+        "scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py",
+        r"AMPLITUDE_TAILS\s*=\s*\{.*?\(0x1,\s*0xE,\s*96,\s*96\):\s*\"0000000141d008086b3add75\".*?\(0xE,\s*0x1,\s*96,\s*96\):\s*\"0000000141d008086b7fecfff7\".*?\(0xD,\s*0x2,\s*160,\s*96\):\s*\"0000000141d008086b3addf5\".*?\(0xD,\s*0x2,\s*96,\s*96\):\s*\"0000000141d008086b3bed75\".*?all-negative mixed-sign",
+    ),
+    (
         "probe_locks_cr_ac_first_payload_substitutions",
         "scripts/run_cabac_p16x16_chroma_cr_ac_first_payload_substitution_probe.py",
         r"EXPECTED_FIRST_PAYLOAD\s*=\s*0xEB.*?QUEUE_M8_FIRST_PAYLOAD\s*=\s*0x75.*?BIT7_PROMOTED_PAYLOAD\s*=\s*0x6B.*?STRICT_MASKS\s*=\s*\{0x1,\s*0x2,\s*0x4,\s*0x6,\s*0x8,\s*0x9,\s*0xF\}.*?MISS_SIGNATURES\s*=\s*\{.*?0x3:\s*\"bytestream -6\".*?0xE:\s*\"bytestream -7\".*?for label, value in \(\(\"queue_m8_payload_0x75\", QUEUE_M8_FIRST_PAYLOAD\), \(\"bit7_payload_0x6b\", BIT7_PROMOTED_PAYLOAD\)\).*?assert_cr_only\(mask, fixture, raw, label\).*?check_both_plane_guard",
