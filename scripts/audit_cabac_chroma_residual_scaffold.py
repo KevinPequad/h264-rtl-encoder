@@ -243,7 +243,7 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "probe_locks_cross_plane_high_amp_trace_split_bank",
         "scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py",
-        r"promoted_cb2_crd_160_160.*?\"tail\":\s*\"0000000141d008086b3aec7fe6\".*?promoted_cb2_crd_096_096.*?\"tail\":\s*\"0000000141d008086b3adefdfc\".*?promoted_cb4_crb_160_160.*?\"tail\":\s*\"0000000141d008086b3bcf7fbf\".*?promoted_cb4_crb_096_096.*?\"tail\":\s*\"0000000141d008086b3becf57f\".*?control_cbd_cr2_160_160.*?\"tail\":\s*\"0000000141d008086b3addf5\".*?payload_ctx_selects.*?kind=\(22\|23\|24\) sel=\(\\d\+\).*?saw_split_bank\s*=\s*any\(sel >= 16.*?former Cb0x2/Cr0xd.*?Cb0x4/Cr0xb",
+        r"shared_cb1_cre_160_160.*?\"tail\":\s*\"0000000141d008086b3bcdfd\".*?promoted_cb2_crd_160_160.*?\"tail\":\s*\"0000000141d008086b3aec7fe6\".*?promoted_cb2_crd_096_096.*?\"tail\":\s*\"0000000141d008086b3adefdfc\".*?promoted_cb4_crb_160_160.*?\"tail\":\s*\"0000000141d008086b3bcf7fbf\".*?promoted_cb4_crb_096_096.*?\"tail\":\s*\"0000000141d008086b3becf57f\".*?shared_cb8_cr7_096_096.*?\"tail\":\s*\"0000000141d008086b7eddf7\".*?control_cbd_cr2_160_160.*?\"tail\":\s*\"0000000141d008086b3addf5\".*?payload_ctx_selects.*?kind=\(22\|23\|24\) sel=\(\\d\+\).*?saw_split_bank\s*=\s*any\(sel >= 16.*?former Cb0x2/Cr0xd.*?Cb0x4/Cr0xb.*?Cb0x1/Cr0xe.*?Cb0x8/Cr0x7",
     ),
     (
         "probe_locks_cr_ac_first_payload_substitutions",
