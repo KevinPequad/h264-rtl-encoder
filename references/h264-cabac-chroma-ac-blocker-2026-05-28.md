@@ -496,3 +496,10 @@ Next useful probe:
 - The `Cr=+32` misses keep the final tail `...6bbbecf7`, first-payload context `ari_low=0x36c`, and terminate pre-state `ari_low=0x620e`, while the `Cr=-32` misses keep the final tail `...6bbbccff`, first-payload context `ari_low=0x1ec`, and terminate pre-state `ari_low=0x3400`. All four remain one-frame FFmpeg misses with byte-identical IDR frames.
 - The trace parser now tolerates known Verilator/testbench stdout interleaving around the `[CABACTERM]` row, so terminate-state locks do not flap when TB progress text splits `ari_pbyte` across lines.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.
+
+## 2026-06-01 high-amplitude final-payload context lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so each coded high-amplitude chroma-AC block now locks its residual payload context count and final `[CABACCTX]` arithmetic state, not only the first payload context and terminate pre-state.
+- The four `Cb0x2/Cr0xd` miss sign cases all keep four coded blocks with payload context counts `(21,21,21,20)`, but their final per-block arithmetic states split by sign (`Cr=+32` keeps later `pbyte=d6/b3/dc`, `Cr=-32` keeps `pbyte=d2/b3/dc`). The reciprocal `Cb0xd/Cr0x2` strict-pass lane stays locked with coded blocks `0/2/3/5` and final pending bytes `4a/e5/12/dc`.
+- This gives the next repair a stable per-coded-block residual-tail endpoint to compare against the first-payload and terminate divergence, keeping the target on CABAC arithmetic/renormalization/output-byte state rather than CBF selector or literal bytestream patching.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.

@@ -298,6 +298,55 @@ CASES: dict[str, dict[str, Any]] = {
 }
 
 
+PAYLOAD_CTX_EXPECTATIONS: dict[str, dict[str, list[tuple[object, ...]] | list[tuple[int, int]]]] = {
+    "fail_cb2_crd_160_160": {
+        "counts": [(1, 21), (4, 21), (6, 21), (7, 20)],
+        "final": [
+            (1, 24, 1, 116, 114, "328", 282, -7, 0, 1, "9"),
+            (4, 24, 1, 116, 114, "2b8", 266, -8, 0, 1, "d6"),
+            (6, 24, 1, 116, 114, "2864", 326, -4, 0, 1, "b3"),
+            (7, 24, 1, 116, 114, "3064", 326, -3, 0, 1, "dc"),
+        ],
+    },
+    "fail_cb2_crd_096_160": {
+        "counts": [(1, 21), (4, 21), (6, 21), (7, 20)],
+        "final": [
+            (1, 24, 1, 116, 114, "40", 282, -7, 0, 1, "7"),
+            (4, 24, 1, 116, 114, "2b8", 266, -8, 0, 1, "d6"),
+            (6, 24, 1, 116, 114, "2864", 326, -4, 0, 1, "b3"),
+            (7, 24, 1, 116, 114, "3064", 326, -3, 0, 1, "dc"),
+        ],
+    },
+    "fail_cb2_crd_160_096": {
+        "counts": [(1, 21), (4, 21), (6, 21), (7, 20)],
+        "final": [
+            (1, 24, 1, 116, 114, "328", 282, -7, 0, 1, "9"),
+            (4, 24, 1, 116, 114, "0", 266, -8, 0, 1, "d2"),
+            (6, 24, 1, 116, 114, "1200", 326, -4, 0, 1, "b3"),
+            (7, 24, 1, 116, 114, "1a00", 326, -3, 0, 1, "dc"),
+        ],
+    },
+    "fail_cb2_crd_096_096": {
+        "counts": [(1, 21), (4, 21), (6, 21), (7, 20)],
+        "final": [
+            (1, 24, 1, 116, 114, "40", 282, -7, 0, 1, "7"),
+            (4, 24, 1, 116, 114, "0", 266, -8, 0, 1, "d2"),
+            (6, 24, 1, 116, 114, "1200", 326, -4, 0, 1, "b3"),
+            (7, 24, 1, 116, 114, "1a00", 326, -3, 0, 1, "dc"),
+        ],
+    },
+    "pass_cbd_cr2_160_160": {
+        "counts": [(0, 21), (2, 21), (3, 21), (5, 20)],
+        "final": [
+            (0, 24, 1, 116, 114, "ae4", 394, -6, 0, 1, "4a"),
+            (2, 24, 1, 116, 114, "15ab8", 266, -1, 0, 1, "e5"),
+            (3, 24, 1, 116, 114, "864", 326, -6, 0, 1, "12"),
+            (5, 24, 1, 116, 114, "3064", 326, -3, 0, 1, "dc"),
+        ],
+    },
+}
+
+
 def build_debug_sim() -> Path:
     workspace = Path(stage_workspace("h264_cabac_high_amp_trace_"))
     config = BuildConfig(
@@ -415,6 +464,40 @@ def parse_first_payload_ctx(text: str, expected_blk: int) -> dict[str, object]:
     raise SystemExit(f"[FAIL] HIGH_AMP_TRACE missing first payload ctx for block {expected_blk}")
 
 
+def parse_payload_context_summary(text: str) -> tuple[list[tuple[int, int]], list[tuple[object, ...]]]:
+    counts: dict[int, int] = {}
+    final_by_block: dict[int, tuple[object, ...]] = {}
+    for line in text.splitlines():
+        if "[CABACCTX]" not in line or "cat=2" not in line:
+            continue
+        m = re.search(
+            r"blk=(\d+) kind=(\d+) sel=(\d+) in=(\d+) out=(\d+) "
+            r"ari_low=([0-9a-fA-F]+) ari_range=(\d+) ari_queue=(-?\d+) "
+            r"ari_outstanding=(\d+) ari_pending=(\d+) ari_pbyte=([0-9a-fA-F]+)",
+            line,
+        )
+        if not m:
+            continue
+        blk, kind, sel, state_in, state_out = map(int, m.groups()[:5])
+        if kind == 21:
+            continue
+        counts[blk] = counts.get(blk, 0) + 1
+        final_by_block[blk] = (
+            blk,
+            kind,
+            sel,
+            state_in,
+            state_out,
+            m.group(6).lower(),
+            int(m.group(7)),
+            int(m.group(8)),
+            int(m.group(9)),
+            int(m.group(10)),
+            m.group(11).lower(),
+        )
+    return sorted(counts.items()), [final_by_block[blk] for blk in sorted(final_by_block)]
+
+
 def parse_terminate_state(text: str) -> dict[str, object]:
     marker = text.find("[CABACTERM]")
     if marker < 0:
@@ -519,6 +602,19 @@ def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
             f"[FAIL] HIGH_AMP_TRACE {name} first payload ctx {first_ctx}, expected {spec['first_payload_ctx']}"
         )
 
+    payload_ctx_counts, payload_final_ctx = parse_payload_context_summary(text)
+    expected_payload_ctx = PAYLOAD_CTX_EXPECTATIONS[name]
+    if payload_ctx_counts != expected_payload_ctx["counts"]:
+        raise SystemExit(
+            f"[FAIL] HIGH_AMP_TRACE {name} payload ctx counts {payload_ctx_counts}, "
+            f"expected {expected_payload_ctx['counts']}"
+        )
+    if payload_final_ctx != expected_payload_ctx["final"]:
+        raise SystemExit(
+            f"[FAIL] HIGH_AMP_TRACE {name} payload final ctx {payload_final_ctx}, "
+            f"expected {expected_payload_ctx['final']}"
+        )
+
     term_state = parse_terminate_state(text)
     if term_state != spec["term_state"]:
         raise SystemExit(
@@ -530,7 +626,8 @@ def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
     print(
         f"[PASS] HIGH_AMP_TRACE {name}: {status}, tail={tail}, "
         f"CBF={cbf_order}, payload={[f'0x{b:02x}' for b in payload_bytes[:3]]}, "
-        f"chunks={chunk_summary}, first_ctx={first_ctx}, term={term_state}"
+        f"chunks={chunk_summary}, first_ctx={first_ctx}, "
+        f"payload_final_ctx={payload_final_ctx}, term={term_state}"
     )
 
 
@@ -542,7 +639,7 @@ def main() -> int:
         "[PASS] CABAC P16x16 high-amplitude chroma-AC trace probe locks the failing "
         "Cb0x2/Cr0xd sign-family against reciprocal Cb0xd/Cr0x2 strict pass, including "
         "plane-local CBF walks, residual output chunks, first payload bytes, and "
-        "first-payload and terminate arithmetic context state."
+        "first/final-payload and terminate arithmetic context state."
     )
     return 0
 
