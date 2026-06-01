@@ -32,7 +32,8 @@ EXPECTED_HEADER_TAIL = 0x6B
 # reciprocal diagonal singletons,
 # sparse-Cb plus dense-Cr / dense-Cb plus sparse-Cr right-column and bottom-row
 # controls, dense-Cr, dense-Cb, same-diagonal dense, complementary checker,
-# asymmetric three-block, its reciprocal mirror, asymmetric three-plus-one complements,
+# asymmetric three-block, its reciprocal mirror, extra two-/three-block skew pairs,
+# asymmetric three-plus-one complements,
 # all-but-one reciprocal complements including same-quadrant singleton mirrors,
 # and dense-both controls.  This is
 # deliberately smaller than the full 15x15 lattice
@@ -45,9 +46,11 @@ TAILS = {
     (0x2, 0x1): "0000000141d008086b3acbeb2d4098",
     (0x2, 0x4): "0000000141d008086b3acbeb2d408a",
     (0x3, 0x3): "0000000141d008086b3acc614c11ff50ec24abcc54",
+    (0x3, 0x5): "0000000141d008086b3acc614deaff50ec24abcc56",
     (0x4, 0x1): "0000000141d008086b3acbdfe134e8",
     (0x4, 0x2): "0000000141d008086b3acbdfe134f0",
     (0x5, 0x5): "0000000141d008086b3acc6f8c40ff5158a92c2c76",
+    (0x5, 0x3): "0000000141d008086b3acc6f8a4eff5158a92c2c75",
     (0x6, 0x9): "0000000141d008086b3acc6941a435899e104b1c8a00",
     (0x9, 0x6): "0000000141d008086b3acc68c9ae34745f6b095dfa00",
     (0xC, 0xC): "0000000141d008086b3acc626e3a52133cb094a23a",
@@ -70,10 +73,16 @@ TAILS = {
     (0xF, 0x4): "0000000141d008086b3acc332499ec2488aa9fedc0",
     (0xF, 0x8): "0000000141d008086b3acc332499ec2488aa9fedce",
     (0xF, 0xF): "0000000141d008086b7acc",
+    (0x1, 0x7): "0000000141d008086b3acbf3269a7a91944575",
+    (0x7, 0x1): "0000000141d008086b3acc332499ec2488aacd",
     (0x7, 0x8): "0000000141d008086b3acc332499ec2488aacd",
     (0x8, 0x7): "0000000141d008086b3acbf588e2699065115d",
+    (0x1, 0xB): "0000000141d008086b3acbf3269a7a91944576",
+    (0xB, 0x1): "0000000141d008086b3acc332499ec24af9158f0",
+    (0x2, 0xB): "0000000141d008086b3acbf5cad40984ca22bb59",
+    (0xB, 0x2): "0000000141d008086b3acc332499ec24af9159",
     (0xE, 0x1): "0000000141d008086b3acc3602d3f58ca1b3b4",
-    (0xB, 0x4): "0000000141d008086b3acc332499ec24af9157",
+    (0xB, 0x4): "0000000141d008086b3acc35d57438412366ab",
     (0x4, 0xB): "0000000141d008086b3acbf516134e874fdcaa2d",
     (0xD, 0x2): "0000000141d008086b3acc33249a58a9214bf7",
     (0x2, 0xD): "0000000141d008086b3acbf5cad4097c4d2ada7d",
@@ -323,7 +332,7 @@ def main() -> int:
         "orthogonal axis-pair, reciprocal diagonal singleton, "
         "sparse+dense right-column/bottom-row, same-diagonal dense, "
         "complementary checker, "
-        "asymmetric three-block plus reciprocal mirror, dense-Cb, dense-Cr, "
+        "asymmetric three-block plus reciprocal mirror, extra two-/three-block skew pairs, dense-Cb, dense-Cr, "
         "asymmetric three-plus-one complements, all-but-one reciprocal complements, "
         "same-quadrant all-but-one/singleton mirrors, "
         "and dense-both Cb+Cr AC masks "
