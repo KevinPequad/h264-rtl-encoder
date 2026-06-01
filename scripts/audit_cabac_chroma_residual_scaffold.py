@@ -241,6 +241,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"EXPECTED_MISSES\s*=\s*\{.*?\(0x3,\s*0xC,\s*160,\s*96\):\s*\(FRAME_SIZE,\s*\"bytestream -19\",\s*\"0000000141d008086bbacd\"\).*?\(0x3,\s*0xC,\s*96,\s*96\):\s*\(FRAME_SIZE,\s*\"bytestream -19\",\s*\"0000000141d008086bbacd\"\).*?CROSS_PLANE_AC_EXPECTED_MISS.*?remaining Cb0x3/Cr0xC positive-Cb/negative-Cr split-row",
     ),
     (
+        "probe_rejects_split_row_cr_payload_bank_hypothesis",
+        "scripts/run_cabac_p16x16_chroma_ac_split_row_payload_probe.py",
+        r"CB_MASK\s*=\s*0x3.*?CR_MASK\s*=\s*0xC.*?STAGED_SPLIT_CTX.*?4'h3\)\s*&&.*?4'hc.*?EXPECTED_BASELINE_MISSES\s*=\s*\{.*?\(160,\s*96\):\s*\(\"0000000141d008086bbacd\",\s*\"bytestream -19\"\).*?\(96,\s*96\):\s*\(\"0000000141d008086bbacd\",\s*\"bytestream -19\"\).*?EXPECTED_STAGED_MISSES\s*=\s*\{.*?\(160,\s*96\):\s*\(\"0000000141d008086bfafe5f\",\s*\"bytestream -18\"\).*?\(96,\s*96\):\s*\(\"0000000141d008086bfafe5f\",\s*\"bytestream -18\"\).*?rejects.*?naive Cr-side split payload-bank extension",
+    ),
+    (
         "probe_locks_cross_plane_mixed_sign_complement_guards",
         "scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py",
         r"AMPLITUDE_TAILS\s*=\s*\{.*?\(0x1,\s*0xE,\s*96,\s*96\):\s*\"0000000141d008086b3add75\".*?\(0xE,\s*0x1,\s*96,\s*96\):\s*\"0000000141d008086b7fecfff7\".*?\(0xD,\s*0x2,\s*160,\s*96\):\s*\"0000000141d008086b3addf5\".*?\(0xD,\s*0x2,\s*96,\s*96\):\s*\"0000000141d008086b3bed75\".*?\(0x2,\s*0xD,\s*160,\s*160\):\s*\"0000000141d008086b3aec7fe6\".*?\(0x2,\s*0xD,\s*96,\s*160\):\s*\"0000000141d008086b3aec7f7c\".*?\(0x2,\s*0xD,\s*160,\s*96\):\s*\"0000000141d008086b3adefda6\".*?\(0x2,\s*0xD,\s*96,\s*96\):\s*\"0000000141d008086b3adefdfc\".*?\(0xB,\s*0x4,\s*160,\s*160\):\s*\"0000000141d008086b7fcf7f7b\".*?\(0xB,\s*0x4,\s*96,\s*160\):\s*\"0000000141d008086b7edef7fa\".*?\(0x4,\s*0xB,\s*96,\s*96\):\s*\"0000000141d008086b3becf57f\".*?complete \+/-32 sign matrices.*?targeted all-but-one/singleton.*?complement mirror families",
