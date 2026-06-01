@@ -6,11 +6,13 @@ focused check covers representative sparse mixed cases with luma residual plus
 one or two active chroma AC blocks, including all four single-plane Cb/Cr
 quadrants, same-plane row/column pairs, same-block Cb+Cr quadrant cases, both
 row-adjacent directions, both column-adjacent directions, opposite-diagonal Cb+Cr pairs,
-and complementary two-block row/column pairs on both chroma planes.
+and complementary two-block row/column pairs on both chroma planes, plus a
+small high-amplitude row/column-complement subset with luma residual present.
 It locks strict FFmpeg decode, plane-local CABAC counters, CAVLC suppression
 counts, final P-slice bytes, current decoded-plane metrics, and per-4x4
 chroma-block locality so sparse residuals cannot silently land in the wrong
-chroma quadrant while preserving the same aggregate SAD.
+chroma quadrant while preserving the same aggregate SAD, including the higher
+magnitude CABAC payload path that previously needed separate non-luma probes.
 """
 
 from __future__ import annotations
@@ -44,6 +46,8 @@ class Case:
     expected_y_sad: int
     expected_u_sad: int
     expected_v_sad: int
+    cb_sample_value: int = 136
+    cr_sample_value: int = 136
 
     @property
     def expected_cb_ac_mbs(self) -> int:
@@ -423,16 +427,64 @@ CASES = (
         expected_u_sad=128,
         expected_v_sad=128,
     ),
+    Case(
+        name="cbcr_ac_m3_12_hi",
+        cb_mask=0x3,
+        cr_mask=0xC,
+        expected_final_slice="0000000141d008086b3af6f9f3d6d5d77f74f7ff",
+        expected_cavlc_suppressed_bits=301,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=160,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m12_3_hi",
+        cb_mask=0xC,
+        cr_mask=0x3,
+        expected_final_slice="0000000141d008086b3abffbf9fb775ffdf6fffe",
+        expected_cavlc_suppressed_bits=301,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=160,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m5_10_hi",
+        cb_mask=0x5,
+        cr_mask=0xA,
+        expected_final_slice="0000000141d008086b3af6fdf3d6ef57fdfdf7ef",
+        expected_cavlc_suppressed_bits=297,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=160,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m10_5_hi",
+        cb_mask=0xA,
+        cr_mask=0x5,
+        expected_final_slice="0000000141d008086b3abefffdf5ff57fdfdf7ef",
+        expected_cavlc_suppressed_bits=297,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=160,
+        cr_sample_value=160,
+    ),
 )
 
 
-def sparse_chroma(mask: int) -> bytes:
+def sparse_chroma(mask: int, sample_value: int = 136) -> bytes:
     data: list[int] = []
     for y in range(HEIGHT // 2):
         for x in range(WIDTH // 2):
             block = (y // 4) * 2 + (x // 4)
             if (mask >> block) & 1:
-                data.append(136 if ((x + y) & 1) else 128)
+                data.append(sample_value if ((x + y) & 1) else 128)
             else:
                 data.append(128)
     return bytes(data)
@@ -445,7 +497,14 @@ def make_fixture(case: Case) -> Path:
     y0 = bytes([64]) * LUMA_SIZE
     flat_chroma = bytes([128]) * CHROMA_SIZE
     y1 = bytes([72]) * LUMA_SIZE
-    path.write_bytes(y0 + flat_chroma + flat_chroma + y1 + sparse_chroma(case.cb_mask) + sparse_chroma(case.cr_mask))
+    path.write_bytes(
+        y0
+        + flat_chroma
+        + flat_chroma
+        + y1
+        + sparse_chroma(case.cb_mask, case.cb_sample_value)
+        + sparse_chroma(case.cr_mask, case.cr_sample_value)
+    )
     print(f"[INFO] LUMA_SPARSE_CHROMA_RES {case.name} fixture {path.relative_to(ROOT)} size={path.stat().st_size}")
     return path
 
@@ -568,8 +627,10 @@ def check_decoded_planes(fixture: Path, raw: bytes, case: Case) -> tuple[int, in
         raise SystemExit(f"[FAIL] LUMA_SPARSE_CHROMA_RES {case.name} SAD YUV={actual}, expected {expected}")
     u_block_sads = chroma_block_sads(raw, src, u0)
     v_block_sads = chroma_block_sads(raw, src, v0)
-    expected_u_blocks = tuple(64 if (case.cb_mask >> block) & 1 else 0 for block in range(4))
-    expected_v_blocks = tuple(64 if (case.cr_mask >> block) & 1 else 0 for block in range(4))
+    expected_u_block_sad = abs(case.cb_sample_value - 128) * 8
+    expected_v_block_sad = abs(case.cr_sample_value - 128) * 8
+    expected_u_blocks = tuple(expected_u_block_sad if (case.cb_mask >> block) & 1 else 0 for block in range(4))
+    expected_v_blocks = tuple(expected_v_block_sad if (case.cr_mask >> block) & 1 else 0 for block in range(4))
     if u_block_sads != expected_u_blocks or v_block_sads != expected_v_blocks:
         raise SystemExit(
             f"[FAIL] LUMA_SPARSE_CHROMA_RES {case.name} chroma-block SAD drift: "
@@ -623,7 +684,7 @@ def main() -> int:
     sim = build_baseline_sim()
     for case in CASES:
         run_case(sim, case)
-    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, and opposite-diagonal mixed-plane pairs plus complementary two-block row/column mixed-plane pairs, strict-decode with plane-local counters and per-block chroma locality")
+    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, opposite-diagonal mixed-plane pairs, complementary two-block row/column mixed-plane pairs, and high-amplitude complementary row/column pairs, strict-decode with plane-local counters and per-block chroma locality")
     return 0
 
 
