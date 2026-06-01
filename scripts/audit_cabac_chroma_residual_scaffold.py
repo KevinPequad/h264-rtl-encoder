@@ -236,9 +236,9 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"AMPLITUDE_TAILS\s*=\s*\{.*?\(0x6,\s*0x9,\s*160,\s*160\):\s*\"0000000141d008086b7ffeef\".*?\(0xC,\s*0x3,\s*160,\s*160\):\s*\"0000000141d008086bbaff\".*?\(0x3,\s*0xC,\s*160,\s*160\):\s*\"0000000141d008086b3ffe\".*?\(0x3,\s*0xC,\s*160,\s*96\):\s*\"0000000141d008086b7ede\".*?\(0x3,\s*0xC,\s*96,\s*96\):\s*\"0000000141d008086b7ede\"",
     ),
     (
-        "probe_promotes_split_row_remaining_signs",
+        "probe_locks_cross_plane_high_amp_skew_sign_partition",
         "scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py",
-        r"Split-row Cb0x3/Cr0xC high-amplitude polarity coverage is fully promoted.*?EXPECTED_MISSES\s*=\s*\{\}.*?full Cb0x3/Cr0xC split-row sign matrix",
+        r"Split-row Cb0x3/Cr0xC high-amplitude polarity coverage is fully promoted.*?adjacent skew-pair.*?EXPECTED_MISSES\s*=\s*\{.*?\(0x3,\s*0x5,\s*160,\s*160\):\s*\(384,\s*\"corrupt decoded frame\",\s*\"0000000141d008086bfbcf\"\).*?\(0x6,\s*0x9,\s*96,\s*96\):\s*\(384,\s*\"corrupt decoded frame\",\s*\"0000000141d008086bbfceef\"\).*?\(0x9,\s*0x6,\s*96,\s*160\):\s*\(384,\s*\"corrupt decoded frame\",\s*\"0000000141d008086bbefe\"\).*?high-amplitude skew-pair pass/miss sign partitions.*?scoped one-frame expected-miss",
     ),
     (
         "probe_locks_split_row_cbf_walk_repair_boundary",

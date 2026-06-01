@@ -33,6 +33,7 @@ EXPECTED_HEADER_TAIL = 0x6B
 # sparse-Cb plus dense-Cr / dense-Cb plus sparse-Cr right-column and bottom-row
 # controls, dense-Cr, dense-Cb, same-diagonal dense, complementary checker,
 # asymmetric three-block, its reciprocal mirror, extra two-/three-block skew pairs,
+# high-amplitude skew-pair sign partitions,
 # asymmetric three-plus-one complements,
 # all-but-one reciprocal complements including same-quadrant singleton mirrors,
 # and dense-both controls.  This is
@@ -111,11 +112,18 @@ AMPLITUDE_TAILS = {
     (0xA, 0x5, 160, 136): "0000000141d008086b3acc6e451591f10a562921da00000300",
     (0xA, 0x5, 136, 160): "0000000141d008086b",
     (0xA, 0x5, 160, 160): "0000000141d008086b7bef",
+    (0x3, 0x5, 96, 96): "0000000141d008086b3fcf",
+    (0x3, 0x5, 160, 96): "0000000141d008086b3fcf",
+    (0x5, 0x3, 160, 160): "0000000141d008086bbaff",
+    (0x5, 0x3, 96, 96): "0000000141d008086b3eff",
+    (0x5, 0x3, 160, 96): "0000000141d008086b3eff",
+    (0x5, 0x3, 96, 160): "0000000141d008086bbaff",
     (0xC, 0x3, 160, 96): "0000000141d008086b3eff",
     (0xC, 0x3, 96, 96): "0000000141d008086b3eff",
     (0x6, 0x9, 96, 160): "0000000141d008086b7ffeef",
     (0x6, 0x9, 160, 160): "0000000141d008086b7ffeef",
     (0x9, 0x6, 160, 96): "0000000141d008086b7ade",
+    (0x9, 0x6, 96, 96): "0000000141d008086b7ade",
     (0xC, 0x3, 96, 160): "0000000141d008086bbaff",
     (0xC, 0x3, 160, 160): "0000000141d008086bbaff",
     (0x3, 0xC, 160, 160): "0000000141d008086b3ffe",
@@ -158,10 +166,19 @@ AMPLITUDE_TAILS = {
 }
 
 # Split-row Cb0x3/Cr0xC high-amplitude polarity coverage is fully promoted by
-# the scoped plane-local CBF walk in h264_bitstream.v. Keep EXPECTED_MISSES as
-# an empty explicit hook so future partial-promotion probes can still share the
-# one-frame-miss checker without reintroducing a known split-row short-decode.
-EXPECTED_MISSES = {}
+# the scoped plane-local CBF walk in h264_bitstream.v.  The adjacent skew-pair
+# high-amplitude sign partitions below are not promoted by that repair; keep
+# their one-frame miss signatures locked so the next arithmetic/output-state
+# fix has stable negative controls while the passing sign directions remain in
+# AMPLITUDE_TAILS above.
+EXPECTED_MISSES = {
+    (0x3, 0x5, 160, 160): (384, "corrupt decoded frame", "0000000141d008086bfbcf"),
+    (0x3, 0x5, 96, 160): (384, "corrupt decoded frame", "0000000141d008086bfbcf"),
+    (0x6, 0x9, 96, 96): (384, "corrupt decoded frame", "0000000141d008086bbfceef"),
+    (0x6, 0x9, 160, 96): (384, "corrupt decoded frame", "0000000141d008086bbfceef"),
+    (0x9, 0x6, 160, 160): (384, "corrupt decoded frame", "0000000141d008086bbefe"),
+    (0x9, 0x6, 96, 160): (384, "corrupt decoded frame", "0000000141d008086bbefe"),
+}
 
 
 def checker_chroma(mask: int, value: int = 136) -> bytes:
@@ -404,6 +421,7 @@ def main() -> int:
         "sparse+dense right-column/bottom-row, same-diagonal dense, "
         "complementary checker, "
         "asymmetric three-block plus reciprocal mirror, extra two-/three-block skew pairs, dense-Cb, dense-Cr, "
+        "high-amplitude skew-pair pass/miss sign partitions, "
         "asymmetric three-plus-one complements, all-but-one reciprocal complements, "
         "same-quadrant all-but-one/singleton mirrors, "
         "and dense-both Cb+Cr AC masks "
@@ -412,7 +430,8 @@ def main() -> int:
         "complement mirror families "
         "including the full Cb0x3/Cr0xC split-row sign matrix "
         "high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
-        "checked-in -7 CABAC queue initializer"
+        "checked-in -7 CABAC queue initializer, with scoped one-frame expected-miss "
+        "signatures locked for the remaining skew-pair high-amplitude directions"
     )
     return 0
 
