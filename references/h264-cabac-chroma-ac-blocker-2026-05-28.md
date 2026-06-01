@@ -598,3 +598,10 @@ Next useful probe:
 - Both `+32/+32` and `-32/+32` rows mutate the canonical strict tail `...6b7fff` to the same one-frame `...6bbecf` bytestream miss, so the rejection is sign-independent on the Cb side rather than a single positive-Cb artifact.
 - The same run still locks the representative Cr-negative strict rows under the staged candidate, keeping the immediate repair target on a narrower sign/mask predicate or CABAC arithmetic/output-byte state.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_checker_cbf_walk_rejection_probe.py` passes.
+
+## 2026-06-01 reciprocal checker orientation lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_checker_cbf_walk_rejection_probe.py` again so the staged broad checker CBF-walk candidate also locks the reciprocal Cr-positive `Cb0xA/Cr0x5` rows.
+- Under the same staged patch, `Cb0xA/Cr0x5 +32/+32` and `-32/+32` strict-decode full `768/768` with exact `U_SAD=512 V_SAD=512` and tail `...6b7fff`, while the `Cb0x5/Cr0xA` Cr-positive rows still regress to one-frame `...6bbecf` misses.
+- This narrows the rejection: the broad selector is not uniformly bad for both complementary-checker orientations; the next source trial should isolate the exact `Cb0x5/Cr0xA` Cr-positive hazard or the Cr-negative-only promotion condition without treating the reciprocal orientation as a blocker.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_checker_cbf_walk_rejection_probe.py` passes.

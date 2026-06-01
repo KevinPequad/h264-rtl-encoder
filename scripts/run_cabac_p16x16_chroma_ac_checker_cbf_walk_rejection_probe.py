@@ -56,6 +56,16 @@ REGRESSED_CR_POSITIVE_ROWS = {
     (0x5, 0xA, 96, 160),
 }
 
+# The reciprocal Cr-positive checker orientation is not the broad-selector
+# regression: the staged candidate mutates its canonical source tail but still
+# strict-decodes with exact plane-local SAD.  Lock that distinction so the next
+# repair stays narrower than a blanket "all complementary checkers are bad"
+# conclusion.
+STRICT_RECIPROCAL_CR_POSITIVE_TAILS = {
+    (0xA, 0x5, 160, 160): CANONICAL_STRICT_TAIL,
+    (0xA, 0x5, 96, 160): CANONICAL_STRICT_TAIL,
+}
+
 # The same staged selector widening does promote representative Cr-negative
 # checker misses.  Keep those tails locked as strict rows while still rejecting
 # the broad path because it regresses the Cr-positive strict control above.
@@ -121,11 +131,21 @@ def main() -> int:
             cb_value,
             cr_value,
         )
+    for (cb_mask, cr_mask, cb_value, cr_value), expected_tail in STRICT_RECIPROCAL_CR_POSITIVE_TAILS.items():
+        check_case(
+            sim,
+            cb_mask,
+            cr_mask,
+            expected_tail,
+            cb_value,
+            cr_value,
+        )
     print(
         "[PASS] CABAC P16x16 checker high-amplitude broad CBF-walk candidate "
-        "promotes the Cr-negative rows in isolation but remains rejected because "
-        "it regresses the Cr-positive checker strict controls; keep the checked-in "
-        "checker repair scoped narrower than the whole Cb0x5/Cr0xA + Cb0xA/Cr0x5 "
+        "promotes the Cr-negative rows in isolation and preserves the reciprocal "
+        "Cr-positive orientation, but remains rejected because it regresses the "
+        "Cb0x5/Cr0xA Cr-positive checker strict controls; keep the checked-in "
+        "checker repair scoped narrower than the whole complementary-checker "
         "CBF-walk selector family"
     )
     return 0
