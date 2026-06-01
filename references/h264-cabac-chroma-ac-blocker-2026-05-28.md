@@ -591,3 +591,10 @@ Next useful probe:
 - Refreshed the probe to lock those rows as strict passes while still rejecting the broad CBF-walk candidate because it regresses the already-strict Cr-positive `Cb0x5/Cr0xA +32/+32` control to a one-frame miss (`...6b7fff -> ...6bbecf`).
 - This narrows the next repair: the selector idea is not wholly wrong, but it cannot be applied across the entire complementary-checker family. The next source trial should isolate the Cr-negative branch or the exact sign/mask condition without disturbing the Cr-positive strict lane.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_checker_cbf_walk_rejection_probe.py` passes.
+
+## 2026-06-01 broad checker CBF-walk Cb-sign regression lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_checker_cbf_walk_rejection_probe.py` so the staged wide checker CBF-walk candidate must now reject both Cb signs on the Cr-positive `Cb0x5/Cr0xA` high-amplitude checker lane.
+- Both `+32/+32` and `-32/+32` rows mutate the canonical strict tail `...6b7fff` to the same one-frame `...6bbecf` bytestream miss, so the rejection is sign-independent on the Cb side rather than a single positive-Cb artifact.
+- The same run still locks the representative Cr-negative strict rows under the staged candidate, keeping the immediate repair target on a narrower sign/mask predicate or CABAC arithmetic/output-byte state.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_checker_cbf_walk_rejection_probe.py` passes.

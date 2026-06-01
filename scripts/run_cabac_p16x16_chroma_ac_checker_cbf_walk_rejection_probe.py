@@ -44,11 +44,17 @@ WIDE_CHECKER_SELECTOR = """                  ((cabac_chroma_ac_cb_plane_nz_mask(
                     ((cabac_chroma_ac_cb_plane_nz_mask() == 4'ha) &&
                      (cabac_chroma_ac_cr_plane_nz_mask() == 4'h5))))))) begin"""
 
-# The canonical source strict-decodes this Cr-positive checker lane with this
+# The canonical source strict-decodes these Cr-positive checker lanes with this
 # tail.  The staged broad-CBF-walk patch mutates the final slice to the rejected
-# tail below before decoding quality is even considered.
+# tail below before decoding quality is even considered.  Keep both Cb signs so
+# future repair attempts cannot accidentally reclassify the sign-independent
+# regression as a one-off positive-Cb artifact.
 CANONICAL_STRICT_TAIL = "0000000141d008086b7fff"
 REJECTED_WIDE_CBF_TAIL = "0000000141d008086bbecf"
+REGRESSED_CR_POSITIVE_ROWS = {
+    (0x5, 0xA, 160, 160),
+    (0x5, 0xA, 96, 160),
+}
 
 # The same staged selector widening does promote representative Cr-negative
 # checker misses.  Keep those tails locked as strict rows while still rejecting
@@ -83,32 +89,29 @@ def build_wide_cbf_sim() -> Path:
 
 def main() -> int:
     sim = build_wide_cbf_sim()
-    cb_mask = 0x5
-    cr_mask = 0xA
-    cb_value = 160
-    cr_value = 160
-    fixture = make_fixture(cb_mask, cr_mask, cb_value, cr_value)
-    h264 = run_case(sim, cb_mask, cr_mask, fixture, cb_value, cr_value)
-    stream = h264.read_bytes()
-    label = f"cb=0x{cb_mask:x} cr=0x{cr_mask:x} cb_value={cb_value} cr_value={cr_value}"
-    tail = final_slice_hex(stream, label)
-    if tail == CANONICAL_STRICT_TAIL:
-        raise SystemExit(
-            "[FAIL] CHECKER_CBF_REJECT broad checker CBF walk unexpectedly preserved "
-            f"the canonical strict tail {tail}"
+    for cb_mask, cr_mask, cb_value, cr_value in sorted(REGRESSED_CR_POSITIVE_ROWS):
+        fixture = make_fixture(cb_mask, cr_mask, cb_value, cr_value)
+        h264 = run_case(sim, cb_mask, cr_mask, fixture, cb_value, cr_value)
+        stream = h264.read_bytes()
+        label = f"cb=0x{cb_mask:x} cr=0x{cr_mask:x} cb_value={cb_value} cr_value={cr_value}"
+        tail = final_slice_hex(stream, label)
+        if tail == CANONICAL_STRICT_TAIL:
+            raise SystemExit(
+                "[FAIL] CHECKER_CBF_REJECT broad checker CBF walk unexpectedly preserved "
+                f"the canonical strict tail {tail} for {label}"
+            )
+        if tail != REJECTED_WIDE_CBF_TAIL:
+            raise SystemExit(
+                f"[FAIL] CHECKER_CBF_REJECT staged tail drift {tail} for {label}, "
+                f"expected rejected tail {REJECTED_WIDE_CBF_TAIL}"
+            )
+        raw, err = decode_raw(h264)
+        err_sig = err.strip().replace("\n", " | ") or "<none>"
+        print(
+            "[PASS] CHECKER_CBF_REJECT broad checker CBF-walk candidate regresses "
+            f"the Cr-positive strict control {label}: decoded={len(raw)} bytes, "
+            f"tail={tail}, canonical_tail={CANONICAL_STRICT_TAIL}, ffmpeg={err_sig!r}"
         )
-    if tail != REJECTED_WIDE_CBF_TAIL:
-        raise SystemExit(
-            f"[FAIL] CHECKER_CBF_REJECT staged tail drift {tail}, "
-            f"expected rejected tail {REJECTED_WIDE_CBF_TAIL}"
-        )
-    raw, err = decode_raw(h264)
-    err_sig = err.strip().replace("\n", " | ") or "<none>"
-    print(
-        "[PASS] CHECKER_CBF_REJECT broad checker CBF-walk candidate regresses "
-        f"the Cr-positive strict control: decoded={len(raw)} bytes, "
-        f"tail={tail}, canonical_tail={CANONICAL_STRICT_TAIL}, ffmpeg={err_sig!r}"
-    )
     for (cb_mask, cr_mask, cb_value, cr_value), expected_tail in PROMOTED_CR_NEGATIVE_TAILS.items():
         check_case(
             sim,
@@ -121,7 +124,7 @@ def main() -> int:
     print(
         "[PASS] CABAC P16x16 checker high-amplitude broad CBF-walk candidate "
         "promotes the Cr-negative rows in isolation but remains rejected because "
-        "it regresses the Cr-positive checker strict control; keep the checked-in "
+        "it regresses the Cr-positive checker strict controls; keep the checked-in "
         "checker repair scoped narrower than the whole Cb0x5/Cr0xA + Cb0xA/Cr0x5 "
         "CBF-walk selector family"
     )
