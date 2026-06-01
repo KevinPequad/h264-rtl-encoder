@@ -153,6 +153,31 @@ def coded_chroma_ac_blocks(text: str) -> list[int]:
     return coded
 
 
+def frame1_chroma_summary(text: str) -> dict[str, int]:
+    """Return the frame-1 integrated chroma residual ownership counters."""
+    for line in text.splitlines():
+        if "[CABAC_CHROMA] Frame 1" not in line:
+            continue
+        pairs = dict((key, int(value)) for key, value in re.findall(r"([a-z_]+)=([0-9]+)", line))
+        required = {
+            "cabac_chroma_mbs",
+            "cabac_chroma_dc_mbs",
+            "cabac_chroma_ac_mbs",
+            "cb_dc_mbs",
+            "cr_dc_mbs",
+            "cb_ac_mbs",
+            "cr_ac_mbs",
+            "cb_ac_blocks",
+            "cr_ac_blocks",
+            "cavlc_suppressed_bits",
+        }
+        missing = sorted(required.difference(pairs))
+        if missing:
+            raise SystemExit(f"[FAIL] B4_TRACE_CONTRAST malformed CABAC_CHROMA summary missing {missing}: {line}")
+        return pairs
+    raise SystemExit("[FAIL] B4_TRACE_CONTRAST missing frame-1 CABAC_CHROMA ownership summary")
+
+
 def check_case(
     sim: Path,
     label: str,
@@ -197,10 +222,28 @@ def check_case(
         selects = cbf_ctx_selects(text)
         if selects != expected_cbf_selects:
             raise SystemExit(f"[FAIL] B4_TRACE_CONTRAST {case_label} CBF selects {selects}, expected {expected_cbf_selects}")
+    summary = frame1_chroma_summary(text)
+    expected_summary = {
+        "cabac_chroma_mbs": 1,
+        "cabac_chroma_dc_mbs": 0,
+        "cabac_chroma_ac_mbs": 1,
+        "cb_dc_mbs": 1,
+        "cr_dc_mbs": 1,
+        "cb_ac_mbs": 1,
+        "cr_ac_mbs": 1,
+        "cb_ac_blocks": cb_mask.bit_count(),
+        "cr_ac_blocks": cr_mask.bit_count(),
+        "cavlc_suppressed_bits": 180 + (2 if cb_value > 128 else 0) + (2 if cr_value > 128 else 0),
+    }
+    if summary != expected_summary:
+        raise SystemExit(
+            f"[FAIL] B4_TRACE_CONTRAST {case_label} CABAC_CHROMA summary {summary}, "
+            f"expected {expected_summary}"
+        )
     print(
         f"[PASS] B4_TRACE_CONTRAST {case_label}: strict two-frame decode, "
         f"coded_blocks={blocks}, split_blocks={split_blocks}, high_payload_ctx={high_summary}, "
-        f"U_SAD={u_sad} V_SAD={v_sad}, tail={tail}"
+        f"summary={summary}, U_SAD={u_sad} V_SAD={v_sad}, tail={tail}"
     )
 
 
@@ -233,7 +276,8 @@ def main() -> int:
     print(
         "[PASS] CABAC P16x16 high-amplitude B4 trace contrast: Cb0xb/Cr0x4 now "
         "strict-decodes through the scoped plane-local CBF walk without using the split "
-        "payload bank, while the Cb0x4/Cr0xb mirror remains strict on the split bank."
+        "payload bank, while the Cb0x4/Cr0xb mirror remains strict on the split bank; "
+        "both directions keep exact integrated CABAC_CHROMA ownership counters."
     )
     return 0
 

@@ -572,3 +572,9 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so the promoted high-amplitude `Cb0x2/Cr0xd` and `Cb0x4/Cr0xb` rows do not merely require that some payload context selector enters the split bank.
 - The probe now locks the exact high-bank payload context summary: only coded Cr high-amplitude blocks use selector `17`, only as `CHRAC_LEVEL` (`kind=24`), and exactly five context updates are expected for each coded Cr block. Shared-bank controls must keep an empty high-bank summary.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes; the broad chroma residual red gate still passes after the hardening.
+
+## 2026-06-01 B4 trace ownership-summary lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_b4_trace_contrast_probe.py` so the repaired high-amplitude reciprocal `Cb0xb/Cr0x4` path and its `Cb0x4/Cr0xb` mirror no longer pass only on final tails, split-bank summaries, and decoded-plane SAD.
+- The trace gate now also locks the frame-1 integrated `[CABAC_CHROMA]` ownership summary for each sign pair: both lanes must report `cabac_chroma_mbs=1`, AC-not-DC lane ownership, both-plane DC/AC ownership, exact `cb_ac_blocks` / `cr_ac_blocks` from the masks, and the sign-dependent `cavlc_suppressed_bits` counts `184/182/182/180`.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_b4_trace_contrast_probe.py` passes.

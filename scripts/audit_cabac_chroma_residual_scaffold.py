@@ -303,7 +303,7 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "probe_locks_b4_trace_contrast",
         "scripts/run_cabac_p16x16_chroma_ac_b4_trace_contrast_probe.py",
-        r"Trace-contrast gate.*?B4_TAILS.*?0000000141d008086b7fcf7f7b.*?0000000141d008086b7edef7fa.*?MIRROR_TAILS.*?0000000141d008086b3bcf7fbf.*?0000000141d008086b3becf57f.*?EXPECTED_CODED_BLOCKS.*?B4_CB_MASK,\s*B4_CR_MASK.*?\[0,\s*1,\s*3,\s*6\].*?MIRROR_CB_MASK,\s*MIRROR_CR_MASK.*?\[2,\s*4,\s*5,\s*7\].*?EXPECTED_B4_CBF_SELECTS\s*=\s*\[0,\s*1,\s*2,\s*2,\s*4,\s*4,\s*4,\s*5\].*?high_payload_ctx_summary.*?expected_high_summary=\[\].*?expected_high_summary=\[\(4,\s*24,\s*17,\s*5\),\s*\(5,\s*24,\s*17,\s*5\),\s*\(7,\s*24,\s*17,\s*5\)\].*?strict-decodes through the scoped plane-local CBF walk.*?Cb0x4/Cr0xb mirror remains strict on the split bank",
+        r"Trace-contrast gate.*?B4_TAILS.*?0000000141d008086b7fcf7f7b.*?0000000141d008086b7edef7fa.*?MIRROR_TAILS.*?0000000141d008086b3bcf7fbf.*?0000000141d008086b3becf57f.*?EXPECTED_CODED_BLOCKS.*?B4_CB_MASK,\s*B4_CR_MASK.*?\[0,\s*1,\s*3,\s*6\].*?MIRROR_CB_MASK,\s*MIRROR_CR_MASK.*?\[2,\s*4,\s*5,\s*7\].*?EXPECTED_B4_CBF_SELECTS\s*=\s*\[0,\s*1,\s*2,\s*2,\s*4,\s*4,\s*4,\s*5\].*?high_payload_ctx_summary.*?frame1_chroma_summary.*?cavlc_suppressed_bits.*?180 \+ \(2 if cb_value > 128 else 0\) \+ \(2 if cr_value > 128 else 0\).*?expected_high_summary=\[\].*?expected_high_summary=\[\(4,\s*24,\s*17,\s*5\),\s*\(5,\s*24,\s*17,\s*5\),\s*\(7,\s*24,\s*17,\s*5\)\].*?strict-decodes through the scoped plane-local CBF walk.*?Cb0x4/Cr0xb mirror remains strict on the split bank.*?exact integrated CABAC_CHROMA ownership counters",
     ),
     (
         "probe_locks_cross_plane_high_amp_trace_split_bank",
