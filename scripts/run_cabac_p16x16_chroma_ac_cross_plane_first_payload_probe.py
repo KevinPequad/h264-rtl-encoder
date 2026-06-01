@@ -31,8 +31,8 @@ EXPECTED_HEADER_TAIL = 0x6B
 # orthogonal axis-pair, bottom/top mirror pairs, bottom-row cross-corners,
 # reciprocal diagonal singletons,
 # sparse-Cb plus dense-Cr / dense-Cb plus sparse-Cr right-column and bottom-row
-# controls, dense-Cr, dense-Cb, same-diagonal dense, asymmetric three-block,
-# its reciprocal mirror, asymmetric three-plus-one complements,
+# controls, dense-Cr, dense-Cb, same-diagonal dense, complementary checker,
+# asymmetric three-block, its reciprocal mirror, asymmetric three-plus-one complements,
 # all-but-one reciprocal complements including same-quadrant singleton mirrors,
 # and dense-both controls.  This is
 # deliberately smaller than the full 15x15 lattice
@@ -52,6 +52,8 @@ TAILS = {
     (0x9, 0x6): "0000000141d008086b3acc68c9ae34745f6b095dfa00",
     (0xC, 0xC): "0000000141d008086b3acc626e3a52133cb094a23a",
     (0xA, 0xA): "0000000141d008086b3acc707c6a06d40d584aefd500",
+    (0x5, 0xA): "0000000141d008086b3acc6f8c66df5158a92c722b",
+    (0xA, 0x5): "0000000141d008086b3acc707c4426d40d584ac22b",
     (0x7, 0xB): "0000000141d008086b3acc36849d0ec2488aacde0d00000300",
     (0xB, 0x7): "0000000141d008086b3acc36849d0ec24af9158f060000",
     (0x3, 0xC): "0000000141d008086b3acc614c37df50ec24aaa82a",
@@ -320,6 +322,7 @@ def main() -> int:
         "sparse/sparse, mirror, split-row, bottom-row cross-corner, "
         "orthogonal axis-pair, reciprocal diagonal singleton, "
         "sparse+dense right-column/bottom-row, same-diagonal dense, "
+        "complementary checker, "
         "asymmetric three-block plus reciprocal mirror, dense-Cb, dense-Cr, "
         "asymmetric three-plus-one complements, all-but-one reciprocal complements, "
         "same-quadrant all-but-one/singleton mirrors, "
