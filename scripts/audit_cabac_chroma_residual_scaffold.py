@@ -253,7 +253,7 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "bitstream_scopes_high_amp_cr_payload_context_bank",
         "rtl/h264_bitstream.v",
-        r"cabac_res_chroma_ac_cr_sig_ctx_state.*?cabac_res_chroma_ac_cr_last_ctx_state.*?cabac_res_chroma_ac_cr_level_ctx_state_1.*?cabac_chroma_ac_split_plane_ctx.*?cabac_chroma_ac_cb_plane_nz_mask\(\)\s*==\s*4'h2.*?cabac_chroma_ac_cr_plane_nz_mask\(\)\s*==\s*4'hd.*?cabac_chroma_ac_cb_plane_nz_mask\(\)\s*==\s*4'h4.*?cabac_chroma_ac_cr_plane_nz_mask\(\)\s*==\s*4'hb.*?cabac_pending_ctx_sel\[4\]",
+        r"cabac_res_chroma_ac_cr_sig_ctx_state.*?cabac_res_chroma_ac_cr_last_ctx_state.*?cabac_res_chroma_ac_cr_level_ctx_state_1.*?cabac_chroma_ac_split_plane_ctx.*?cabac_chroma_ac_cb_plane_nz_mask\(\)\s*==\s*4'h2.*?cabac_chroma_ac_cr_plane_nz_mask\(\)\s*==\s*4'hd.*?cabac_chroma_ac_cb_plane_nz_mask\(\)\s*==\s*4'h4.*?cabac_chroma_ac_cr_plane_nz_mask\(\)\s*==\s*4'hb.*?!cabac_chroma_ac_cr_plane_has_negative\(\).*?cabac_chroma_ac_cb_plane_nz_mask\(\)\s*==\s*4'h5.*?cabac_chroma_ac_cr_plane_nz_mask\(\)\s*==\s*4'ha.*?cabac_chroma_ac_cb_plane_nz_mask\(\)\s*==\s*4'ha.*?cabac_chroma_ac_cr_plane_nz_mask\(\)\s*==\s*4'h5.*?cabac_pending_ctx_sel\[4\]",
     ),
     (
         "probe_promotes_cross_plane_high_amp_miss_target",

@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Bounded high-amplitude complementary-checker Cb+Cr chroma-AC sign probe.
+"""Bounded high-amplitude complementary-checker Cb+Cr chroma-AC sign gate.
 
 The broad cross-plane gate keeps the promoted low/default-amplitude checker
 complements (`Cb0x5/Cr0xA` and `Cb0xA/Cr0x5`) strict.  This focused probe locks
-the current high-amplitude +/-32 sign partition so the remaining arithmetic
-repair target is explicit: Cr-positive directions strict-decode, while
-Cr-negative directions still short-decode from the RTL-produced stream.
+the high-amplitude +/-32 sign matrix after the scoped Cr split-payload repair so
+all complementary-checker directions strict-decode from the RTL-produced stream.
 """
 
 from __future__ import annotations
@@ -20,7 +19,6 @@ from scripts.run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe import (
     EXPECTED_BYTES,
     assert_planes,
     build_baseline_sim,
-    check_expected_miss,
     decode_raw,
     final_slice_hex,
     make_fixture,
@@ -32,15 +30,12 @@ from scripts.run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe import (
 STRICT_TAILS = {
     (0x5, 0xA, 160, 160): "0000000141d008086b7fff",
     (0x5, 0xA, 96, 160): "0000000141d008086b7fff",
+    (0x5, 0xA, 160, 96): "0000000141d008086b3acc6e",
+    (0x5, 0xA, 96, 96): "0000000141d008086b3acc6e",
     (0xA, 0x5, 160, 160): "0000000141d008086b7bef",
     (0xA, 0x5, 96, 160): "0000000141d008086b7bef",
-}
-
-EXPECTED_MISSES = {
-    (0x5, 0xA, 160, 96): (384, "bytestream -23", "0000000141d008086bbbff"),
-    (0x5, 0xA, 96, 96): (384, "bytestream -23", "0000000141d008086bbbff"),
-    (0xA, 0x5, 160, 96): (384, "bytestream -15", "0000000141d008086bbfef"),
-    (0xA, 0x5, 96, 96): (384, "bytestream -15", "0000000141d008086bbfef"),
+    (0xA, 0x5, 160, 96): "0000000141d008086b3aec7e",
+    (0xA, 0x5, 96, 96): "0000000141d008086b3aec7e",
 }
 
 
@@ -72,21 +67,10 @@ def main() -> int:
     sim = build_baseline_sim()
     for (cb_mask, cr_mask, cb_value, cr_value), tail in STRICT_TAILS.items():
         check_strict(sim, cb_mask, cr_mask, cb_value, cr_value, tail)
-    for (cb_mask, cr_mask, cb_value, cr_value), (expected_bytes, expected_signature, tail) in EXPECTED_MISSES.items():
-        check_expected_miss(
-            sim,
-            cb_mask,
-            cr_mask,
-            cb_value,
-            cr_value,
-            expected_bytes,
-            expected_signature,
-            tail,
-        )
     print(
         "[PASS] CABAC P16x16 complementary-checker high-amplitude sign probe "
-        "locks Cr-positive strict-decode lanes and Cr-negative expected-miss "
-        "lanes for Cb0x5/Cr0xA and Cb0xA/Cr0x5"
+        "locks all +/-32 lanes as strict FFmpeg decodes for Cb0x5/Cr0xA "
+        "and Cb0xA/Cr0x5"
     )
     return 0
 

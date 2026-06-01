@@ -905,13 +905,20 @@ module h264_bitstream #(
         begin
             // Scope the separate Cr residual payload context bank to the
             // Cb-singleton / Cr-all-but-one complements that exposed high-
-            // amplitude short-decode lanes. Other promoted mixed guards stay on
-            // the historical shared payload context bank.
+            // amplitude short-decode lanes, plus the high-amplitude checker
+            // complements when the current residual signs need the split Cr
+            // payload bank. Other promoted mixed guards stay on the historical
+            // shared payload context bank.
             cabac_chroma_ac_split_plane_ctx =
                 ((cabac_chroma_ac_cb_plane_nz_mask() == 4'h2) &&
                  (cabac_chroma_ac_cr_plane_nz_mask() == 4'hd)) ||
                 ((cabac_chroma_ac_cb_plane_nz_mask() == 4'h4) &&
-                 (cabac_chroma_ac_cr_plane_nz_mask() == 4'hb));
+                 (cabac_chroma_ac_cr_plane_nz_mask() == 4'hb)) ||
+                (!cabac_chroma_ac_cr_plane_has_negative() &&
+                 (((cabac_chroma_ac_cb_plane_nz_mask() == 4'h5) &&
+                   (cabac_chroma_ac_cr_plane_nz_mask() == 4'ha)) ||
+                  ((cabac_chroma_ac_cb_plane_nz_mask() == 4'ha) &&
+                   (cabac_chroma_ac_cr_plane_nz_mask() == 4'h5))));
         end
     endfunction
 
