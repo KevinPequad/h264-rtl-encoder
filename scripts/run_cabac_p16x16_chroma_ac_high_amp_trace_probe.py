@@ -87,6 +87,162 @@ CASES: dict[str, dict[str, Any]] = {
             "ari_pbyte": "dc",
         },
     },
+    "fail_cb2_crd_096_160": {
+        "cb_mask": 0x2,
+        "cr_mask": 0xD,
+        "cb_value": 96,
+        "cr_value": 160,
+        "tail": "0000000141d008086bbbecf7",
+        "decoded_bytes": FRAME_SIZE,
+        "ffmpeg_signature": "bytestream -16",
+        "expected_quality": False,
+        "cbf_order": [(0, 0), (1, 1), (2, 0), (3, 0), (4, 1), (5, 0), (6, 1), (7, 1)],
+        "coded_blocks": [1, 4, 6, 7],
+        "payload_bytes": [0xBB, 0xEC, 0xF7],
+        "residual_chunks": [
+            (1, 0x85, 40),
+            (1, 0x44, 48),
+            (1, 0x1E, 56),
+            (1, 0x80, 64),
+            (4, 0x07, 72),
+            (4, 0x15, 80),
+            (4, 0x63, 88),
+            (4, 0x0E, 96),
+            (6, 0xD6, 104),
+            (6, 0xE9, 112),
+            (6, 0x0F, 120),
+            (7, 0xB3, 0),
+            (7, 0xA4, 8),
+            (7, 0xB6, 16),
+        ],
+        "first_payload_ctx": {
+            "blk": 1,
+            "kind": 22,
+            "sel": 0,
+            "state_in": 122,
+            "state_out": 120,
+            "ari_low": "36c",
+            "ari_range": 414,
+            "ari_queue": -8,
+            "ari_pending": 1,
+            "ari_pbyte": "43",
+        },
+        "term_state": {
+            "mb": 1,
+            "count": 0,
+            "bits": "000000000000000000000000",
+            "bit_cnt": 0,
+            "ari_low": "620e",
+            "ari_range": 326,
+            "ari_queue": -2,
+            "ari_pending": 1,
+            "ari_pbyte": "dc",
+        },
+    },
+    "fail_cb2_crd_160_096": {
+        "cb_mask": 0x2,
+        "cr_mask": 0xD,
+        "cb_value": 160,
+        "cr_value": 96,
+        "tail": "0000000141d008086bbbccff",
+        "decoded_bytes": FRAME_SIZE,
+        "ffmpeg_signature": "bytestream -26",
+        "expected_quality": False,
+        "cbf_order": [(0, 0), (1, 1), (2, 0), (3, 0), (4, 1), (5, 0), (6, 1), (7, 1)],
+        "coded_blocks": [1, 4, 6, 7],
+        "payload_bytes": [0xBB, 0xCC, 0xFF],
+        "residual_chunks": [
+            (1, 0x27, 40),
+            (1, 0xC7, 48),
+            (1, 0xBE, 56),
+            (1, 0x80, 64),
+            (4, 0x09, 72),
+            (4, 0x84, 80),
+            (4, 0x03, 88),
+            (4, 0x0E, 96),
+            (6, 0xD2, 104),
+            (6, 0x19, 112),
+            (6, 0xCF, 120),
+            (7, 0xB3, 0),
+            (7, 0x48, 8),
+            (7, 0x9A, 16),
+        ],
+        "first_payload_ctx": {
+            "blk": 1,
+            "kind": 22,
+            "sel": 0,
+            "state_in": 122,
+            "state_out": 120,
+            "ari_low": "1ec",
+            "ari_range": 414,
+            "ari_queue": -8,
+            "ari_pending": 1,
+            "ari_pbyte": "c7",
+        },
+        "term_state": {
+            "mb": 1,
+            "count": 0,
+            "bits": "000000000000000000000000",
+            "bit_cnt": 0,
+            "ari_low": "3400",
+            "ari_range": 326,
+            "ari_queue": -2,
+            "ari_pending": 1,
+            "ari_pbyte": "dc",
+        },
+    },
+    "fail_cb2_crd_096_096": {
+        "cb_mask": 0x2,
+        "cr_mask": 0xD,
+        "cb_value": 96,
+        "cr_value": 96,
+        "tail": "0000000141d008086bbbccff",
+        "decoded_bytes": FRAME_SIZE,
+        "ffmpeg_signature": "bytestream -26",
+        "expected_quality": False,
+        "cbf_order": [(0, 0), (1, 1), (2, 0), (3, 0), (4, 1), (5, 0), (6, 1), (7, 1)],
+        "coded_blocks": [1, 4, 6, 7],
+        "payload_bytes": [0xBB, 0xCC, 0xFF],
+        "residual_chunks": [
+            (1, 0xA7, 40),
+            (1, 0xC7, 48),
+            (1, 0xBE, 56),
+            (1, 0x80, 64),
+            (4, 0x07, 72),
+            (4, 0x15, 80),
+            (4, 0x63, 88),
+            (4, 0x0E, 96),
+            (6, 0xD2, 104),
+            (6, 0x19, 112),
+            (6, 0xCF, 120),
+            (7, 0xB3, 0),
+            (7, 0x48, 8),
+            (7, 0x9A, 16),
+        ],
+        "first_payload_ctx": {
+            "blk": 1,
+            "kind": 22,
+            "sel": 0,
+            "state_in": 122,
+            "state_out": 120,
+            "ari_low": "1ec",
+            "ari_range": 414,
+            "ari_queue": -8,
+            "ari_pending": 1,
+            "ari_pbyte": "c7",
+        },
+        "term_state": {
+            "mb": 1,
+            "count": 0,
+            "bits": "000000000000000000000000",
+            "bit_cnt": 0,
+            "ari_low": "3400",
+            "ari_range": 326,
+            "ari_queue": -2,
+            "ari_pending": 1,
+            "ari_pbyte": "dc",
+        },
+    },
     "pass_cbd_cr2_160_160": {
         "cb_mask": 0xD,
         "cr_mask": 0x2,
@@ -260,17 +416,33 @@ def parse_first_payload_ctx(text: str, expected_blk: int) -> dict[str, object]:
 
 
 def parse_terminate_state(text: str) -> dict[str, object]:
-    for line in text.splitlines():
-        if "[CABACTERM]" not in line:
+    marker = text.find("[CABACTERM]")
+    if marker < 0:
+        raise SystemExit("[FAIL] HIGH_AMP_TRACE missing CABACTERM state")
+
+    # Verilator and the testbench can interleave stdout at byte granularity,
+    # splitting the final CABACTERM line around TB progress prints. Collapse
+    # just this record while dropping complete TB/banner lines so the arithmetic
+    # state lock stays stable without accepting unrelated trace drift.
+    segment = text[marker:]
+    stop = segment.find("[PSKIP]")
+    if stop >= 0:
+        segment = segment[:stop]
+    clean_parts: list[str] = []
+    for line in segment.splitlines():
+        if line.startswith("[TB]") or set(line.strip()) == {"="}:
             continue
-        m = re.search(
-            r"mb=(\d+) count=(\d+) bits=([0-9a-fA-F]+) bit_cnt=(\d+) "
-            r"ari_low=([0-9a-fA-F]+) ari_range=(\d+) ari_queue=(-?\d+) "
-            r"ari_outstanding=(\d+) ari_pending=(\d+) ari_pbyte=([0-9a-fA-F]+)",
-            line,
-        )
-        if not m:
-            continue
+        if "[TB]" in line:
+            line = line.split("[TB]", 1)[0]
+        clean_parts.append(line)
+    clean = "".join(clean_parts)
+    m = re.search(
+        r"mb=(\d+) count=(\d+) bits=([0-9a-fA-F]+) bit_cnt=(\d+) "
+        r"ari_low=([0-9a-fA-F]+) ari_range=(\d+) ari_queue=(-?\d+) "
+        r"ari_outstanding=(\d+) ari_pending=(\d+) ari_pbyte=([0-9a-fA-F]+)",
+        clean,
+    )
+    if m:
         return {
             "mb": int(m.group(1)),
             "count": int(m.group(2)),
@@ -368,7 +540,7 @@ def main() -> int:
         check_case(sim, name, spec)
     print(
         "[PASS] CABAC P16x16 high-amplitude chroma-AC trace probe locks the failing "
-        "Cb0x2/Cr0xd lane against reciprocal Cb0xd/Cr0x2 strict pass, including "
+        "Cb0x2/Cr0xd sign-family against reciprocal Cb0xd/Cr0x2 strict pass, including "
         "plane-local CBF walks, residual output chunks, first payload bytes, and "
         "first-payload and terminate arithmetic context state."
     )

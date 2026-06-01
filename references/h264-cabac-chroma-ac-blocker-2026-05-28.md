@@ -489,3 +489,10 @@ Next useful probe:
 - The miss reaches terminate with `ari_low=0x620e`, `ari_range=326`, `ari_queue=-2`, pending byte `0xdc`; the reciprocal strict-pass reaches terminate with `ari_low=0x318`, `ari_range=312`, `ari_queue=-8`, pending byte `0x62`.
 - This keeps the next source repair pinned below header/CBF selector changes and on the residual-output/terminate arithmetic boundary: any candidate must explain both the early first-payload split and the final pre-flush divergence without regressing the reciprocal strict lane.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.
+
+## 2026-06-01 high-amplitude sign-family trace lock
+
+- Extended `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` from the single `+32/+32` miss into the full remaining `Cb0x2/Cr0xd` high-amplitude sign-family while preserving the reciprocal `Cb0xd/Cr0x2 +32/+32` strict-pass comparison.
+- The `Cr=+32` misses keep the final tail `...6bbbecf7`, first-payload context `ari_low=0x36c`, and terminate pre-state `ari_low=0x620e`, while the `Cr=-32` misses keep the final tail `...6bbbccff`, first-payload context `ari_low=0x1ec`, and terminate pre-state `ari_low=0x3400`. All four remain one-frame FFmpeg misses with byte-identical IDR frames.
+- The trace parser now tolerates known Verilator/testbench stdout interleaving around the `[CABACTERM]` row, so terminate-state locks do not flap when TB progress text splits `ari_pbyte` across lines.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.
