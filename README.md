@@ -56,8 +56,9 @@ Implemented and validated now:
   current inter path
 - validated multi-frame subset runs plus current-tree near-exact
   `Intra_16x16` IDR validation
-- CABAC `P_L0_16x16` residual checkpoint validated as a focused
-  coefficient-driven gate
+- CABAC `P_L0_16x16` residual checkpoints validated as focused
+  coefficient-driven gates, including reduced Cb/Cr DC-only and DC+AC chroma
+  residual smoke streams with strict FFmpeg decode
 - deblock/reconstructed-frame ownership lane validated on canonical commit
   `dc1d47094238f8ad973cdfb5738abd4f0d2ea951` with the standalone oracle,
   public-decoder checks, and a two-frame reference-bank-consumption proof
@@ -67,9 +68,10 @@ Still missing before full-standard completion, using the current `x264`
 software encoder as the implementation baseline:
 
 - full CABAC syntax integration beyond the current skip-capable plus explicit
-  zero-CBP / single-ref / zero-MVD `P_L0_16x16` checkpoint; broader
-  coefficient-significance/last/level coding, `mb_qp_delta`, chroma residuals,
-  `ref_idx`/`MVD` coverage, and full I/P/B CABAC remain to implement
+  zero-CBP / single-ref / zero-MVD `P_L0_16x16` checkpoint and reduced
+  luma/chroma residual smoke subset; broader coefficient-significance/last/level
+  coverage, `mb_qp_delta`, `ref_idx`/`MVD` coverage, and full I/P/B CABAC remain
+  to implement
 - broader `B` / `BREF` picture support, broader direct-mode handling, and the
   associated reference management
 - broader standards-complete sub-pel motion handling across richer inter modes
@@ -320,8 +322,8 @@ Current implemented features:
   current final-path CABAC subset for skip-capable P slices with dual PPS
   emission, CABAC slice-header fields, CABAC-coded `mb_skip_flag`,
   CABAC-coded `end_of_slice_flag`, an explicit single-ref / zero-CBP /
-  zero-MVD `P_L0_16x16` subset, and the validated focused
-  `P_L0_16x16` residual checkpoint
+  zero-MVD `P_L0_16x16` subset, and validated focused `P_L0_16x16` luma and
+  reduced Cb/Cr chroma residual checkpoints
 - parameterized resolution
 - parameterized bit depth
 - parameterized chroma format
@@ -332,9 +334,9 @@ Implemented now relative to the chosen `x264` baseline:
 - parameter-set and slice-header ownership in RTL
 - CAVLC-based coefficient coding in RTL
 - current CABAC final-path subset on skip-capable P slices, with CABAC PPS
-  selection, CABAC-coded `mb_skip_flag`, CABAC-coded `end_of_slice_flag`, and
-  an explicit single-ref / zero-CBP / zero-MVD `P_L0_16x16` subset, and the
-  validated focused `P_L0_16x16` residual checkpoint
+  selection, CABAC-coded `mb_skip_flag`, CABAC-coded `end_of_slice_flag`, an
+  explicit single-ref / zero-CBP / zero-MVD `P_L0_16x16` subset, and validated
+  focused `P_L0_16x16` luma plus reduced Cb/Cr chroma residual checkpoints
 - I and P picture flow
 - non-reference `B`-picture syntax on the current intra / `I_PCM` path
 - limited non-reference `B_L0_16x16`, `B_L1_16x16`, and `B_BI_16x16` inter
@@ -406,8 +408,8 @@ Current additional validated non-`I_PCM` coverage at `320x176`:
 Important non-completion gaps:
 
 - full `CABAC` syntax/context integration beyond the current skip-capable plus
-  explicit zero-CBP / single-ref / zero-MVD `P_L0_16x16` P-slice subset is
-  not implemented yet
+  explicit zero-CBP / single-ref / zero-MVD `P_L0_16x16` P-slice subset and
+  reduced luma/chroma residual smoke subset is not implemented yet
 - broader inter-coded `B` / `BREF` picture handling is not implemented beyond
   the current limited reordered dual-list `B_L0_16x16` / `B_L1_16x16` /
   `B_BI_16x16` `16x16` path
@@ -508,6 +510,12 @@ Measured validation points:
   `P_L0_16x16` zero-CBP / single-ref / zero-MVD smoke, `47,268` cycles,
   `74` bytes, `Main` profile, `output/smoke_32x16_2f_cabac_p16x16.h264`, and
   `b_mode_summary.total_cabac_p16x16 = 2`
+- `16x16_2f_cabac_p16x16_chroma_residual`: strict FFmpeg-decodable explicit
+  CABAC `P_L0_16x16` Cb/Cr DC-only and DC+AC residual smoke streams via
+  `scripts/run_cabac_p16x16_chroma_residual_red_check.sh`; current reduced
+  fixtures lock byte-identical IDR reconstruction plus plane-local decoded SAD
+  for Cb-only (`U_SAD=512/256 V_SAD=0`), Cr-only (`U_SAD=0 V_SAD=512/256`),
+  and both-plane (`U_SAD=512/256 V_SAD=512/256`) chroma residual cases
 - `32x16_nonipcm_ncfix`: the `Intra_16x16` luma-DC `nC` fix re-opened strict
   decode on tiny non-`I_PCM` high-bit-depth probes, covering `10-bit 4:2:0`,
   `10-bit 4:2:2`, `8-bit 4:4:4`, and `10-bit 4:4:4` through the
