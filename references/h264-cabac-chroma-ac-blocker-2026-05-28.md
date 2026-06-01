@@ -553,3 +553,10 @@ Next useful probe:
 - The refreshed probe now locks the current source baseline: all 15 Cb-only AC masks strict-decode with exact Cb-plane SAD, and the dense Cb+Cr guard strict-decodes with final slice `0000000141d008086b7acc`.
 - The staged `-7 -> -8` candidate still strict-decodes all 15 Cb-only and all 15 Cr-only masks plus representative mixed masks, but remains explicitly non-committable because the dense Cb+Cr guard short-decodes (`bytestream -9`) with final-slice drift `0000000141d008086b7acc -> 0000000141d008086bf599`.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_cb_ac_queue_align_probe.py` passes, and the broader `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_residual_red_check.sh` still passes.
+
+## 2026-06-01 queue-alignment Cr baseline lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_cb_ac_queue_align_probe.py` so the checked-in `cod_i_queue=-7` baseline now explicitly runs all 15 Cr-only chroma-AC masks before staging the `-7 -> -8` queue candidate.
+- Each baseline Cr mask must strict-decode both frames with clean FFmpeg stderr, byte-identical IDR, exact `V_SAD = 64 * popcount(mask)`, zero Cb drift, and matching plane-local `cr_ac_blocks` counters. This makes the queue probe symmetric: the source baseline and the staged candidate are both locked across full Cb-only and Cr-only mask lattices before the dense Cb+Cr non-committable regression is evaluated.
+- The static chroma residual scaffold audit now guards that the queue-align probe keeps this Cb/Cr baseline lattice coverage.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_cb_ac_queue_align_probe.py` passes; `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_residual_red_check.sh` passes.

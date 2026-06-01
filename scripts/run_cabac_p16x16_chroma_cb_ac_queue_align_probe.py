@@ -292,7 +292,12 @@ def final_slice(stream: bytes, label: str) -> bytes:
     return stream[last_start:]
 
 
-def check_baseline(sim: Path, fixtures: dict[int, Path], both_plane_fixture: Path) -> bytes:
+def check_baseline(
+    sim: Path,
+    fixtures: dict[int, Path],
+    cr_fixtures: dict[int, Path],
+    both_plane_fixture: Path,
+) -> bytes:
     for mask, fixture in fixtures.items():
         raw, err, h264, _ = run_mask_case(sim, "baseline", mask, fixture)
         if mask in BASELINE_FULL:
@@ -314,6 +319,26 @@ def check_baseline(sim: Path, fixtures: dict[int, Path], both_plane_fixture: Pat
                 f"[PASS] CB_AC_QUEUE_ALIGN baseline mask=0x{mask:x} remains short "
                 f"{len(raw)}/{EXPECTED_BYTES} with {signature}"
             )
+
+    for mask, fixture in cr_fixtures.items():
+        raw, err, h264, sim_text = run_case(sim, "baseline", f"cr_mask_{mask:x}", fixture)
+        expected_blocks = mask.bit_count()
+        for needle in (
+            "cabac_p16x16_mbs=1",
+            "cb_ac_mbs=0",
+            "cr_ac_mbs=1",
+            "cb_ac_blocks=0",
+            f"cr_ac_blocks={expected_blocks}",
+        ):
+            if needle not in sim_text:
+                raise SystemExit(f"[FAIL] CR_AC_QUEUE_ALIGN baseline mask=0x{mask:x} sim log missing {needle}")
+        if err.strip():
+            raise SystemExit(f"[FAIL] CR_AC_QUEUE_ALIGN baseline mask=0x{mask:x} expected clean FFmpeg log, got {err.strip()!r}")
+        u_sad, v_sad = assert_cr_only(mask, fixture, raw, "baseline")
+        print(
+            f"[PASS] CR_AC_QUEUE_ALIGN baseline mask=0x{mask:x} remains strict "
+            f"{len(raw)}/{EXPECTED_BYTES} size={h264.stat().st_size} U_SAD={u_sad} V_SAD={v_sad}"
+        )
 
     raw, err, h264, sim_text = run_case(sim, "baseline", "both_planes_guard", both_plane_fixture)
     assert_both_plane_counters(sim_text, "baseline both-plane guard")
@@ -511,12 +536,12 @@ def check_queue_m8(
 def main() -> None:
     fixtures, cr_fixtures, both_plane_fixture, mixed_both_fixtures = make_fixtures()
     baseline = build_candidate("baseline", patch_queue=False)
-    baseline_both_stream = check_baseline(baseline, fixtures, both_plane_fixture)
+    baseline_both_stream = check_baseline(baseline, fixtures, cr_fixtures, both_plane_fixture)
     queue_m8 = build_candidate("queue_m8", patch_queue=True)
     check_queue_m8(queue_m8, fixtures, cr_fixtures, both_plane_fixture, mixed_both_fixtures, baseline_both_stream)
     print(
         "[PASS] CABAC P16x16 chroma-AC queue-alignment staged probe: "
-        "baseline source -7 queue initialization strict-decodes all 15 Cb-only masks; globally changing h264_cabac_core "
+        "baseline source -7 queue initialization strict-decodes all 15 Cb-only and all 15 Cr-only masks; globally changing h264_cabac_core "
         "cod_i_queue initialization from -7 to -8 keeps all 15 Cb-only and all 15 Cr-only AC masks "
         "to strict two-frame FFmpeg decode, but is explicitly blocked from source promotion by the dense "
         "Cb+Cr AC regression guard while representative mixed both-plane masks remain strict; the dense "
