@@ -469,3 +469,9 @@ Next useful probe:
 - Extended `scripts/run_cabac_p16x16_chroma_ac_high_amp_miss_probe.py` again so the same four high-amplitude `Cb0x2/Cr0xd` sign combinations also sweep the second CABAC payload byte after the locked `d0 08 08 6b bb` prefix.
 - The generated baseline second payloads are `0xec` for the `Cr=+32` cases and `0xcc` for the `Cr=-32` cases; all stay outside the strict expected-SAD repair class.
 - Mutating only the second payload byte has a narrow shared strict expected-SAD class, `0x1a-0x1b`, for all four cases. This reinforces that the repair target is CABAC arithmetic/renormalization/output-byte state across the first residual bytes, not a literal first-payload byte patch.
+
+## 2026-05-31 high-amplitude 0x2/0xd third-payload dead-end lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_miss_probe.py` to mutate the third/final CABAC payload byte for the same four `Cb0x2/Cr0xd` high-amplitude complement misses after the locked `d0 08 08 6b bb {ec,cc}` prefix.
+- The generated third payload is `0xf7` for the `Cr=+32` cases and `0xff` for the `Cr=-32` cases. No single third-payload byte value strict-decodes both frames with byte-identical IDR and expected plane-local SAD for any sign combination.
+- This boundary lock keeps the next source repair focused on first/second residual output-byte arithmetic/renormalization state instead of chasing the terminating tail byte.

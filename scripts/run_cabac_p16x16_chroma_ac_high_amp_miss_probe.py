@@ -121,6 +121,17 @@ SECOND_PAYLOAD_PASS_RANGES = {
     (0x2, 0xD, 96, 96): ((0x1A, 0x1B),),
 }
 
+# Unlike the first two payload bytes, mutating only the final/third payload byte
+# of this short high-amplitude lane never reaches strict expected-SAD decode.
+# Keep that boundary locked so a future repair stays focused on the earlier
+# CABAC arithmetic/output-byte state instead of chasing the terminating tail.
+EXPECTED_THIRD_PAYLOAD = {
+    (0x2, 0xD, 160, 160): 0xF7,
+    (0x2, 0xD, 96, 160): 0xF7,
+    (0x2, 0xD, 160, 96): 0xFF,
+    (0x2, 0xD, 96, 96): 0xFF,
+}
+
 
 def expanded_values(ranges: tuple[tuple[int, int], ...]) -> set[int]:
     values: set[int] = set()
@@ -300,6 +311,50 @@ def lock_second_payload_pass_range(
     )
 
 
+def lock_third_payload_dead_end(
+    stream: bytes,
+    fixture: Path,
+    cb_mask: int,
+    cr_mask: int,
+    cb_value: int,
+    cr_value: int,
+    label: str,
+) -> None:
+    second_idx = second_payload_index(stream, cb_mask, cr_mask, cb_value, cr_value, label)
+    third_idx = second_idx + 1
+    if third_idx >= len(stream):
+        raise SystemExit(f"[FAIL] CROSS_PLANE_HIGH_AMP_MISS {label} missing third CABAC payload byte")
+    expected = EXPECTED_THIRD_PAYLOAD[(cb_mask, cr_mask, cb_value, cr_value)]
+    if stream[third_idx] != expected:
+        raise SystemExit(
+            f"[FAIL] CROSS_PLANE_HIGH_AMP_MISS {label} third payload 0x{stream[third_idx]:02x}, "
+            f"expected 0x{expected:02x}"
+        )
+
+    actual: set[int] = set()
+    for value in range(256):
+        mutated = bytearray(stream)
+        mutated[third_idx] = value
+        raw, err = decode_stream(bytes(mutated))
+        if err.strip() or len(raw) != EXPECTED_BYTES:
+            continue
+        try:
+            assert_planes(cb_mask, cr_mask, fixture, raw, cb_value, cr_value)
+        except SystemExit:
+            continue
+        actual.add(value)
+
+    if actual:
+        raise SystemExit(
+            f"[FAIL] CROSS_PLANE_HIGH_AMP_MISS {label} third-payload unexpectedly has "
+            f"strict expected-SAD values: {format_ranges(actual)}"
+        )
+    print(
+        f"[PASS] CROSS_PLANE_HIGH_AMP_MISS {label} third-payload dead-end locked: "
+        f"baseline=0x{stream[third_idx]:02x} strict_expected_sad_values=0"
+    )
+
+
 def check_miss_case(
     sim: Path,
     cb_mask: int,
@@ -331,6 +386,7 @@ def check_miss_case(
         raise SystemExit(f"[FAIL] CROSS_PLANE_HIGH_AMP_MISS {label} changed IDR reference frame")
     lock_first_payload_pass_range(stream, fixture, cb_mask, cr_mask, cb_value, cr_value, label)
     lock_second_payload_pass_range(stream, fixture, cb_mask, cr_mask, cb_value, cr_value, label)
+    lock_third_payload_dead_end(stream, fixture, cb_mask, cr_mask, cb_value, cr_value, label)
     print(
         f"[PASS] CROSS_PLANE_HIGH_AMP_MISS {label} remains bounded one-frame miss: "
         f"decoded={len(raw)}/{EXPECTED_BYTES} signature={expected_signature} tail={tail}"
@@ -345,7 +401,7 @@ def main() -> int:
         "[PASS] CABAC P16x16 cross-plane high-amplitude chroma-AC miss probe: "
         "Cb/Cr 0x2/0xd +/-32 complement cases keep exact final-slice tails, "
         "strict one-frame FFmpeg miss signatures, byte-identical IDR frames, and "
-        "locked first/second-payload expected-SAD mutation classes."
+        "locked first/second-payload expected-SAD mutation classes plus third-payload dead ends."
     )
     return 0
 
