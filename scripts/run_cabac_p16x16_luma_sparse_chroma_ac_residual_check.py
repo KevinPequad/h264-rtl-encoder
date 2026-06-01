@@ -8,7 +8,7 @@ quadrants, same-plane row/column pairs, same-block Cb+Cr quadrant cases, both
 row-adjacent directions, both column-adjacent directions, opposite-diagonal Cb+Cr pairs,
 and complementary two-block row/column pairs on both chroma planes, plus
 high-amplitude same-quadrant and row/column-complement subsets with luma
-residual present, including the complementary row/column +/-32 sign matrix.
+residual present, including the complementary split-row/column +/-32 sign matrix.
 It locks strict FFmpeg decode, plane-local CABAC counters, CAVLC suppression
 counts, final P-slice bytes, current decoded-plane metrics, and per-4x4
 chroma-block locality so sparse residuals cannot silently land in the wrong
@@ -489,6 +489,42 @@ CASES = (
         cr_sample_value=160,
     ),
     Case(
+        name="cbcr_ac_m3_12_hi_cbpos_crneg",
+        cb_mask=0x3,
+        cr_mask=0xC,
+        expected_final_slice="0000000141d008086b3af6f9f3d6d5d77f7df77f",
+        expected_cavlc_suppressed_bits=298,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=160,
+        cr_sample_value=96,
+    ),
+    Case(
+        name="cbcr_ac_m3_12_hi_cbneg_crpos",
+        cb_mask=0x3,
+        cr_mask=0xC,
+        expected_final_slice="0000000141d008086b3abfebf3d245577f74f7ff",
+        expected_cavlc_suppressed_bits=300,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=96,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m3_12_hi_cbneg_crneg",
+        cb_mask=0x3,
+        cr_mask=0xC,
+        expected_final_slice="0000000141d008086b3abfebf3d245577f7df77f",
+        expected_cavlc_suppressed_bits=297,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=96,
+        cr_sample_value=96,
+    ),
+    Case(
         name="cbcr_ac_m12_3_hi",
         cb_mask=0xC,
         cr_mask=0x3,
@@ -499,6 +535,42 @@ CASES = (
         expected_v_sad=512,
         cb_sample_value=160,
         cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m12_3_hi_cbpos_crneg",
+        cb_mask=0xC,
+        cr_mask=0x3,
+        expected_final_slice="0000000141d008086b3abffbf9fb775ffdb4fffe",
+        expected_cavlc_suppressed_bits=300,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=160,
+        cr_sample_value=96,
+    ),
+    Case(
+        name="cbcr_ac_m12_3_hi_cbneg_crpos",
+        cb_mask=0xC,
+        cr_mask=0x3,
+        expected_final_slice="0000000141d008086b3abfebf9f94f7ffdf6fffe",
+        expected_cavlc_suppressed_bits=298,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=96,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m12_3_hi_cbneg_crneg",
+        cb_mask=0xC,
+        cr_mask=0x3,
+        expected_final_slice="0000000141d008086b3abfebf9f94f7ffdb4fffe",
+        expected_cavlc_suppressed_bits=297,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=96,
+        cr_sample_value=96,
     ),
     Case(
         name="cbcr_ac_m5_10_hi",
@@ -805,7 +877,7 @@ def main() -> int:
     sim = build_baseline_sim()
     for case in CASES:
         run_case(sim, case)
-    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, opposite-diagonal mixed-plane pairs, complementary two-block row/column mixed-plane pairs, high-amplitude same-quadrant pairs, and the high-amplitude complementary row/column +/-32 sign matrix, strict-decode with plane-local counters and per-block chroma locality")
+    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, opposite-diagonal mixed-plane pairs, complementary two-block row/column mixed-plane pairs, high-amplitude same-quadrant pairs, and the high-amplitude complementary split-row/column +/-32 sign matrix, strict-decode with plane-local counters and per-block chroma locality")
     return 0
 
 
