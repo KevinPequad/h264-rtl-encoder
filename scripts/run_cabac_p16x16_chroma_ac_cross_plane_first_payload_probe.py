@@ -28,7 +28,7 @@ EXPECTED_BYTES = FRAME_SIZE * 2
 EXPECTED_HEADER_TAIL = 0x6B
 
 # Representative cross-plane cases: sparse/sparse top-row, diagonal, split-row,
-# orthogonal axis-pair, one-vs-two-block row/axis pairs,
+# sparse singleton mirror gaps, orthogonal axis-pair, one-vs-two-block row/axis pairs,
 # bottom/top mirror pairs, bottom-row cross-corners,
 # reciprocal diagonal singletons,
 # sparse-Cb plus dense-Cr / dense-Cb plus sparse-Cr right-column and bottom-row
@@ -47,12 +47,16 @@ TAILS = {
     (0x1, 0x1): "0000000141d008086b3acbb8b517a9",
     (0x1, 0x2): "0000000141d008086b3acbb8b517b2",
     (0x1, 0x3): "0000000141d008086b3acc099da545ea4651",
+    (0x1, 0x4): "0000000141d008086b3acbb8b51790",
     (0x1, 0x5): "0000000141d008086b3acc10be3269ea4654",
+    (0x1, 0x8): "0000000141d008086b3acbb8b517a6",
     (0x2, 0x1): "0000000141d008086b3acbeb2d4098",
     (0x2, 0x2): "0000000141d008086b3acbeb2d409d",
     (0x2, 0x3): "0000000141d008086b3acc09a95b50261328",
     (0x2, 0x4): "0000000141d008086b3acbeb2d408a",
+    (0x2, 0x5): "0000000141d008086b3acc10c842e8a71d253e",
     (0x2, 0x6): "0000000141d008086b3acc0da221745404ca",
+    (0x2, 0x8): "0000000141d008086b3acbeb2d4097",
     (0x3, 0x1): "0000000141d008086b3acc61364743b092af",
     (0x3, 0x2): "0000000141d008086b3acc61364743b092b0",
     (0x3, 0x3): "0000000141d008086b3acc614c11ff50ec24abcc54",
@@ -64,9 +68,12 @@ TAILS = {
     (0x4, 0x2): "0000000141d008086b3acbdfe134f0",
     (0x4, 0x3): "0000000141d008086b3acc09a6884d3a3a48",
     (0x4, 0x4): "0000000141d008086b3acbdfe134d3",
+    (0x4, 0x5): "0000000141d008086b3acc10c5dda820832a",
     (0x5, 0x5): "0000000141d008086b3acc6f8c40ff5158a92c2c76",
     (0x5, 0x1): "0000000141d008086b3acc6f78d26962a4b0",
+    (0x5, 0x2): "0000000141d008086b3acc6f78d26962a4b1",
     (0x5, 0x3): "0000000141d008086b3acc6f8a4eff5158a92c2c75",
+    (0x5, 0x4): "0000000141d008086b3acc6f78d26962a4ad",
     (0x5, 0x6): "0000000141d008086b3acc6f8b636fa8ac54963915",
     (0x6, 0x2): "0000000141d008086b3acc693d717438412c96",
     (0x6, 0x3): "0000000141d008086b3acc6941211369fac656391500",
@@ -101,6 +108,7 @@ TAILS = {
     (0x2, 0xF): "0000000141d008086b3acbf4ded3f999944575ae9b",
     (0x4, 0xF): "0000000141d008086b3acbf452ba2e8e9222bad74d",
     (0x8, 0xF): "0000000141d008086b3acbf3e7134c83288aeb5d37",
+    (0x8, 0x1): "0000000141d008086b3acbe70e2699",
     (0x8, 0x2): "0000000141d008086b3acbe70e269b",
     (0x8, 0x3): "0000000141d008086b3acc09a85389a6419445",
     (0x4, 0x8): "0000000141d008086b3acbdfe134e5",
@@ -455,6 +463,7 @@ def main() -> int:
     print(
         "[PASS] CABAC P16x16 cross-plane chroma-AC gate promoted: representative "
         "sparse/sparse, mirror, split-row, bottom-row cross-corner, "
+        "sparse singleton mirror gaps, "
         "orthogonal axis-pair, reciprocal diagonal singleton, "
         "one-vs-two-block row/axis pairs, "
         "sparse+dense right-column/bottom-row, same-diagonal dense, "
