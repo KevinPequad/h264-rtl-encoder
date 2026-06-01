@@ -4,10 +4,12 @@
 The promoted high-amplitude cross-plane path currently scopes a separate Cr
 payload context bank only for the Cb-singleton/Cr-all-but-one masks that were
 repaired in the source.  This staged diagnostic patches temporary workspaces to
-try the reciprocal Cb-all-but-one/Cr-singleton `0xb/0x4` mask through the
-Cr-side, Cb-side, and both-plane payload-bank extensions, then proves the four
-+/-32 sign combinations still short-decode.  That keeps the next repair search
-from repeating these too-simple context-bank extensions.
+first locks the current shared-bank short-decode signature for the reciprocal
+Cb-all-but-one/Cr-singleton `0xb/0x4` mask, then patches temporary workspaces to
+try that mask through the Cr-side, Cb-side, and both-plane payload-bank
+extensions.  All four +/-32 sign combinations still short-decode in each lane,
+keeping the next repair search from repeating either the baseline observation or
+these too-simple context-bank extensions.
 """
 
 from __future__ import annotations
@@ -23,6 +25,7 @@ from scripts.rtl_runner import BuildConfig, build_sim, stage_workspace  # noqa: 
 from scripts.run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe import (  # noqa: E402
     EXPECTED_BYTES,
     FRAME_SIZE,
+    build_baseline_sim,
     decode_raw,
     final_slice_hex,
     make_fixture,
@@ -62,6 +65,13 @@ STAGED_DUAL_PAYLOAD_CTX_COND = "(cabac_chroma_ac_split_plane_ctx())"
 
 # Exact final-slice tails observed after applying only each staged extension.
 # All cases still produce a one-frame FFmpeg decode miss.
+EXPECTED_BASELINE_MISSES = {
+    (160, 160): ("0000000141d008086bfedff5", "bytestream -4"),
+    (160, 96): ("0000000141d008086bfedff5", "bytestream -4"),
+    (96, 160): ("0000000141d008086bffef75", "corrupt decoded frame"),
+    (96, 96): ("0000000141d008086bffef75", "corrupt decoded frame"),
+}
+
 EXPECTED_MISSES = {
     "cr_payload_split": {
         (160, 160): ("0000000141d008086bfedffd73", "bytestream -3"),
@@ -82,6 +92,28 @@ EXPECTED_MISSES = {
         (96, 96): ("0000000141d008086bfafe77f75d", "corrupt decoded frame"),
     },
 }
+
+
+def check_baseline() -> None:
+    sim = build_baseline_sim()
+    for (cb_value, cr_value), (expected_tail, expected_signature) in EXPECTED_BASELINE_MISSES.items():
+        label = f"cb=0x{CB_MASK:x} cr=0x{CR_MASK:x} cb_value={cb_value} cr_value={cr_value}"
+        fixture = make_fixture(CB_MASK, CR_MASK, cb_value, cr_value)
+        h264 = run_case(sim, CB_MASK, CR_MASK, fixture, cb_value, cr_value)
+        tail = final_slice_hex(h264.read_bytes(), label)
+        if tail != expected_tail:
+            raise SystemExit(f"[FAIL] B4_SPLIT baseline {label} tail {tail}, expected {expected_tail}")
+        raw, err = decode_raw(h264)
+        if len(raw) != FRAME_SIZE or expected_signature not in err:
+            raise SystemExit(
+                f"[FAIL] B4_SPLIT baseline {label} expected shared-bank miss "
+                f"{FRAME_SIZE}/{EXPECTED_BYTES} with {expected_signature!r}, got "
+                f"{len(raw)}/{EXPECTED_BYTES} err={err.strip()!r}"
+            )
+        print(
+            f"[PASS] B4_SPLIT baseline {label}: shared-bank path still short-decodes "
+            f"{len(raw)}/{EXPECTED_BYTES}, tail={tail}, signature={expected_signature!r}"
+        )
 
 
 def build_staged_sim(variant: str) -> Path:
@@ -145,12 +177,14 @@ def check_variant(variant: str) -> None:
 
 
 def main() -> int:
+    check_baseline()
     for variant in EXPECTED_MISSES:
         check_variant(variant)
     print(
-        "[PASS] CABAC P16x16 high-amplitude Cb0xb/Cr0x4 diagnostic rejects the naive "
-        "Cr-side, Cb-side, and both-plane split-context extensions: all four +/-32 reciprocal "
-        "complement cases remain one-frame FFmpeg misses"
+        "[PASS] CABAC P16x16 high-amplitude Cb0xb/Cr0x4 diagnostic locks the baseline "
+        "shared-bank short-decode and rejects the naive Cr-side, Cb-side, and both-plane "
+        "split-context extensions: all four +/-32 reciprocal complement cases remain "
+        "one-frame FFmpeg misses"
     )
     return 0
 
