@@ -32,7 +32,8 @@ EXPECTED_HEADER_TAIL = 0x6B
 # reciprocal diagonal singletons,
 # sparse-Cb plus dense-Cr / dense-Cb plus sparse-Cr right-column and bottom-row
 # controls, dense-Cr, dense-Cb, same-diagonal dense, asymmetric three-block,
-# its reciprocal mirror, all-but-one reciprocal complements, and dense-both controls.  This is
+# its reciprocal mirror, asymmetric three-plus-one complements,
+# all-but-one reciprocal complements, and dense-both controls.  This is
 # deliberately smaller than the full 15x15 lattice
 # so the cron gate stays
 # bounded while still covering the combinations that used to expose short-decode
@@ -66,6 +67,8 @@ TAILS = {
     (0xF, 0x4): "0000000141d008086b3acc332499ec2488aa9fedc0",
     (0xF, 0x8): "0000000141d008086b3acc332499ec2488aa9fedce",
     (0xF, 0xF): "0000000141d008086b7acc",
+    (0x7, 0x8): "0000000141d008086b3acc332499ec2488aacd",
+    (0x8, 0x7): "0000000141d008086b3acbf588e2699065115d",
     (0xE, 0x1): "0000000141d008086b3acc3602d3f58ca1b3b4",
     (0xD, 0xE): "0000000141d008086b3acc36849d158a9214bf7b590000",
     (0xE, 0xD): "0000000141d008086b3acc36b8ad3f58ca1b3b4eb300000300",
@@ -303,7 +306,8 @@ def main() -> int:
         "orthogonal axis-pair, reciprocal diagonal singleton, "
         "sparse+dense right-column/bottom-row, same-diagonal dense, "
         "asymmetric three-block plus reciprocal mirror, dense-Cb, dense-Cr, "
-        "all-but-one reciprocal complements, and dense-both Cb+Cr AC masks "
+        "asymmetric three-plus-one complements, all-but-one reciprocal complements, "
+        "and dense-both Cb+Cr AC masks "
         "plus positive, reciprocal, mixed-sign, and asymmetric complement "
         "high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
         "checked-in -7 CABAC queue initializer"
