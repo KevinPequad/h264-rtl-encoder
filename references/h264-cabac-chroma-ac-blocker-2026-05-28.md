@@ -539,3 +539,10 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so every remaining `Cb0x2/Cr0xd` high-amplitude miss and the reciprocal `Cb0xd/Cr0x2` strict-pass comparison must also report `cabac_p16x16_mbs=1`, plane-local `cb_ac_mbs=1` / `cr_ac_mbs=1`, exact Cb/Cr AC block counters, and `cavlc_suppressed_bits=` in the RTL simulation log.
 - This keeps the high-amplitude diagnostic tied to the integrated RTL CABAC residual path instead of accidentally accepting a trace from a stream that lost plane-local AC ownership or fell back to legacy CAVLC emission.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.
+
+## 2026-06-01 high-amplitude exact chroma summary lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` again so each high-amplitude miss/pass row locks the full frame-1 `[CABAC_CHROMA]` ownership summary: `cabac_chroma_mbs`, DC/AC lane flags, plane-local DC/AC macroblock ownership, exact Cb/Cr AC block counts, and exact `cavlc_suppressed_bits`.
+- The four remaining `Cb0x2/Cr0xd` sign-family misses keep exact suppressed-bit counts `184/182/182/180` across the `(+,+)/(-,+)/(+,-)/(-,-)` value combinations, while the reciprocal strict-pass `Cb0xd/Cr0x2 +32/+32` lane keeps `(cb_ac_blocks=3, cr_ac_blocks=1, cavlc_suppressed_bits=184)`.
+- This prevents a future first-payload/arithmetic experiment from preserving payload bytes and tails while silently shifting integrated chroma residual ownership or legacy CAVLC suppression accounting.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.

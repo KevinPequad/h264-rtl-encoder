@@ -45,6 +45,7 @@ CASES: dict[str, dict[str, Any]] = {
         "decoded_bytes": FRAME_SIZE,
         "ffmpeg_signature": "bytestream -16",
         "expected_quality": False,
+        "chroma_summary": (1, 0, 1, 1, 1, 1, 1, 1, 3, 184),
         "cbf_order": [(0, 0), (1, 1), (2, 0), (3, 0), (4, 1), (5, 0), (6, 1), (7, 1)],
         "coded_blocks": [1, 4, 6, 7],
         "payload_bytes": [0xBB, 0xEC, 0xF7],
@@ -103,6 +104,7 @@ CASES: dict[str, dict[str, Any]] = {
         "decoded_bytes": FRAME_SIZE,
         "ffmpeg_signature": "bytestream -16",
         "expected_quality": False,
+        "chroma_summary": (1, 0, 1, 1, 1, 1, 1, 1, 3, 182),
         "cbf_order": [(0, 0), (1, 1), (2, 0), (3, 0), (4, 1), (5, 0), (6, 1), (7, 1)],
         "coded_blocks": [1, 4, 6, 7],
         "payload_bytes": [0xBB, 0xEC, 0xF7],
@@ -161,6 +163,7 @@ CASES: dict[str, dict[str, Any]] = {
         "decoded_bytes": FRAME_SIZE,
         "ffmpeg_signature": "bytestream -26",
         "expected_quality": False,
+        "chroma_summary": (1, 0, 1, 1, 1, 1, 1, 1, 3, 182),
         "cbf_order": [(0, 0), (1, 1), (2, 0), (3, 0), (4, 1), (5, 0), (6, 1), (7, 1)],
         "coded_blocks": [1, 4, 6, 7],
         "payload_bytes": [0xBB, 0xCC, 0xFF],
@@ -219,6 +222,7 @@ CASES: dict[str, dict[str, Any]] = {
         "decoded_bytes": FRAME_SIZE,
         "ffmpeg_signature": "bytestream -26",
         "expected_quality": False,
+        "chroma_summary": (1, 0, 1, 1, 1, 1, 1, 1, 3, 180),
         "cbf_order": [(0, 0), (1, 1), (2, 0), (3, 0), (4, 1), (5, 0), (6, 1), (7, 1)],
         "coded_blocks": [1, 4, 6, 7],
         "payload_bytes": [0xBB, 0xCC, 0xFF],
@@ -277,6 +281,7 @@ CASES: dict[str, dict[str, Any]] = {
         "decoded_bytes": EXPECTED_BYTES,
         "ffmpeg_signature": "",
         "expected_quality": True,
+        "chroma_summary": (1, 0, 1, 1, 1, 1, 1, 3, 1, 184),
         "cbf_order": [(0, 1), (1, 0), (2, 1), (3, 1), (4, 0), (5, 1), (6, 0), (7, 0)],
         "coded_blocks": [0, 2, 3, 5],
         "payload_bytes": [0x3A, 0xDD, 0xF5],
@@ -720,6 +725,23 @@ def parse_payload_context_summary(text: str) -> tuple[list[tuple[int, int]], lis
     return sorted(counts.items()), [final_by_block[blk] for blk in sorted(final_by_block)]
 
 
+def parse_chroma_summary(text: str) -> tuple[int, int, int, int, int, int, int, int, int, int]:
+    for line in text.splitlines():
+        if "[CABAC_CHROMA] Frame 1" not in line:
+            continue
+        m = re.search(
+            r"cabac_chroma_mbs=(\d+) cabac_chroma_dc_mbs=(\d+) cabac_chroma_ac_mbs=(\d+) "
+            r"cb_dc_mbs=(\d+) cr_dc_mbs=(\d+) cb_ac_mbs=(\d+) cr_ac_mbs=(\d+) "
+            r"cb_ac_blocks=(\d+) cr_ac_blocks=(\d+) cavlc_suppressed_bits=(\d+)",
+            line,
+        )
+        if not m:
+            continue
+        a, b, c, d, e, f, g, h, i, j = map(int, m.groups())
+        return (a, b, c, d, e, f, g, h, i, j)
+    raise SystemExit("[FAIL] HIGH_AMP_TRACE missing frame-1 CABAC chroma summary")
+
+
 def parse_terminate_state(text: str) -> dict[str, object]:
     marker = text.find("[CABACTERM]")
     if marker < 0:
@@ -800,17 +822,15 @@ def check_case(sim: Path, name: str, spec: dict[str, Any]) -> None:
         )
 
     text = sim_log.read_text(encoding="utf-8", errors="replace")
-    for needle in (
-        "cabac_p16x16_mbs=1",
-        "cb_ac_mbs=1",
-        "cr_ac_mbs=1",
-        f"cb_ac_blocks={int(spec['cb_mask']).bit_count()}",
-        f"cr_ac_blocks={int(spec['cr_mask']).bit_count()}",
-    ):
+    for needle in ("cabac_p16x16_mbs=1",):
         if needle not in text:
             raise SystemExit(f"[FAIL] HIGH_AMP_TRACE {name} sim log missing {needle}")
-    if "cavlc_suppressed_bits=" not in text:
-        raise SystemExit(f"[FAIL] HIGH_AMP_TRACE {name} did not suppress legacy CAVLC")
+    chroma_summary = parse_chroma_summary(text)
+    if chroma_summary != spec["chroma_summary"]:
+        raise SystemExit(
+            f"[FAIL] HIGH_AMP_TRACE {name} chroma summary {chroma_summary}, "
+            f"expected {spec['chroma_summary']}"
+        )
 
     cbf_order = parse_cbf_order(text)
     if cbf_order != spec["cbf_order"]:
@@ -895,7 +915,7 @@ def check_case(sim: Path, name: str, spec: dict[str, Any]) -> None:
         f"[PASS] HIGH_AMP_TRACE {name}: {status}, tail={tail}, "
         f"stream_size={len(stream)}, CBF={cbf_order}, payload={[f'0x{b:02x}' for b in payload_bytes[:3]]}, "
         f"p_slice_emit_tail={p_slice_emit_tail}, payload_emit_rows={payload_emit_rows}, "
-        f"chunks={chunk_summary}, residual_bins={coded_residual_bins}, first_ctx={first_ctx}, cbf_ctx={cbf_ctx_trail}, "
+        f"chroma_summary={chroma_summary}, chunks={chunk_summary}, residual_bins={coded_residual_bins}, first_ctx={first_ctx}, cbf_ctx={cbf_ctx_trail}, "
         f"payload_final_ctx={payload_final_ctx}, term={term_state}"
     )
 
@@ -907,7 +927,7 @@ def main() -> int:
     print(
         "[PASS] CABAC P16x16 high-amplitude chroma-AC trace probe locks the failing "
         "Cb0x2/Cr0xd sign-family against reciprocal Cb0xd/Cr0x2 strict pass, including "
-        "plane-local CBF walks/context trails, exact coded-block residual bin trails, P-slice emit-tail bit-buffer rows, payload emit rows, residual output chunks, first payload bytes, and "
+        "plane-local chroma ownership summaries, CBF walks/context trails, exact coded-block residual bin trails, P-slice emit-tail bit-buffer rows, payload emit rows, residual output chunks, first payload bytes, and "
         "stream sizes plus first/final-payload and terminate arithmetic context state."
     )
     return 0
