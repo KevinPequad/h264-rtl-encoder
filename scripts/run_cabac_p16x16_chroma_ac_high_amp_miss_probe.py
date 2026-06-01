@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Promotion gate for the former high-amplitude Cb0x2/Cr0xd chroma-AC miss.
+"""Promotion gate for former high-amplitude Cb/Cr chroma-AC complement misses.
 
-The Cb singleton + Cr all-but-one high-amplitude complement used to short-decode
+The Cb singleton + Cr all-but-one high-amplitude complements used to short-decode
 under the shared chroma-AC residual payload context bank.  The RTL now scopes a
-separate Cr payload context bank to this mask pair; keep the exact promoted
-strict-decode tails and plane-local SAD locked so the old negative probe cannot
-silently regress.
+separate Cr payload context bank to these target mask pairs; keep the exact
+promoted strict-decode tails and plane-local SAD locked so the old negative
+probes cannot silently regress.
 """
 
 from __future__ import annotations
@@ -31,6 +31,10 @@ PROMOTED_CASES = {
     (0x2, 0xD, 96, 160): "0000000141d008086b3aec7f7c",
     (0x2, 0xD, 160, 96): "0000000141d008086b3adefda6",
     (0x2, 0xD, 96, 96): "0000000141d008086b3adefdfc",
+    (0x4, 0xB, 160, 160): "0000000141d008086b3bcf7fbf",
+    (0x4, 0xB, 96, 160): "0000000141d008086b3bcf7f7f",
+    (0x4, 0xB, 160, 96): "0000000141d008086b3becf5bf",
+    (0x4, 0xB, 96, 96): "0000000141d008086b3becf57f",
 }
 
 
@@ -58,7 +62,8 @@ def main() -> int:
         )
     print(
         "[PASS] CABAC P16x16 cross-plane high-amplitude chroma-AC promotion gate: "
-        "former Cb0x2/Cr0xd +/-32 complement misses now strict-decode with exact final-slice tails."
+        "former Cb singleton / Cr all-but-one +/-32 complement misses now "
+        "strict-decode with exact final-slice tails."
     )
     return 0
 

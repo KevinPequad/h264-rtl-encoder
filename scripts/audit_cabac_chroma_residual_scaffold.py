@@ -233,12 +233,12 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "bitstream_scopes_high_amp_cr_payload_context_bank",
         "rtl/h264_bitstream.v",
-        r"cabac_res_chroma_ac_cr_sig_ctx_state.*?cabac_res_chroma_ac_cr_last_ctx_state.*?cabac_res_chroma_ac_cr_level_ctx_state_1.*?cabac_chroma_ac_split_plane_ctx.*?cabac_chroma_ac_cb_plane_nz_mask\(\)\s*==\s*4'h2.*?cabac_chroma_ac_cr_plane_nz_mask\(\)\s*==\s*4'hd.*?cabac_pending_ctx_sel\[4\]",
+        r"cabac_res_chroma_ac_cr_sig_ctx_state.*?cabac_res_chroma_ac_cr_last_ctx_state.*?cabac_res_chroma_ac_cr_level_ctx_state_1.*?cabac_chroma_ac_split_plane_ctx.*?cabac_chroma_ac_cb_plane_nz_mask\(\)\s*==\s*4'h2.*?cabac_chroma_ac_cr_plane_nz_mask\(\)\s*==\s*4'hd.*?cabac_chroma_ac_cb_plane_nz_mask\(\)\s*==\s*4'h4.*?cabac_chroma_ac_cr_plane_nz_mask\(\)\s*==\s*4'hb.*?cabac_pending_ctx_sel\[4\]",
     ),
     (
         "probe_promotes_cross_plane_high_amp_miss_target",
         "scripts/run_cabac_p16x16_chroma_ac_high_amp_miss_probe.py",
-        r"PROMOTED_CASES\s*=\s*\{.*?\(0x2,\s*0xD,\s*160,\s*160\):\s*\"0000000141d008086b3aec7fe6\".*?\(0x2,\s*0xD,\s*96,\s*160\):\s*\"0000000141d008086b3aec7f7c\".*?\(0x2,\s*0xD,\s*160,\s*96\):\s*\"0000000141d008086b3adefda6\".*?\(0x2,\s*0xD,\s*96,\s*96\):\s*\"0000000141d008086b3adefdfc\".*?assert_planes\(cb_mask, cr_mask, fixture, raw, cb_value, cr_value\).*?former Cb0x2/Cr0xd \+/-32 complement misses now strict-decode",
+        r"PROMOTED_CASES\s*=\s*\{.*?\(0x2,\s*0xD,\s*160,\s*160\):\s*\"0000000141d008086b3aec7fe6\".*?\(0x2,\s*0xD,\s*96,\s*160\):\s*\"0000000141d008086b3aec7f7c\".*?\(0x2,\s*0xD,\s*160,\s*96\):\s*\"0000000141d008086b3adefda6\".*?\(0x2,\s*0xD,\s*96,\s*96\):\s*\"0000000141d008086b3adefdfc\".*?\(0x4,\s*0xB,\s*160,\s*160\):\s*\"0000000141d008086b3bcf7fbf\".*?\(0x4,\s*0xB,\s*96,\s*160\):\s*\"0000000141d008086b3bcf7f7f\".*?\(0x4,\s*0xB,\s*160,\s*96\):\s*\"0000000141d008086b3becf5bf\".*?\(0x4,\s*0xB,\s*96,\s*96\):\s*\"0000000141d008086b3becf57f\".*?assert_planes\(cb_mask, cr_mask, fixture, raw, cb_value, cr_value\).*?former Cb singleton / Cr all-but-one",
     ),
     (
         "probe_locks_cross_plane_high_amp_trace_split_bank",
