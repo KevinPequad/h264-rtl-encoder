@@ -102,6 +102,17 @@ def payload_ctx_selects(text: str) -> list[int]:
     return selects
 
 
+def split_payload_blocks(text: str) -> list[int]:
+    blocks: set[int] = set()
+    for line in text.splitlines():
+        if "[CABACCTX]" not in line or "cat=2" not in line:
+            continue
+        m = re.search(r"blk=(\d+) kind=(22|23|24) sel=(\d+)", line)
+        if m and int(m.group(3)) >= 16:
+            blocks.add(int(m.group(1)))
+    return sorted(blocks)
+
+
 def coded_chroma_ac_blocks(text: str) -> list[int]:
     coded: list[int] = []
     for line in text.splitlines():
@@ -135,6 +146,9 @@ def check_b4_case(sim: Path, cb_value: int, cr_value: int) -> None:
     selects = payload_ctx_selects(text)
     if any(sel >= 16 for sel in selects):
         raise SystemExit(f"[FAIL] B4_TRACE_CONTRAST {label} unexpectedly used split payload bank: {selects}")
+    split_blocks = split_payload_blocks(text)
+    if split_blocks:
+        raise SystemExit(f"[FAIL] B4_TRACE_CONTRAST {label} split payload blocks {split_blocks}, expected []")
     print(
         f"[PASS] B4_TRACE_CONTRAST {label}: shared-bank short/{expected_signature}, "
         f"first_payload=0x{expected_first:02x}, coded_blocks={blocks}, tail={tail}"
@@ -163,9 +177,16 @@ def check_mirror_case(sim: Path, cb_value: int, cr_value: int) -> None:
     selects = payload_ctx_selects(text)
     if not any(sel >= 16 for sel in selects):
         raise SystemExit(f"[FAIL] B4_TRACE_CONTRAST {label} did not expose split payload bank: {selects}")
+    split_blocks = split_payload_blocks(text)
+    expected_split_blocks = [4, 5, 7]
+    if split_blocks != expected_split_blocks:
+        raise SystemExit(
+            f"[FAIL] B4_TRACE_CONTRAST {label} split payload blocks {split_blocks}, "
+            f"expected {expected_split_blocks}"
+        )
     print(
         f"[PASS] B4_TRACE_CONTRAST {label}: split-bank strict decode, "
-        f"coded_blocks={blocks}, U_SAD={u_sad} V_SAD={v_sad}, tail={tail}"
+        f"coded_blocks={blocks}, split_blocks={split_blocks}, U_SAD={u_sad} V_SAD={v_sad}, tail={tail}"
     )
 
 

@@ -283,7 +283,7 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "probe_locks_b4_trace_contrast",
         "scripts/run_cabac_p16x16_chroma_ac_b4_trace_contrast_probe.py",
-        r"Trace-contrast probe.*?MIRROR_CB_MASK\s*=\s*0x4.*?MIRROR_CR_MASK\s*=\s*0xB.*?MIRROR_TAILS.*?0000000141d008086b3bcf7fbf.*?0000000141d008086b3becf57f.*?EXPECTED_CODED_BLOCKS.*?B4_CB_MASK,\s*B4_CR_MASK.*?\[0,\s*1,\s*3,\s*6\].*?MIRROR_CB_MASK,\s*MIRROR_CR_MASK.*?\[2,\s*4,\s*5,\s*7\].*?coded_chroma_ac_blocks.*?if any\(sel >= 16 for sel in selects\).*?if not any\(sel >= 16 for sel in selects\).*?open Cb0xb/Cr0x4.*?Cb0x4/Cr0xb mirror strict-decodes",
+        r"Trace-contrast probe.*?MIRROR_CB_MASK\s*=\s*0x4.*?MIRROR_CR_MASK\s*=\s*0xB.*?MIRROR_TAILS.*?0000000141d008086b3bcf7fbf.*?0000000141d008086b3becf57f.*?EXPECTED_CODED_BLOCKS.*?B4_CB_MASK,\s*B4_CR_MASK.*?\[0,\s*1,\s*3,\s*6\].*?MIRROR_CB_MASK,\s*MIRROR_CR_MASK.*?\[2,\s*4,\s*5,\s*7\].*?split_payload_blocks.*?if any\(sel >= 16 for sel in selects\).*?split payload blocks \{split_blocks\}, expected \[\].*?if not any\(sel >= 16 for sel in selects\).*?expected_split_blocks\s*=\s*\[4,\s*5,\s*7\].*?split_blocks != expected_split_blocks.*?open Cb0xb/Cr0x4.*?Cb0x4/Cr0xb mirror strict-decodes",
     ),
     (
         "probe_locks_cross_plane_high_amp_trace_split_bank",
