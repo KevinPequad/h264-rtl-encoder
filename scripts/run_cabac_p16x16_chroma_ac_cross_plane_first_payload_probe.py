@@ -96,8 +96,9 @@ TAILS = {
 # bounded guard because it shares residual level/sign contexts across both
 # planes.  Keep this to small positive/mixed-sign Cb/Cr samples, plus
 # high-amplitude three-plus-one-block and all-but-one/singleton complement
-# guards, including sampled all-negative mixed-sign complements that mirror the
-# already-promoted positive/mixed-sign cases, so the cron gate remains bounded.
+# guards, including sampled all-negative mixed-sign complements and same-
+# quadrant reciprocal mirrors that match the already-promoted positive/mixed-
+# sign cases, so the cron gate remains bounded.
 AMPLITUDE_TAILS = {
     (0x5, 0xA, 160, 136): "0000000141d008086b",
     (0x5, 0xA, 136, 160): "0000000141d008086b",
@@ -129,6 +130,12 @@ AMPLITUDE_TAILS = {
     (0xD, 0x2, 96, 160): "0000000141d008086b3bed75",
     (0xD, 0x2, 160, 96): "0000000141d008086b3addf5",
     (0xD, 0x2, 96, 96): "0000000141d008086b3bed75",
+    (0x2, 0xD, 160, 160): "0000000141d008086b3aec7fe6",
+    (0x2, 0xD, 96, 96): "0000000141d008086b3adefdfc",
+    (0xB, 0x4, 160, 160): "0000000141d008086b7fcf7f7b",
+    (0xB, 0x4, 96, 96): "0000000141d008086b7edef7fa",
+    (0x4, 0xB, 160, 160): "0000000141d008086b3bcf7fbf",
+    (0x4, 0xB, 96, 96): "0000000141d008086b3becf57f",
     (0x7, 0x8, 160, 160): "0000000141d008086b7eddf5ff",
     (0x8, 0x7, 160, 160): "0000000141d008086b7fcdff",
 }
@@ -338,6 +345,7 @@ def main() -> int:
         "and dense-both Cb+Cr AC masks "
         "plus positive, reciprocal, mixed-sign, asymmetric complement, "
         "and all-but-one/singleton complement including all-negative mixed-sign "
+        "and same-quadrant reciprocal mirror "
         "high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
         "checked-in -7 CABAC queue initializer"
     )
