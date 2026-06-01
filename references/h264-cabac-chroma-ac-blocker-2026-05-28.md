@@ -578,3 +578,9 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_ac_b4_trace_contrast_probe.py` so the repaired high-amplitude reciprocal `Cb0xb/Cr0x4` path and its `Cb0x4/Cr0xb` mirror no longer pass only on final tails, split-bank summaries, and decoded-plane SAD.
 - The trace gate now also locks the frame-1 integrated `[CABAC_CHROMA]` ownership summary for each sign pair: both lanes must report `cabac_chroma_mbs=1`, AC-not-DC lane ownership, both-plane DC/AC ownership, exact `cb_ac_blocks` / `cr_ac_blocks` from the masks, and the sign-dependent `cavlc_suppressed_bits` counts `184/182/182/180`.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_b4_trace_contrast_probe.py` passes.
+
+## 2026-06-01 checker CBF-walk negative-row rejection lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_checker_cbf_walk_rejection_probe.py` so the staged complementary-checker CBF-walk candidate now proves two things in one run: the Cr-negative-gated selector expansion still regresses the already-strict `Cb0x5/Cr0xA +32/+32` control (`...6b7fff -> ...6bbecf`), and representative Cr-negative rows remain one-frame misses with the canonical `bytestream -23` / `-15` signatures.
+- This rules out the simple Cr-negative-gated plane-local CBF-walk path as a promotion route, not just the all-sign checker expansion; the remaining complementary-checker repair target stays below that selector on a narrower condition or CABAC arithmetic/renormalization/output-byte state.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_checker_cbf_walk_rejection_probe.py` passes.
