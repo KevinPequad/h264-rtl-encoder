@@ -19,6 +19,7 @@ patterns = {
     "single_tl": (flat, single_tl),
     "single_tr": (flat, single_tr),
     "single_bl": (flat, single_bl),
+    "single_br": (flat, single_br),
     "cb_mirror_single_tl": (single_tl, flat),
     "cb_mirror_single_tr": (single_tr, flat),
     "cb_mirror_single_bl": (single_bl, flat),
@@ -51,7 +52,7 @@ PY
 SIM="$(tail -1 "$BUILD_OUT")"
 mkdir -p output/cabac_chroma_ac_debug
 
-for name in single_tl single_tr single_bl cb_mirror_single_tl cb_mirror_single_tr cb_mirror_single_bl cb_mirror_single_br; do
+for name in single_tl single_tr single_bl single_br cb_mirror_single_tl cb_mirror_single_tr cb_mirror_single_bl cb_mirror_single_br; do
   "$SIM" \
     +frames=2 \
     +timeout=5000000 \
@@ -106,18 +107,26 @@ expected = {
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
         "order_probe": [("cbf", 0, 0), ("cbf", 1, 0), ("cbf", 2, 0), ("cbf", 3, 0), ("cbf", 4, 0), ("cbf", 5, 0), ("cbf", 6, 1), ("payload", 6), ("cbf", 7, 0)],
     },
+    "single_br": {
+        "first_coded": 7,
+        "decode_bytes": 768,
+        "ffmpeg_signature": "",
+        "cbf_ctx_updates": [(0, 3, 105, 109), (1, 2, 124, 122), (2, 1, 119, 123), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 100)],
+        "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
+        "order_probe": [("cbf", 0, 0), ("cbf", 1, 0), ("cbf", 2, 0), ("cbf", 3, 0), ("cbf", 4, 0), ("cbf", 5, 0), ("cbf", 6, 0), ("cbf", 7, 1), ("payload", 7)],
+    },
     "cb_mirror_single_tl": {
         "first_coded": 0,
-        "decode_bytes": 384,
-        "ffmpeg_signature": "bytestream -19",
+        "decode_bytes": 768,
+        "ffmpeg_signature": "",
         "cbf_ctx_updates": [(0, 1, 119, 117), (1, 1, 117, 119), (2, 3, 105, 109), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
         "order_probe": [("cbf", 0, 1), ("payload", 0), ("cbf", 1, 0), ("cbf", 2, 0), ("cbf", 3, 0), ("cbf", 4, 0), ("cbf", 5, 0), ("cbf", 6, 0), ("cbf", 7, 0)],
     },
     "cb_mirror_single_tr": {
         "first_coded": 1,
-        "decode_bytes": 384,
-        "ffmpeg_signature": "bytestream -21",
+        "decode_bytes": 768,
+        "ffmpeg_signature": "",
         "cbf_ctx_updates": [(0, 1, 119, 123), (1, 1, 123, 121), (2, 3, 105, 109), (3, 0, 92, 90), (4, 7, 105, 109), (5, 6, 124, 122), (6, 5, 119, 123), (7, 4, 92, 90)],
         "coded_payload_ctx_updates": common_coded_payload_ctx_updates,
         "order_probe": [("cbf", 0, 0), ("cbf", 1, 1), ("payload", 1), ("cbf", 2, 0), ("cbf", 3, 0), ("cbf", 4, 0), ("cbf", 5, 0), ("cbf", 6, 0), ("cbf", 7, 0)],
@@ -200,9 +209,8 @@ for name, exp in expected.items():
         raise SystemExit(f"[FAIL] {name}: debug trace did not include both residual-bin and context-update lines")
     if "ari_low=" not in debug_text or "ari_range=" not in debug_text or "ari_queue=" not in debug_text:
         raise SystemExit(f"[FAIL] {name}: context-update trace did not include CABAC arithmetic state taps")
-    # FFmpeg emits a short raw file for the remaining known miss signature and full
-    # 768-byte output for the strict-pass controls; lock those signatures so
-    # this remains a diagnostic compare rather than silently promoting/demoting.
+    # Lock both raw output length and FFmpeg diagnostics so this remains a
+    # diagnostic compare rather than silently promoting/demoting sparse paths.
     raw_path = Path(f"/tmp/nonexistent_{name}")
     # Decode bytes were printed by the shell loop; recompute from the h264 to keep
     # this parser self-checking.
@@ -241,5 +249,5 @@ for name, exp in expected.items():
         f"coded-payload, and CBF/payload ordering trails locked"
     )
 
-print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks promoted Cr top/left strict passes, the remaining sparse Cb top-row miss trace set plus bottom-row strict passes, true pending-block CHRAC_CBF selector/state trails, identical coded-block payload context trails, CABAC arithmetic trace taps, current CBF-before-payload ordering, and FFmpeg bytestream signatures around sparse top-row Cb misses")
+print("[PASS] CABAC P16x16 sparse chroma AC debug compare locks promoted Cr and Cb quadrant strict passes, true pending-block CHRAC_CBF selector/state trails, identical coded-block payload context trails, CABAC arithmetic trace taps, and current CBF-before-payload ordering")
 PY
