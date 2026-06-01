@@ -47,6 +47,22 @@ CASES: dict[str, dict[str, Any]] = {
         "cbf_order": [(0, 0), (1, 1), (2, 0), (3, 0), (4, 1), (5, 0), (6, 1), (7, 1)],
         "coded_blocks": [1, 4, 6, 7],
         "payload_bytes": [0xBB, 0xEC, 0xF7],
+        "residual_chunks": [
+            (1, 0x05, 40),
+            (1, 0x44, 48),
+            (1, 0x1E, 56),
+            (1, 0x80, 64),
+            (4, 0x09, 72),
+            (4, 0x84, 80),
+            (4, 0x03, 88),
+            (4, 0x0E, 96),
+            (6, 0xD6, 104),
+            (6, 0xE9, 112),
+            (6, 0x0F, 120),
+            (7, 0xB3, 0),
+            (7, 0xA4, 8),
+            (7, 0xB6, 16),
+        ],
         "first_payload_ctx": {
             "blk": 1,
             "kind": 22,
@@ -72,6 +88,22 @@ CASES: dict[str, dict[str, Any]] = {
         "cbf_order": [(0, 1), (1, 0), (2, 1), (3, 1), (4, 0), (5, 1), (6, 0), (7, 0)],
         "coded_blocks": [0, 2, 3, 5],
         "payload_bytes": [0x3A, 0xDD, 0xF5],
+        "residual_chunks": [
+            (0, 0x1A, 40),
+            (0, 0x04, 48),
+            (0, 0xBC, 56),
+            (0, 0x71, 64),
+            (2, 0x4A, 72),
+            (2, 0xC4, 80),
+            (2, 0x6B, 88),
+            (2, 0xE5, 96),
+            (3, 0xAD, 104),
+            (3, 0xAD, 112),
+            (3, 0xAE, 120),
+            (5, 0x12, 0),
+            (5, 0x99, 8),
+            (5, 0xB1, 16),
+        ],
         "first_payload_ctx": {
             "blk": 0,
             "kind": 22,
@@ -158,6 +190,24 @@ def parse_payload_bytes(text: str) -> list[int]:
     return bytes_out
 
 
+def parse_residual_chunks(text: str) -> list[tuple[int, int, int]]:
+    chunks: list[tuple[int, int, int]] = []
+    for line in text.splitlines():
+        if "[CABACBITS]" not in line or "cat=2" not in line:
+            continue
+        m = re.search(r"blk=(\d+) count=(\d+) bits=([0-9a-fA-F]+) bit_cnt=(\d+)", line)
+        if not m:
+            continue
+        blk = int(m.group(1))
+        count = int(m.group(2))
+        if count != 8:
+            raise SystemExit(f"[FAIL] HIGH_AMP_TRACE unexpected non-byte residual chunk: {line}")
+        byte = int(m.group(3)[:2], 16)
+        bit_cnt = int(m.group(4))
+        chunks.append((blk, byte, bit_cnt))
+    return chunks
+
+
 def parse_first_payload_ctx(text: str, expected_blk: int) -> dict[str, object]:
     for line in text.splitlines():
         if "[CABACCTX]" not in line or "cat=2" not in line:
@@ -236,6 +286,13 @@ def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
             f"[FAIL] HIGH_AMP_TRACE {name} payload bytes {payload_bytes}, expected prefix {spec['payload_bytes']}"
         )
 
+    residual_chunks = parse_residual_chunks(text)
+    if residual_chunks != spec["residual_chunks"]:
+        raise SystemExit(
+            f"[FAIL] HIGH_AMP_TRACE {name} residual chunks {residual_chunks}, "
+            f"expected {spec['residual_chunks']}"
+        )
+
     first_ctx = parse_first_payload_ctx(text, coded_blocks[0])
     if first_ctx != spec["first_payload_ctx"]:
         raise SystemExit(
@@ -243,10 +300,11 @@ def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
         )
 
     status = "strict expected-SAD pass" if spec["expected_quality"] else f"bounded one-frame miss {spec['ffmpeg_signature']}"
+    chunk_summary = [(blk, f"0x{byte:02x}", bit_cnt) for blk, byte, bit_cnt in residual_chunks]
     print(
         f"[PASS] HIGH_AMP_TRACE {name}: {status}, tail={tail}, "
         f"CBF={cbf_order}, payload={[f'0x{b:02x}' for b in payload_bytes[:3]]}, "
-        f"first_ctx={first_ctx}"
+        f"chunks={chunk_summary}, first_ctx={first_ctx}"
     )
 
 
@@ -257,7 +315,8 @@ def main() -> int:
     print(
         "[PASS] CABAC P16x16 high-amplitude chroma-AC trace probe locks the failing "
         "Cb0x2/Cr0xd lane against reciprocal Cb0xd/Cr0x2 strict pass, including "
-        "plane-local CBF walks, first payload bytes, and first payload arithmetic context state."
+        "plane-local CBF walks, residual output chunks, first payload bytes, and "
+        "first payload arithmetic context state."
     )
     return 0
 

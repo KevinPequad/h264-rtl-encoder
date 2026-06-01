@@ -476,9 +476,9 @@ Next useful probe:
 - The generated third payload is `0xf7` for the `Cr=+32` cases and `0xff` for the `Cr=-32` cases. No single third-payload byte value strict-decodes both frames with byte-identical IDR and expected plane-local SAD for any sign combination.
 - This boundary lock keeps the next source repair focused on first/second residual output-byte arithmetic/renormalization state instead of chasing the terminating tail byte.
 
-## 2026-06-01 high-amplitude reciprocal trace lock
+## 2026-06-01 high-amplitude reciprocal trace chunk lock
 
-- Added `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py`, a DEBUG_CABAC_P16X16 comparison for the remaining high-amplitude `Cb0x2/Cr0xd +32/+32` one-frame miss against the reciprocal strict-pass `Cb0xd/Cr0x2` lane.
-- The failing lane remains `384/768` with `bytestream -16`, final tail `0000000141d008086bbbecf7`, CBF walk `[(0,0),(1,1),(2,0),(3,0),(4,1),(5,0),(6,1),(7,1)]`, payload bytes `bb ec f7`, and first payload context `{blk=1 kind=22 sel=0 in=122 out=120 ari_low=36c ari_range=414 ari_queue=-8 pending=1 pbyte=43}`.
-- The reciprocal strict control decodes `768/768` with tail `0000000141d008086b3addf5`, CBF walk `[(0,1),(1,0),(2,1),(3,1),(4,0),(5,1),(6,0),(7,0)]`, payload bytes `3a dd f5`, and first payload context `{blk=0 kind=22 sel=0 in=122 out=120 ari_low=228 ari_range=294 ari_queue=-8 pending=1 pbyte=4}`.
-- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes. This makes the next source repair target the first residual output-byte arithmetic/renormalization state after different plane-local CBF walks, not another broad CBF selector remap or bytestream literal patch.
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so the remaining high-amplitude `Cb0x2/Cr0xd +32/+32` one-frame miss and reciprocal strict-pass `Cb0xd/Cr0x2` lane now lock the complete residual `CABACBITS` byte chunks in addition to final P-slice tails, CBF walks, emitted CABAC payload bytes, and first-payload arithmetic context.
+- Failing lane chunk trail: `(1,05,40),(1,44,48),(1,1e,56),(1,80,64),(4,09,72),(4,84,80),(4,03,88),(4,0e,96),(6,d6,104),(6,e9,112),(6,0f,120),(7,b3,0),(7,a4,8),(7,b6,16)`.
+- Reciprocal strict-pass chunk trail: `(0,1a,40),(0,04,48),(0,bc,56),(0,71,64),(2,4a,72),(2,c4,80),(2,6b,88),(2,e5,96),(3,ad,104),(3,ad,112),(3,ae,120),(5,12,0),(5,99,8),(5,b1,16)`.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes. The next repair should use this residual output-byte divergence against the shared first-payload context state and divergent CBF walk, rather than another mask/selector or literal bytestream patch.
