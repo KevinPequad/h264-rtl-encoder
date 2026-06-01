@@ -8,8 +8,9 @@ quadrants, same-plane row/column pairs, same-block Cb+Cr quadrant cases, both
 row-adjacent directions, both column-adjacent directions, opposite-diagonal Cb+Cr pairs,
 and complementary two-block row/column pairs on both chroma planes, plus
 high-amplitude same-quadrant and row/column-complement subsets with luma
-residual present, including the complementary split-row/column +/-32 sign matrix
-and mirrored high-amplitude three-plus-one edge complements.
+residual present, same-mask row/diagonal controls, including their high-amplitude
+forms, the complementary split-row/column +/-32 sign matrix, and mirrored
+high-amplitude three-plus-one edge complements.
 It locks strict FFmpeg decode, plane-local CABAC counters, CAVLC suppression
 counts, final P-slice bytes, current decoded-plane metrics, and per-4x4
 chroma-block locality so sparse residuals cannot silently land in the wrong
@@ -434,6 +435,72 @@ CASES = (
         expected_y_sad=EXPECTED_Y_SAD,
         expected_u_sad=256,
         expected_v_sad=256,
+        cb_sample_value=160,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m6",
+        cb_mask=0x6,
+        cr_mask=0x6,
+        expected_final_slice="0000000141d008086b3abff93df5",
+        expected_cavlc_suppressed_bits=198,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=128,
+        expected_v_sad=128,
+    ),
+    Case(
+        name="cbcr_ac_m7",
+        cb_mask=0x7,
+        cr_mask=0x7,
+        expected_final_slice="0000000141d008086b3af7eff1fc7fff",
+        expected_cavlc_suppressed_bits=218,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=192,
+        expected_v_sad=192,
+    ),
+    Case(
+        name="cbcr_ac_m9",
+        cb_mask=0x9,
+        cr_mask=0x9,
+        expected_final_slice="0000000141d008086b3afeebf3fb7d",
+        expected_cavlc_suppressed_bits=198,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=128,
+        expected_v_sad=128,
+    ),
+    Case(
+        name="cbcr_ac_m6_hi",
+        cb_mask=0x6,
+        cr_mask=0x6,
+        expected_final_slice="0000000141d008086b3af7e97df5fff77f3eff6d",
+        expected_cavlc_suppressed_bits=308,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=160,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m7_hi_same",
+        cb_mask=0x7,
+        cr_mask=0x7,
+        expected_final_slice="0000000141d008086b3ab7",
+        expected_cavlc_suppressed_bits=360,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=768,
+        expected_v_sad=768,
+        cb_sample_value=160,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m9_hi",
+        cb_mask=0x9,
+        cr_mask=0x9,
+        expected_final_slice="0000000141d008086b3afeff7dd6f777bdbdf7eebf",
+        expected_cavlc_suppressed_bits=308,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
         cb_sample_value=160,
         cr_sample_value=160,
     ),
@@ -902,7 +969,7 @@ def main() -> int:
     sim = build_baseline_sim()
     for case in CASES:
         run_case(sim, case)
-    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, opposite-diagonal mixed-plane pairs, complementary two-block row/column mixed-plane pairs, high-amplitude same-quadrant pairs, mirrored high-amplitude three-plus-one edge complements, and the high-amplitude complementary split-row/column +/-32 sign matrix, strict-decode with plane-local counters and per-block chroma locality")
+    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, opposite-diagonal mixed-plane pairs, complementary two-block row/column mixed-plane pairs, default/high-amplitude same-mask row/diagonal controls, high-amplitude same-quadrant pairs, mirrored high-amplitude three-plus-one edge complements, and the high-amplitude complementary split-row/column +/-32 sign matrix, strict-decode with plane-local counters and per-block chroma locality")
     return 0
 
 
