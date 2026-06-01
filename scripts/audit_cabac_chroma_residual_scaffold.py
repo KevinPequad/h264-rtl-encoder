@@ -231,6 +231,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"TAILS\s*=\s*\{.*?\(0x3,\s*0x5\):\s*\"0000000141d008086b3acc614deaff50ec24abcc56\".*?\(0x5,\s*0x3\):\s*\"0000000141d008086b3acc6f8a4eff5158a92c2c75\".*?\(0x1,\s*0x7\):\s*\"0000000141d008086b3acbf3269a7a91944575\".*?\(0x7,\s*0x1\):\s*\"0000000141d008086b3acc332499ec2488aacd\".*?\(0x1,\s*0xB\):\s*\"0000000141d008086b3acbf3269a7a91944576\".*?\(0xB,\s*0x1\):\s*\"0000000141d008086b3acc332499ec24af9158f0\".*?\(0x2,\s*0xB\):\s*\"0000000141d008086b3acbf5cad40984ca22bb59\".*?\(0xB,\s*0x2\):\s*\"0000000141d008086b3acc332499ec24af9159\".*?extra two-/three-block skew pairs",
     ),
     (
+        "probe_locks_cross_plane_diagonal_skew_pairs",
+        "scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py",
+        r"TAILS\s*=\s*\{.*?\(0x6,\s*0xA\):\s*\"0000000141d008086b3acc69422e0369fac6564b1d00\".*?\(0x9,\s*0x3\):\s*\"0000000141d008086b3acc68c91f7fa8bed612b08a00\".*?\(0x3,\s*0x9\):\s*\"0000000141d008086b3acc614d087fa8761255e62b00\".*?\(0xA,\s*0x6\):\s*\"0000000141d008086b3acc707b65036a06ac2577ea00\".*?diagonal-skew reciprocal pairs",
+    ),
+    (
         "probe_locks_cross_plane_high_amp_split_guards",
         "scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py",
         r"AMPLITUDE_TAILS\s*=\s*\{.*?\(0x6,\s*0x9,\s*160,\s*160\):\s*\"0000000141d008086b7ffeef\".*?\(0xC,\s*0x3,\s*160,\s*160\):\s*\"0000000141d008086bbaff\".*?\(0x3,\s*0xC,\s*160,\s*160\):\s*\"0000000141d008086b3ffe\".*?\(0x3,\s*0xC,\s*160,\s*96\):\s*\"0000000141d008086b7ede\".*?\(0x3,\s*0xC,\s*96,\s*96\):\s*\"0000000141d008086b7ede\"",
