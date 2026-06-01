@@ -59,7 +59,7 @@ TAILS = {
     (0xA, 0x5): "0000000141d008086b3acc707c4426d40d584ac22b",
     (0x7, 0xB): "0000000141d008086b3acc36849d0ec2488aacde0d00000300",
     (0xB, 0x7): "0000000141d008086b3acc36849d0ec24af9158f060000",
-    (0x3, 0xC): "0000000141d008086b3acc614c37df50ec24aaa82a",
+    (0x3, 0xC): "0000000141d008086b3acc614c3ad97438412009d5",
     (0xC, 0x3): "0000000141d008086b3acc626e1472133cb0958454",
     (0x1, 0xF): "0000000141d008086b3acbf59d7451ccca22bad74d",
     (0x2, 0xF): "0000000141d008086b3acbf4ded3f999944575ae9b",
@@ -118,8 +118,10 @@ AMPLITUDE_TAILS = {
     (0x9, 0x6, 160, 96): "0000000141d008086b7ade",
     (0xC, 0x3, 96, 160): "0000000141d008086bbaff",
     (0xC, 0x3, 160, 160): "0000000141d008086bbaff",
-    (0x3, 0xC, 160, 160): "0000000141d008086b7ecd",
-    (0x3, 0xC, 96, 160): "0000000141d008086b7ecd",
+    (0x3, 0xC, 160, 160): "0000000141d008086b3ffe",
+    (0x3, 0xC, 96, 160): "0000000141d008086b3ffe",
+    (0x3, 0xC, 160, 96): "0000000141d008086b7ede",
+    (0x3, 0xC, 96, 96): "0000000141d008086b7ede",
     (0x2, 0xF, 160, 96): "0000000141d008086b3aff7dbfbe",
     (0x1, 0xE, 160, 160): "0000000141d008086b3bcdfd",
     (0x1, 0xE, 96, 160): "0000000141d008086b3bcdfd",
@@ -155,14 +157,11 @@ AMPLITUDE_TAILS = {
     (0x8, 0x7, 96, 96): "0000000141d008086b7eddf7",
 }
 
-# These are intentionally *not* promoted yet: the opposite sign directions for
-# the Cb0x3/Cr0xC split-row complement still short-decode. Locking the exact
-# miss keeps the successful positive-positive and negative-Cb/positive-Cr guards
-# from being misread as a complete split-row sign matrix.
-EXPECTED_MISSES = {
-    (0x3, 0xC, 160, 96): (FRAME_SIZE, "bytestream -19", "0000000141d008086bbacd"),
-    (0x3, 0xC, 96, 96): (FRAME_SIZE, "bytestream -19", "0000000141d008086bbacd"),
-}
+# Split-row Cb0x3/Cr0xC high-amplitude polarity coverage is fully promoted by
+# the scoped plane-local CBF walk in h264_bitstream.v. Keep EXPECTED_MISSES as
+# an empty explicit hook so future partial-promotion probes can still share the
+# one-frame-miss checker without reintroducing a known split-row short-decode.
+EXPECTED_MISSES = {}
 
 
 def checker_chroma(mask: int, value: int = 136) -> bytes:
@@ -411,8 +410,7 @@ def main() -> int:
         "plus positive, reciprocal, mixed-sign, asymmetric complement, "
         "and complete +/-32 sign matrices for the targeted all-but-one/singleton "
         "complement mirror families "
-        "while keeping the remaining Cb0x3/Cr0xC positive-Cb/negative-Cr split-row "
-        "sign directions locked as known one-frame bytestream -19 misses "
+        "including the full Cb0x3/Cr0xC split-row sign matrix "
         "high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
         "checked-in -7 CABAC queue initializer"
     )

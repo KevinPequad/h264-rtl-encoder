@@ -106,9 +106,9 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"cabac_chroma_ac_cb_plane_any_nz.*?cabac_chroma_ac_cb_plane_full_nz.*?cabac_chroma_ac_cr_plane_any_nz.*?cabac_chroma_ac_cr_plane_full_nz.*?cabac_chroma_ac_cb_plane_any_nz\(\) &&\s*!cabac_chroma_ac_cb_plane_full_nz\(\) &&\s*!cabac_chroma_ac_cr_plane_any_nz\(\).*?bottom-row sparse Cb.*?3'd2: begin left_coded_i = 1'b1; top_coded_i = 1'b1; end.*?default: begin left_coded_i = 1'b0; top_coded_i = 1'b0; end.*?cabac_chroma_ac_cr_plane_full_nz\(\).*?cabac_res_chroma_ac_cbf_ctx_sel_for = \{top_coded_i, left_coded_i\}",
     ),
     (
-        "bitstream_repairs_b4_plane_local_cbf_walk",
+        "bitstream_repairs_b4_and_split_row_plane_local_cbf_walk",
         "rtl/h264_bitstream.v",
-        r"cabac_chroma_ac_cb_plane_nz_mask\(\)\s*==\s*4'hb.*?cabac_chroma_ac_cr_plane_nz_mask\(\)\s*==\s*4'h4.*?Cb-all-but-one / Cr-singleton.*?left_coded_i\s*=\s*plane_block_i\[0\].*?block_i - 4'd1.*?top_coded_i\s*=\s*\(plane_block_i >= 3'd2\).*?block_i - 4'd2.*?Sparse Cb-only AC needs a dedicated CBF context walk",
+        r"cabac_chroma_ac_cb_plane_nz_mask\(\)\s*==\s*4'hb.*?cabac_chroma_ac_cr_plane_nz_mask\(\)\s*==\s*4'h4.*?cabac_chroma_ac_cb_plane_nz_mask\(\)\s*==\s*4'h3.*?cabac_chroma_ac_cr_plane_nz_mask\(\)\s*==\s*4'hc.*?Cb-all-but-one / Cr-singleton.*?Cb-top-row / Cr-bottom-row split-row.*?left_coded_i\s*=\s*plane_block_i\[0\].*?block_i - 4'd1.*?top_coded_i\s*=\s*\(plane_block_i >= 3'd2\).*?block_i - 4'd2.*?Sparse Cb-only AC needs a dedicated CBF context walk",
     ),
     (
         "bitstream_initializes_chroma_residual_contexts",
@@ -233,17 +233,17 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "probe_locks_cross_plane_high_amp_split_guards",
         "scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py",
-        r"AMPLITUDE_TAILS\s*=\s*\{.*?\(0x6,\s*0x9,\s*160,\s*160\):\s*\"0000000141d008086b7ffeef\".*?\(0xC,\s*0x3,\s*160,\s*160\):\s*\"0000000141d008086bbaff\".*?\(0x3,\s*0xC,\s*160,\s*160\):\s*\"0000000141d008086b7ecd\"",
+        r"AMPLITUDE_TAILS\s*=\s*\{.*?\(0x6,\s*0x9,\s*160,\s*160\):\s*\"0000000141d008086b7ffeef\".*?\(0xC,\s*0x3,\s*160,\s*160\):\s*\"0000000141d008086bbaff\".*?\(0x3,\s*0xC,\s*160,\s*160\):\s*\"0000000141d008086b3ffe\".*?\(0x3,\s*0xC,\s*160,\s*96\):\s*\"0000000141d008086b7ede\".*?\(0x3,\s*0xC,\s*96,\s*96\):\s*\"0000000141d008086b7ede\"",
     ),
     (
-        "probe_locks_split_row_remaining_misses",
+        "probe_promotes_split_row_remaining_signs",
         "scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py",
-        r"EXPECTED_MISSES\s*=\s*\{.*?\(0x3,\s*0xC,\s*160,\s*96\):\s*\(FRAME_SIZE,\s*\"bytestream -19\",\s*\"0000000141d008086bbacd\"\).*?\(0x3,\s*0xC,\s*96,\s*96\):\s*\(FRAME_SIZE,\s*\"bytestream -19\",\s*\"0000000141d008086bbacd\"\).*?CROSS_PLANE_AC_EXPECTED_MISS.*?remaining Cb0x3/Cr0xC positive-Cb/negative-Cr split-row",
+        r"Split-row Cb0x3/Cr0xC high-amplitude polarity coverage is fully promoted.*?EXPECTED_MISSES\s*=\s*\{\}.*?full Cb0x3/Cr0xC split-row sign matrix",
     ),
     (
-        "probe_rejects_split_row_cr_payload_bank_hypothesis",
+        "probe_locks_split_row_cbf_walk_repair_boundary",
         "scripts/run_cabac_p16x16_chroma_ac_split_row_payload_probe.py",
-        r"CB_MASK\s*=\s*0x3.*?CR_MASK\s*=\s*0xC.*?STAGED_SPLIT_CTX.*?4'h3\)\s*&&.*?4'hc.*?EXPECTED_BASELINE_MISSES\s*=\s*\{.*?\(160,\s*96\):\s*\(\"0000000141d008086bbacd\",\s*\"bytestream -19\"\).*?\(96,\s*96\):\s*\(\"0000000141d008086bbacd\",\s*\"bytestream -19\"\).*?EXPECTED_STAGED_MISSES\s*=\s*\{.*?\(160,\s*96\):\s*\(\"0000000141d008086bfafe5f\",\s*\"bytestream -18\"\).*?\(96,\s*96\):\s*\(\"0000000141d008086bfafe5f\",\s*\"bytestream -18\"\).*?rejects.*?naive Cr-side split payload-bank extension",
+        r"CB_MASK\s*=\s*0x3.*?CR_MASK\s*=\s*0xC.*?STAGED_SPLIT_CTX.*?4'h3\)\s*&&.*?4'hc.*?EXPECTED_BASELINE_STRICT\s*=\s*\{.*?\(160,\s*96\):\s*\"0000000141d008086b7ede\".*?\(96,\s*96\):\s*\"0000000141d008086b7ede\".*?EXPECTED_STAGED_STRICT\s*=\s*\{.*?\(160,\s*96\):\s*\"0000000141d008086b7efd5f\".*?\(96,\s*96\):\s*\"0000000141d008086b7efd5f\".*?non-canonical.*?changes the strict stream tail",
     ),
     (
         "probe_locks_cross_plane_mixed_sign_complement_guards",
@@ -403,7 +403,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, promoted Cb/Cr chroma-AC mask lattices with exact plane-local SAD, promoted cross-plane Cb+Cr AC strict-decode coverage including skew-pair guards, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, scoped high-amplitude cross-plane Cr payload-bank promotion locks, Cr AC first-payload substitution coverage, B4 first-payload value-class coverage, B4 second/third-payload empty-class, payload-boundary, terminal arithmetic-state, and B4 trace-contrast coverage, refreshed queue-alignment Cb/Cr lattice baseline coverage, Cb/Cr AC promoted shape/amplitude strict-decode coverage, Cb AC phase/polarity tail plus first-payload substitution coverage, Cr AC phase/polarity tail plus first-payload substitution coverage, and combined, sparse same-plane/cross-plane, plus single-plane luma/chroma DC-only/AC residual strict-decode smoke coverage with locked current decoded-plane metrics")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, promoted Cb/Cr chroma-AC mask lattices with exact plane-local SAD, promoted cross-plane Cb+Cr AC strict-decode coverage including skew-pair guards and the full Cb0x3/Cr0xC split-row sign matrix, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, scoped high-amplitude cross-plane Cr payload-bank promotion locks, split-row CBF-walk repair-boundary coverage, Cr AC first-payload substitution coverage, B4 first-payload value-class coverage, B4 second/third-payload empty-class, payload-boundary, terminal arithmetic-state, and B4 trace-contrast coverage, refreshed queue-alignment Cb/Cr lattice baseline coverage, Cb/Cr AC promoted shape/amplitude strict-decode coverage, Cb AC phase/polarity tail plus first-payload substitution coverage, Cr AC phase/polarity tail plus first-payload substitution coverage, and combined, sparse same-plane/cross-plane, plus single-plane luma/chroma DC-only/AC residual strict-decode smoke coverage with locked current decoded-plane metrics")
     return 0
 
 
