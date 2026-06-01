@@ -238,7 +238,7 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "probe_promotes_cross_plane_high_amp_miss_target",
         "scripts/run_cabac_p16x16_chroma_ac_high_amp_miss_probe.py",
-        r"PROMOTED_CASES\s*=\s*\{.*?\(0x2,\s*0xD,\s*160,\s*160\):\s*\"0000000141d008086b3aec7fe6\".*?\(0x2,\s*0xD,\s*96,\s*160\):\s*\"0000000141d008086b3aec7f7c\".*?\(0x2,\s*0xD,\s*160,\s*96\):\s*\"0000000141d008086b3adefda6\".*?\(0x2,\s*0xD,\s*96,\s*96\):\s*\"0000000141d008086b3adefdfc\".*?\(0x4,\s*0xB,\s*160,\s*160\):\s*\"0000000141d008086b3bcf7fbf\".*?\(0x4,\s*0xB,\s*96,\s*160\):\s*\"0000000141d008086b3bcf7f7f\".*?\(0x4,\s*0xB,\s*160,\s*96\):\s*\"0000000141d008086b3becf5bf\".*?\(0x4,\s*0xB,\s*96,\s*96\):\s*\"0000000141d008086b3becf57f\".*?assert_planes\(cb_mask, cr_mask, fixture, raw, cb_value, cr_value\).*?former Cb singleton / Cr all-but-one",
+        r"PROMOTED_CASES\s*=\s*\{.*?\(0x1,\s*0xE,\s*160,\s*160\):\s*\"0000000141d008086b3bcdfd\".*?\(0x2,\s*0xD,\s*160,\s*160\):\s*\"0000000141d008086b3aec7fe6\".*?\(0x2,\s*0xD,\s*96,\s*160\):\s*\"0000000141d008086b3aec7f7c\".*?\(0x2,\s*0xD,\s*160,\s*96\):\s*\"0000000141d008086b3adefda6\".*?\(0x2,\s*0xD,\s*96,\s*96\):\s*\"0000000141d008086b3adefdfc\".*?\(0x4,\s*0xB,\s*160,\s*160\):\s*\"0000000141d008086b3bcf7fbf\".*?\(0x4,\s*0xB,\s*96,\s*160\):\s*\"0000000141d008086b3bcf7f7f\".*?\(0x4,\s*0xB,\s*160,\s*96\):\s*\"0000000141d008086b3becf5bf\".*?\(0x4,\s*0xB,\s*96,\s*96\):\s*\"0000000141d008086b3becf57f\".*?\(0x8,\s*0x7,\s*96,\s*96\):\s*\"0000000141d008086b7eddf7\".*?Cb singleton / Cr all-but-one",
     ),
     (
         "probe_locks_cross_plane_high_amp_trace_split_bank",

@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Promotion gate for former high-amplitude Cb/Cr chroma-AC complement misses.
+"""Promotion gate for high-amplitude Cb/Cr chroma-AC complement guards.
 
 The Cb singleton + Cr all-but-one high-amplitude complements used to short-decode
 under the shared chroma-AC residual payload context bank.  The RTL now scopes a
 separate Cr payload context bank to these target mask pairs; keep the exact
-promoted strict-decode tails and plane-local SAD locked so the old negative
-probes cannot silently regress.
+promoted strict-decode tails and plane-local SAD locked for those repaired pairs,
+and lock the remaining quadrant-complement high-amplitude singleton/all-but-one
+guards so the old negative probes cannot silently regress into a different
+quadrant.
 """
 
 from __future__ import annotations
@@ -27,6 +29,10 @@ from scripts.run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe import (
 )
 
 PROMOTED_CASES = {
+    (0x1, 0xE, 160, 160): "0000000141d008086b3bcdfd",
+    (0x1, 0xE, 96, 160): "0000000141d008086b3bcdfd",
+    (0x1, 0xE, 160, 96): "0000000141d008086b3add75",
+    (0x1, 0xE, 96, 96): "0000000141d008086b3add75",
     (0x2, 0xD, 160, 160): "0000000141d008086b3aec7fe6",
     (0x2, 0xD, 96, 160): "0000000141d008086b3aec7f7c",
     (0x2, 0xD, 160, 96): "0000000141d008086b3adefda6",
@@ -35,6 +41,10 @@ PROMOTED_CASES = {
     (0x4, 0xB, 96, 160): "0000000141d008086b3bcf7f7f",
     (0x4, 0xB, 160, 96): "0000000141d008086b3becf5bf",
     (0x4, 0xB, 96, 96): "0000000141d008086b3becf57f",
+    (0x8, 0x7, 160, 160): "0000000141d008086b7fcdff",
+    (0x8, 0x7, 96, 160): "0000000141d008086b7fcdff",
+    (0x8, 0x7, 160, 96): "0000000141d008086b7eddf7",
+    (0x8, 0x7, 96, 96): "0000000141d008086b7eddf7",
 }
 
 
@@ -62,8 +72,8 @@ def main() -> int:
         )
     print(
         "[PASS] CABAC P16x16 cross-plane high-amplitude chroma-AC promotion gate: "
-        "former Cb singleton / Cr all-but-one +/-32 complement misses now "
-        "strict-decode with exact final-slice tails."
+        "Cb singleton / Cr all-but-one +/-32 quadrant complements strict-decode "
+        "with exact final-slice tails, including former shared-context misses."
     )
     return 0
 
