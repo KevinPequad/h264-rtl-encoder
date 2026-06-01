@@ -360,6 +360,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         "scripts/run_cabac_p16x16_luma_single_chroma_ac_residual_check.py",
         r"luma \+ single-plane chroma-AC residual.*?EXPECTED_CAVLC_SUPPRESSED_BITS\s*=\s*190.*?EXPECTED_Y_SAD\s*=\s*2048.*?name=\"cb_ac\".*?expected_final_slice=\"0000000141d008086b3abeff\".*?expected_u_sad=256.*?expected_v_sad=0.*?expected_cb_ac_blocks=4.*?expected_cr_ac_blocks=0.*?name=\"cr_ac\".*?expected_final_slice=\"0000000141d008086b3af7ef\".*?expected_u_sad=0.*?expected_v_sad=256.*?expected_cb_ac_blocks=0.*?expected_cr_ac_blocks=4.*?CABAC P16x16 luma plus single-plane Cb/Cr AC residual smoke cases strict-decode",
     ),
+    (
+        "gate_locks_luma_sparse_cross_plane_chroma_ac_pairs",
+        "scripts/run_cabac_p16x16_luma_sparse_chroma_ac_residual_check.py",
+        r"luma \+ sparse chroma-AC residual.*?opposite-diagonal Cb\+Cr pairs.*?name=\"cb_ac_m1\".*?expected_final_slice=\"0000000141d008086b3ab6e931d045573d34f76955d4\".*?name=\"cbcr_ac_m1\".*?expected_final_slice=\"0000000141d008086b3ab6e931d045573d34f76966740000\".*?name=\"cbcr_ac_m2_1\".*?expected_final_slice=\"0000000141d008086b3ab6e931d045573d34f76a57890000\".*?name=\"cbcr_ac_m4_8\".*?expected_final_slice=\"0000000141d008086b3ab6e931d045573d34f76a1f1a0000\".*?expected_cavlc_suppressed_bits=162.*?expected_u_sad=64.*?expected_v_sad=64.*?opposite-diagonal mixed-plane pairs",
+    ),
 )
 
 
@@ -388,7 +393,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, promoted Cb/Cr chroma-AC mask lattices with exact plane-local SAD, promoted cross-plane Cb+Cr AC strict-decode coverage including skew-pair guards, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, scoped high-amplitude cross-plane Cr payload-bank promotion locks, Cr AC first-payload substitution coverage, B4 first-payload value-class coverage, B4 second/third-payload empty-class, payload-boundary, terminal arithmetic-state, and B4 trace-contrast coverage, refreshed queue-alignment Cb/Cr lattice baseline coverage, Cb/Cr AC promoted shape/amplitude strict-decode coverage, Cb AC phase/polarity tail plus first-payload substitution coverage, Cr AC phase/polarity tail plus first-payload substitution coverage, and combined plus single-plane luma/chroma DC-only/AC residual strict-decode smoke coverage with locked current decoded-plane metrics")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, promoted Cb/Cr chroma-AC mask lattices with exact plane-local SAD, promoted cross-plane Cb+Cr AC strict-decode coverage including skew-pair guards, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, scoped high-amplitude cross-plane Cr payload-bank promotion locks, Cr AC first-payload substitution coverage, B4 first-payload value-class coverage, B4 second/third-payload empty-class, payload-boundary, terminal arithmetic-state, and B4 trace-contrast coverage, refreshed queue-alignment Cb/Cr lattice baseline coverage, Cb/Cr AC promoted shape/amplitude strict-decode coverage, Cb AC phase/polarity tail plus first-payload substitution coverage, Cr AC phase/polarity tail plus first-payload substitution coverage, and combined, sparse cross-plane, plus single-plane luma/chroma DC-only/AC residual strict-decode smoke coverage with locked current decoded-plane metrics")
     return 0
 
 

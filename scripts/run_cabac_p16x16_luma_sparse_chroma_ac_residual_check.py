@@ -3,9 +3,10 @@
 
 The dense luma+chroma AC gates prove all four chroma AC blocks active.  This
 focused check covers representative sparse mixed cases with luma residual plus
-one active chroma AC block, including single-plane Cb/Cr and same-block
-Cb+Cr corner cases.  It locks strict FFmpeg decode, plane-local CABAC counters, CAVLC
-suppression counts, final P-slice bytes, and current decoded-plane metrics.
+one active chroma AC block, including single-plane Cb/Cr, same-block Cb+Cr
+corner cases, and opposite-diagonal Cb+Cr pairs.  It locks strict FFmpeg decode,
+plane-local CABAC counters, CAVLC suppression counts, final P-slice bytes, and
+current decoded-plane metrics.
 """
 
 from __future__ import annotations
@@ -103,6 +104,26 @@ CASES = (
         cb_mask=0x1,
         cr_mask=0x1,
         expected_final_slice="0000000141d008086b3ab6e931d045573d34f76966740000",
+        expected_cavlc_suppressed_bits=162,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=64,
+        expected_v_sad=64,
+    ),
+    Case(
+        name="cbcr_ac_m2_1",
+        cb_mask=0x2,
+        cr_mask=0x1,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76a57890000",
+        expected_cavlc_suppressed_bits=162,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=64,
+        expected_v_sad=64,
+    ),
+    Case(
+        name="cbcr_ac_m4_8",
+        cb_mask=0x4,
+        cr_mask=0x8,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76a1f1a0000",
         expected_cavlc_suppressed_bits=162,
         expected_y_sad=EXPECTED_Y_SAD,
         expected_u_sad=64,
@@ -293,7 +314,7 @@ def main() -> int:
     sim = build_baseline_sim()
     for case in CASES:
         run_case(sim, case)
-    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases strict-decode with plane-local counters")
+    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including opposite-diagonal mixed-plane pairs, strict-decode with plane-local counters")
     return 0
 
 
