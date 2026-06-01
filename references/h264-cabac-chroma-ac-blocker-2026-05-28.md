@@ -457,3 +457,9 @@ Next useful probe:
 - For the continuation cases, mutating only the fifth residual payload byte gives narrow strict expected-SAD classes: Cr-only mask `0x3` has 16 passing values (`0x0d,0x0f,0x18-0x19,0x48,0x4d-0x4e,0x54,0x65,0x8e,0x9a,0xbf,0xd4,0xdf,0xe7,0xf0`) and sparse Cb+Cr `0x1/0x1` has only two (`0x2b,0xf6`).
 - The generated baseline fifth bytes (`0xab` and `0x5e`) stay outside those classes, reinforcing that the source repair should target CABAC arithmetic/renormalization/output-byte state rather than bytestream literal patching.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_fifth_payload_value_sweep.py` passes.
+
+## 2026-05-31 high-amplitude 0x2/0xd first-payload range lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_miss_probe.py` so the remaining high-amplitude Cb singleton / Cr all-but-one `0x2/0xd` complement misses no longer lock only the short-output FFmpeg signatures and final tails.
+- The probe now sweeps the first CABAC payload byte after the shared `d0 08 08 6b` P-slice prefix for all four `±32` sign combinations and locks the exact byte-value classes that produce strict two-frame decode with byte-identical IDR and expected plane-local SAD.
+- Both known repair-family values (`0x75` and `0x6b`) are inside the expected-SAD class for all four cases, while the generated baseline first payload remains `0xbb` and stays outside those classes. This keeps the high-amplitude miss scoped to the same CABAC first-payload arithmetic/renormalization boundary as the Cb-only, Cr-only, and sparse mixed-plane blockers.
