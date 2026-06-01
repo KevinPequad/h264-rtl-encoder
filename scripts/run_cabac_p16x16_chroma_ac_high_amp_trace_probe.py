@@ -347,6 +347,14 @@ PAYLOAD_CTX_EXPECTATIONS: dict[str, dict[str, list[tuple[object, ...]] | list[tu
 }
 
 
+P_SLICE_EMIT_TAIL = [
+    (0, 3, 7, "d0", 32, "d008086b0000000000000000", 0, 0),
+    (0, 3, 7, "08", 24, "08086b000000000000000000", 0, 0),
+    (0, 3, 7, "08", 16, "086b00000000000000000000", 0, 0),
+    (0, 3, 7, "6b", 8, "6b0000000000000000000000", 0, 0),
+]
+
+
 def build_debug_sim() -> Path:
     workspace = Path(stage_workspace("h264_cabac_high_amp_trace_"))
     config = BuildConfig(
@@ -415,6 +423,33 @@ def parse_payload_bytes(text: str) -> list[int]:
         if m:
             bytes_out.append(int(m.group(1), 16))
     return bytes_out
+
+
+def parse_emit_rows(text: str) -> list[tuple[int, int, int, str, int, str, int, int]]:
+    rows: list[tuple[int, int, int, str, int, str, int, int]] = []
+    for line in text.splitlines():
+        if "[CABACEMIT]" not in line:
+            continue
+        m = re.search(
+            r"mb=(\d+) return_state=(\d+) return_sub=(\d+) byte=([0-9a-fA-F]+) "
+            r"bit_cnt=(\d+) bit_buf=([0-9a-fA-F]+) pending_kind=(\d+) pending_sel=(\d+)",
+            line,
+        )
+        if not m:
+            continue
+        rows.append(
+            (
+                int(m.group(1)),
+                int(m.group(2)),
+                int(m.group(3)),
+                m.group(4)[:2].lower(),
+                int(m.group(5)),
+                m.group(6).lower(),
+                int(m.group(7)),
+                int(m.group(8)),
+            )
+        )
+    return rows
 
 
 def parse_residual_chunks(text: str) -> list[tuple[int, int, int]]:
@@ -583,6 +618,14 @@ def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
             f"[FAIL] HIGH_AMP_TRACE {name} coded blocks {coded_blocks}, expected {spec['coded_blocks']}"
         )
 
+    emit_rows = parse_emit_rows(text)
+    p_slice_emit_tail = [item for item in emit_rows if item[1] == 3][-4:]
+    if p_slice_emit_tail != P_SLICE_EMIT_TAIL:
+        raise SystemExit(
+            f"[FAIL] HIGH_AMP_TRACE {name} P-slice emit tail {p_slice_emit_tail}, "
+            f"expected {P_SLICE_EMIT_TAIL}"
+        )
+
     payload_bytes = parse_payload_bytes(text)
     if payload_bytes[: len(spec["payload_bytes"])] != spec["payload_bytes"]:
         raise SystemExit(
@@ -626,7 +669,7 @@ def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
     print(
         f"[PASS] HIGH_AMP_TRACE {name}: {status}, tail={tail}, "
         f"CBF={cbf_order}, payload={[f'0x{b:02x}' for b in payload_bytes[:3]]}, "
-        f"chunks={chunk_summary}, first_ctx={first_ctx}, "
+        f"p_slice_emit_tail={p_slice_emit_tail}, chunks={chunk_summary}, first_ctx={first_ctx}, "
         f"payload_final_ctx={payload_final_ctx}, term={term_state}"
     )
 
@@ -638,7 +681,7 @@ def main() -> int:
     print(
         "[PASS] CABAC P16x16 high-amplitude chroma-AC trace probe locks the failing "
         "Cb0x2/Cr0xd sign-family against reciprocal Cb0xd/Cr0x2 strict pass, including "
-        "plane-local CBF walks, residual output chunks, first payload bytes, and "
+        "plane-local CBF walks, P-slice emit-tail bit-buffer rows, residual output chunks, first payload bytes, and "
         "first/final-payload and terminate arithmetic context state."
     )
     return 0

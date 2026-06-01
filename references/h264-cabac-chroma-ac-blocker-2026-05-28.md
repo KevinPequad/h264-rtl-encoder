@@ -503,3 +503,9 @@ Next useful probe:
 - The four `Cb0x2/Cr0xd` miss sign cases all keep four coded blocks with payload context counts `(21,21,21,20)`, but their final per-block arithmetic states split by sign (`Cr=+32` keeps later `pbyte=d6/b3/dc`, `Cr=-32` keeps `pbyte=d2/b3/dc`). The reciprocal `Cb0xd/Cr0x2` strict-pass lane stays locked with coded blocks `0/2/3/5` and final pending bytes `4a/e5/12/dc`.
 - This gives the next repair a stable per-coded-block residual-tail endpoint to compare against the first-payload and terminate divergence, keeping the target on CABAC arithmetic/renormalization/output-byte state rather than CBF selector or literal bytestream patching.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.
+
+## 2026-06-01 high-amplitude P-slice emit-tail lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so the same high-amplitude miss/pass sign-family now also locks the common P-slice `[CABACEMIT]` tail rows and bit-buffer progression: `d0/08/08/6b` with bit counts `32/24/16/8` and no pending residual context.
+- This confirms the remaining high-amplitude split is not caused by earlier P-slice header framing drift; every locked miss and reciprocal strict-pass case reaches the identical pre-residual emit-tail boundary before diverging in the first residual payload bytes and later CABAC arithmetic state.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.
