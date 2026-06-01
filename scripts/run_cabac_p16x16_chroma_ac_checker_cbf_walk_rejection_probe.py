@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT))
 
 from scripts.rtl_runner import BuildConfig, build_sim, stage_workspace  # noqa: E402
 from scripts.run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe import (  # noqa: E402
-    check_expected_miss,
+    check_case,
     decode_raw,
     final_slice_hex,
     make_fixture,
@@ -49,12 +49,12 @@ WIDE_CHECKER_SELECTOR = """                  ((cabac_chroma_ac_cb_plane_nz_mask(
 CANONICAL_STRICT_TAIL = "0000000141d008086b7fff"
 REJECTED_WIDE_CBF_TAIL = "0000000141d008086bbecf"
 
-# The same staged selector widening also fails to promote representative
-# Cr-negative checker misses; keep these locked so future repair work does not
-# retest this already-rejected selector path.
-UNCHANGED_CR_NEGATIVE_MISSES = {
-    (0x5, 0xA, 160, 96): (384, "bytestream -23", "0000000141d008086bbbff"),
-    (0xA, 0x5, 160, 96): (384, "bytestream -15", "0000000141d008086bbfef"),
+# The same staged selector widening does promote representative Cr-negative
+# checker misses.  Keep those tails locked as strict rows while still rejecting
+# the broad path because it regresses the Cr-positive strict control above.
+PROMOTED_CR_NEGATIVE_TAILS = {
+    (0x5, 0xA, 160, 96): "0000000141d008086b3acc6e",
+    (0xA, 0x5, 160, 96): "0000000141d008086b3aec7e",
 }
 
 
@@ -108,23 +108,20 @@ def main() -> int:
         f"the Cr-positive strict control: decoded={len(raw)} bytes, "
         f"tail={tail}, canonical_tail={CANONICAL_STRICT_TAIL}, ffmpeg={err_sig!r}"
     )
-    for (cb_mask, cr_mask, cb_value, cr_value), (expected_bytes, expected_signature, expected_tail) in (
-        UNCHANGED_CR_NEGATIVE_MISSES.items()
-    ):
-        check_expected_miss(
+    for (cb_mask, cr_mask, cb_value, cr_value), expected_tail in PROMOTED_CR_NEGATIVE_TAILS.items():
+        check_case(
             sim,
             cb_mask,
             cr_mask,
+            expected_tail,
             cb_value,
             cr_value,
-            expected_bytes,
-            expected_signature,
-            expected_tail,
         )
     print(
-        "[PASS] CABAC P16x16 checker high-amplitude Cr-negative repair target "
-        "stays on CABAC arithmetic/renormalization or a narrower selector, not the "
-        "Cr-negative-gated Cb0x5/Cr0xA + Cb0xA/Cr0x5 plane-local CBF walk"
+        "[PASS] CABAC P16x16 checker high-amplitude broad CBF-walk candidate "
+        "promotes the Cr-negative rows but remains rejected because it regresses "
+        "the Cr-positive checker strict control; next repair must be narrower "
+        "than the whole Cb0x5/Cr0xA + Cb0xA/Cr0x5 selector family"
     )
     return 0
 
