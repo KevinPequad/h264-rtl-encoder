@@ -75,8 +75,9 @@ TAILS = {
 # (one checkerboard block contributes SAD=64).  Single-plane amplitude probes
 # cover Cb-only/Cr-only value 160, but a combined Cb+Cr macroblock also needs a
 # bounded guard because it shares residual level/sign contexts across both
-# planes.  Keep this to a small positive/mixed-sign Cb/Cr sample so the cron
-# gate remains bounded.
+# planes.  Keep this to a small positive/mixed-sign Cb/Cr sample, plus a pair
+# of high-amplitude three-plus-one-block asymmetric complement guards, so the
+# cron gate remains bounded.
 AMPLITUDE_TAILS = {
     (0x5, 0xA, 160, 136): "0000000141d008086b",
     (0x5, 0xA, 136, 160): "0000000141d008086b",
@@ -99,6 +100,8 @@ AMPLITUDE_TAILS = {
     (0x1, 0xE, 160, 160): "0000000141d008086b3bcdfd",
     (0xE, 0x1, 160, 160): "0000000141d008086b7edd7ff6",
     (0xD, 0x2, 160, 160): "0000000141d008086b3addf5",
+    (0x7, 0x8, 160, 160): "0000000141d008086b7eddf5ff",
+    (0x8, 0x7, 160, 160): "0000000141d008086b7fcdff",
 }
 
 
@@ -301,7 +304,7 @@ def main() -> int:
         "sparse+dense right-column/bottom-row, same-diagonal dense, "
         "asymmetric three-block plus reciprocal mirror, dense-Cb, dense-Cr, "
         "all-but-one reciprocal complements, and dense-both Cb+Cr AC masks "
-        "plus positive, reciprocal, and mixed-sign "
+        "plus positive, reciprocal, mixed-sign, and asymmetric complement "
         "high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
         "checked-in -7 CABAC queue initializer"
     )
