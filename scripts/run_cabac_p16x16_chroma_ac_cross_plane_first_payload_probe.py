@@ -29,6 +29,7 @@ EXPECTED_HEADER_TAIL = 0x6B
 
 # Representative cross-plane cases: sparse/sparse top-row, diagonal, split-row,
 # orthogonal axis-pair, bottom/top mirror pairs, bottom-row cross-corners,
+# reciprocal diagonal singletons,
 # sparse-Cb plus dense-Cr / dense-Cb plus sparse-Cr right-column and bottom-row
 # controls, dense-Cr, dense-Cb, same-diagonal dense, asymmetric three-block,
 # its reciprocal mirror, all-but-one reciprocal complements, and dense-both controls.  This is
@@ -40,8 +41,10 @@ TAILS = {
     (0x1, 0x1): "0000000141d008086b3acbb8b517a9",
     (0x1, 0x2): "0000000141d008086b3acbb8b517b2",
     (0x2, 0x1): "0000000141d008086b3acbeb2d4098",
+    (0x2, 0x4): "0000000141d008086b3acbeb2d408a",
     (0x3, 0x3): "0000000141d008086b3acc614c11ff50ec24abcc54",
     (0x4, 0x1): "0000000141d008086b3acbdfe134e8",
+    (0x4, 0x2): "0000000141d008086b3acbdfe134f0",
     (0x5, 0x5): "0000000141d008086b3acc6f8c40ff5158a92c2c76",
     (0x6, 0x9): "0000000141d008086b3acc6941a435899e104b1c8a00",
     (0x9, 0x6): "0000000141d008086b3acc68c9ae34745f6b095dfa00",
@@ -291,7 +294,8 @@ def main() -> int:
     print(
         "[PASS] CABAC P16x16 cross-plane chroma-AC gate promoted: representative "
         "sparse/sparse, mirror, split-row, bottom-row cross-corner, "
-        "orthogonal axis-pair, sparse+dense right-column/bottom-row, same-diagonal dense, "
+        "orthogonal axis-pair, reciprocal diagonal singleton, "
+        "sparse+dense right-column/bottom-row, same-diagonal dense, "
         "asymmetric three-block plus reciprocal mirror, dense-Cb, dense-Cr, "
         "all-but-one reciprocal complements, and dense-both Cb+Cr AC masks "
         "plus positive, reciprocal, and mixed-sign "
