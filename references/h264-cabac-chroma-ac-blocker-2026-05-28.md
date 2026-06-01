@@ -521,3 +521,9 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so the remaining `Cb0x2/Cr0xd` high-amplitude sign-family misses and reciprocal `Cb0xd/Cr0x2` strict-pass lane now lock the CHRAC_CBF `[CABACCTX]` trail, not only the CBF value order.
 - The new lock records each chroma-AC block's CBF selector, context state-in/out, arithmetic low/range/queue/outstanding/pending byte, and plane-bank selector. The miss family keeps the expected Cb singleton / Cr all-but-one walk while the reciprocal pass keeps its mirror walk, so future source experiments cannot silently change the pre-payload context state while chasing the first residual payload byte.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.
+
+## 2026-06-01 high-amplitude stream-size lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so each remaining `Cb0x2/Cr0xd` high-amplitude sign-family miss and the reciprocal `Cb0xd/Cr0x2` strict-pass lane must keep the exact generated H.264 stream size (`448` bytes), in addition to final P-slice tail, CBF/order/context trail, payload emit rows, residual chunks, and terminate arithmetic state.
+- This prevents a future CABAC arithmetic experiment from preserving the final tail while silently moving SPS/PPS/AUD/slice framing or adding/removing payload bytes around the same residual boundary.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.

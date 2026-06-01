@@ -40,6 +40,7 @@ CASES: dict[str, dict[str, Any]] = {
         "cr_mask": 0xD,
         "cb_value": 160,
         "cr_value": 160,
+        "stream_size": 448,
         "tail": "0000000141d008086bbbecf7",
         "decoded_bytes": FRAME_SIZE,
         "ffmpeg_signature": "bytestream -16",
@@ -97,6 +98,7 @@ CASES: dict[str, dict[str, Any]] = {
         "cr_mask": 0xD,
         "cb_value": 96,
         "cr_value": 160,
+        "stream_size": 448,
         "tail": "0000000141d008086bbbecf7",
         "decoded_bytes": FRAME_SIZE,
         "ffmpeg_signature": "bytestream -16",
@@ -154,6 +156,7 @@ CASES: dict[str, dict[str, Any]] = {
         "cr_mask": 0xD,
         "cb_value": 160,
         "cr_value": 96,
+        "stream_size": 448,
         "tail": "0000000141d008086bbbccff",
         "decoded_bytes": FRAME_SIZE,
         "ffmpeg_signature": "bytestream -26",
@@ -211,6 +214,7 @@ CASES: dict[str, dict[str, Any]] = {
         "cr_mask": 0xD,
         "cb_value": 96,
         "cr_value": 96,
+        "stream_size": 448,
         "tail": "0000000141d008086bbbccff",
         "decoded_bytes": FRAME_SIZE,
         "ffmpeg_signature": "bytestream -26",
@@ -268,6 +272,7 @@ CASES: dict[str, dict[str, Any]] = {
         "cr_mask": 0x2,
         "cb_value": 160,
         "cr_value": 160,
+        "stream_size": 448,
         "tail": "0000000141d008086b3addf5",
         "decoded_bytes": EXPECTED_BYTES,
         "ffmpeg_signature": "",
@@ -690,6 +695,10 @@ def parse_terminate_state(text: str) -> dict[str, object]:
 def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
     fixture, h264, sim_log = run_rtl_case(sim, name, spec)
     stream = h264.read_bytes()
+    if len(stream) != spec["stream_size"]:
+        raise SystemExit(
+            f"[FAIL] HIGH_AMP_TRACE {name} stream size {len(stream)}, expected {spec['stream_size']}"
+        )
     tail = final_slice_hex(stream, name)
     if tail != spec["tail"]:
         raise SystemExit(f"[FAIL] HIGH_AMP_TRACE {name} tail {tail}, expected {spec['tail']}")
@@ -794,7 +803,7 @@ def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
     chunk_summary = [(blk, f"0x{byte:02x}", bit_cnt) for blk, byte, bit_cnt in residual_chunks]
     print(
         f"[PASS] HIGH_AMP_TRACE {name}: {status}, tail={tail}, "
-        f"CBF={cbf_order}, payload={[f'0x{b:02x}' for b in payload_bytes[:3]]}, "
+        f"stream_size={len(stream)}, CBF={cbf_order}, payload={[f'0x{b:02x}' for b in payload_bytes[:3]]}, "
         f"p_slice_emit_tail={p_slice_emit_tail}, payload_emit_rows={payload_emit_rows}, "
         f"chunks={chunk_summary}, first_ctx={first_ctx}, cbf_ctx={cbf_ctx_trail}, "
         f"payload_final_ctx={payload_final_ctx}, term={term_state}"
@@ -809,7 +818,7 @@ def main() -> int:
         "[PASS] CABAC P16x16 high-amplitude chroma-AC trace probe locks the failing "
         "Cb0x2/Cr0xd sign-family against reciprocal Cb0xd/Cr0x2 strict pass, including "
         "plane-local CBF walks/context trails, P-slice emit-tail bit-buffer rows, payload emit rows, residual output chunks, first payload bytes, and "
-        "first/final-payload and terminate arithmetic context state."
+        "stream sizes plus first/final-payload and terminate arithmetic context state."
     )
     return 0
 
