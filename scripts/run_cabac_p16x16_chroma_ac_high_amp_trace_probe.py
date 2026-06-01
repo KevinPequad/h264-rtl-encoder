@@ -107,6 +107,24 @@ def payload_ctx_selects(text: str) -> list[int]:
     return selects
 
 
+def high_payload_ctx_summary(text: str) -> list[tuple[int, int, int, int]]:
+    """Return (block, kind, selector, count) rows for split high-bank payload contexts."""
+    counts: dict[tuple[int, int, int], int] = {}
+    for line in text.splitlines():
+        if "[CABACCTX]" not in line or "cat=2" not in line:
+            continue
+        m = re.search(r"blk=(\d+).*kind=(22|23|24) sel=(\d+)", line)
+        if not m:
+            continue
+        block = int(m.group(1))
+        kind = int(m.group(2))
+        selector = int(m.group(3))
+        if selector >= 16:
+            key = (block, kind, selector)
+            counts[key] = counts.get(key, 0) + 1
+    return [(block, kind, selector, count) for (block, kind, selector), count in sorted(counts.items())]
+
+
 def check_case(sim: Path, name: str, spec: dict[str, Any]) -> None:
     fixture, h264, text = run_rtl_case(sim, name, spec)
     stream = h264.read_bytes()
@@ -126,9 +144,21 @@ def check_case(sim: Path, name: str, spec: dict[str, Any]) -> None:
             f"[FAIL] HIGH_AMP_TRACE {name} split-bank visibility {saw_split_bank}, "
             f"expected {spec['split']}; selects={selects[:24]}"
         )
+    high_summary = high_payload_ctx_summary(text)
+    expected_high_summary = (
+        [(4 + idx, 24, 17, 5) for idx in range(4) if (int(spec["cr_mask"]) >> idx) & 1]
+        if bool(spec["split"])
+        else []
+    )
+    if high_summary != expected_high_summary:
+        raise SystemExit(
+            f"[FAIL] HIGH_AMP_TRACE {name} high-bank payload context summary "
+            f"{high_summary}, expected {expected_high_summary}"
+        )
     print(
         f"[PASS] HIGH_AMP_TRACE {name}: strict two-frame decode tail={tail}, "
-        f"split_bank={saw_split_bank}, payload_ctx_selects_sample={selects[:12]}"
+        f"split_bank={saw_split_bank}, high_payload_ctx={high_summary}, "
+        f"payload_ctx_selects_sample={selects[:12]}"
     )
 
 

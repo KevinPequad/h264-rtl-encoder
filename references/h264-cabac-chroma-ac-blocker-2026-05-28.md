@@ -566,3 +566,9 @@ Next useful probe:
 - Re-ran `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` and found the diagnostic expectations were stale after the checked-in CABAC core queue alignment work: all tracked Cb-only masks `0x1`, `0x2`, `0x3`, `0x4`, `0x5`, `0x6`, `0x8`, and `0xc` now strict-decode both frames (`768/768`) with clean FFmpeg stderr.
 - Refreshed the arithmetic trace locks to treat the previously short masks as strict-pass rows, with exact Cb-only decoded-plane SAD (`64 * popcount(mask)`), stream size/tail, residual byte chunks, CBF arithmetic trail, terminate pre-state, first-payload state, and the common P-slice emit-tail rows preserved.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` passes. The next source target remains the remaining mixed/high-amplitude chroma-AC arithmetic/output-byte cases, not the now-promoted low-amplitude Cb-only mask lattice.
+
+## 2026-06-01 high-amplitude split-bank payload-count lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so the promoted high-amplitude `Cb0x2/Cr0xd` and `Cb0x4/Cr0xb` rows do not merely require that some payload context selector enters the split bank.
+- The probe now locks the exact high-bank payload context summary: only coded Cr high-amplitude blocks use selector `17`, only as `CHRAC_LEVEL` (`kind=24`), and exactly five context updates are expected for each coded Cr block. Shared-bank controls must keep an empty high-bank summary.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes; the broad chroma residual red gate still passes after the hardening.
