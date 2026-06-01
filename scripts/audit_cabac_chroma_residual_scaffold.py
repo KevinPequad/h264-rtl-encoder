@@ -233,7 +233,12 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "probe_locks_cross_plane_diagonal_skew_pairs",
         "scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py",
-        r"TAILS\s*=\s*\{.*?\(0x6,\s*0xA\):\s*\"0000000141d008086b3acc69422e0369fac6564b1d00\".*?\(0x9,\s*0x3\):\s*\"0000000141d008086b3acc68c91f7fa8bed612b08a00\".*?\(0x3,\s*0x9\):\s*\"0000000141d008086b3acc614d087fa8761255e62b00\".*?\(0xA,\s*0x6\):\s*\"0000000141d008086b3acc707b65036a06ac2577ea00\".*?diagonal-skew reciprocal pairs",
+        r"TAILS\s*=\s*\{.*?\(0x6,\s*0xA\):\s*\"0000000141d008086b3acc69422e0369fac6564b1d00\".*?\(0x9,\s*0x3\):\s*\"0000000141d008086b3acc68c91f7fa8bed612b08a00\".*?\(0x3,\s*0x9\):\s*\"0000000141d008086b3acc614d087fa8761255e62b00\".*?\(0xA,\s*0x6\):\s*\"0000000141d008086b3acc707b65036a06ac2577ea00\".*?diagonal-skew.*?reciprocal pairs",
+    ),
+    (
+        "probe_locks_cross_plane_edge_adjacent_pairs",
+        "scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py",
+        r"TAILS\s*=\s*\{.*?\(0x5,\s*0xC\):\s*\"0000000141d008086b3acc6f8a74df5158a92b61bf\".*?\(0xC,\s*0x5\):\s*\"0000000141d008086b3acc626fed72133cb0958456\".*?\(0xA,\s*0x3\):\s*\"0000000141d008086b3acc707a5226d40d584ac22a\".*?\(0x3,\s*0xA\):\s*\"0000000141d008086b3acc614e10df50ec24ac1476\".*?\(0x6,\s*0xC\):\s*\"0000000141d008086b3acc6941340369fac655f00a\".*?\(0xC,\s*0x6\):\s*\"0000000141d008086b3acc626f1ca9099e584aefd5\".*?edge-adjacent reciprocal pairs",
     ),
     (
         "probe_locks_cross_plane_high_amp_split_guards",

@@ -34,7 +34,7 @@ EXPECTED_HEADER_TAIL = 0x6B
 # sparse-Cb plus dense-Cr / dense-Cb plus sparse-Cr right-column and bottom-row
 # controls, dense-Cr, dense-Cb, same-diagonal dense, complementary checker,
 # asymmetric three-block, its reciprocal mirror, extra two-/three-block skew pairs,
-# two-block off-diagonal and diagonal-skew reciprocal pairs,
+# two-block off-diagonal, diagonal-skew, and edge-adjacent reciprocal pairs,
 # high-amplitude skew-pair sign partitions,
 # asymmetric three-plus-one complements, three-block reciprocal complements,
 # all-but-one reciprocal complements including same-quadrant singleton mirrors,
@@ -87,6 +87,12 @@ TAILS = {
     (0xB, 0x7): "0000000141d008086b3acc36849d0ec24af9158f060000",
     (0x3, 0xC): "0000000141d008086b3acc614c3ad97438412009d5",
     (0xC, 0x3): "0000000141d008086b3acc626e1472133cb0958454",
+    (0x5, 0xC): "0000000141d008086b3acc6f8a74df5158a92b61bf",
+    (0xC, 0x5): "0000000141d008086b3acc626fed72133cb0958456",
+    (0xA, 0x3): "0000000141d008086b3acc707a5226d40d584ac22a",
+    (0x3, 0xA): "0000000141d008086b3acc614e10df50ec24ac1476",
+    (0x6, 0xC): "0000000141d008086b3acc6941340369fac655f00a",
+    (0xC, 0x6): "0000000141d008086b3acc626f1ca9099e584aefd5",
     (0x1, 0xF): "0000000141d008086b3acbf59d7451ccca22bad74d",
     (0x2, 0xF): "0000000141d008086b3acbf4ded3f999944575ae9b",
     (0x4, 0xF): "0000000141d008086b3acbf452ba2e8e9222bad74d",
@@ -449,7 +455,7 @@ def main() -> int:
         "sparse+dense right-column/bottom-row, same-diagonal dense, "
         "complementary checker, "
         "asymmetric three-block plus reciprocal mirror, extra two-/three-block skew pairs, "
-        "two-block off-diagonal and diagonal-skew reciprocal pairs, dense-Cb, dense-Cr, "
+        "two-block off-diagonal, diagonal-skew, and edge-adjacent reciprocal pairs, dense-Cb, dense-Cr, "
         "high-amplitude skew-pair sign partitions, "
         "asymmetric three-plus-one complements, three-block reciprocal complements, "
         "all-but-one reciprocal complements, "
