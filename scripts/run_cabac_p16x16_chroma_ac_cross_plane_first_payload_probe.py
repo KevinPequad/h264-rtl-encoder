@@ -38,7 +38,7 @@ EXPECTED_HEADER_TAIL = 0x6B
 # high-amplitude skew-pair sign partitions,
 # asymmetric three-plus-one complements, three-block reciprocal complements,
 # all-but-one reciprocal complements including same-quadrant singleton mirrors,
-# and dense-both controls.  This is
+# same-mask Cb/Cr controls, and dense-both controls.  This is
 # deliberately smaller than the full 15x15 lattice
 # so the cron gate stays
 # bounded while still covering the combinations that used to expose short-decode
@@ -49,6 +49,7 @@ TAILS = {
     (0x1, 0x3): "0000000141d008086b3acc099da545ea4651",
     (0x1, 0x5): "0000000141d008086b3acc10be3269ea4654",
     (0x2, 0x1): "0000000141d008086b3acbeb2d4098",
+    (0x2, 0x2): "0000000141d008086b3acbeb2d409d",
     (0x2, 0x3): "0000000141d008086b3acc09a95b50261328",
     (0x2, 0x4): "0000000141d008086b3acbeb2d408a",
     (0x2, 0x6): "0000000141d008086b3acc0da221745404ca",
@@ -62,6 +63,7 @@ TAILS = {
     (0x4, 0x1): "0000000141d008086b3acbdfe134e8",
     (0x4, 0x2): "0000000141d008086b3acbdfe134f0",
     (0x4, 0x3): "0000000141d008086b3acc09a6884d3a3a48",
+    (0x4, 0x4): "0000000141d008086b3acbdfe134d3",
     (0x5, 0x5): "0000000141d008086b3acc6f8c40ff5158a92c2c76",
     (0x5, 0x1): "0000000141d008086b3acc6f78d26962a4b0",
     (0x5, 0x3): "0000000141d008086b3acc6f8a4eff5158a92c2c75",
@@ -69,11 +71,13 @@ TAILS = {
     (0x6, 0x2): "0000000141d008086b3acc693d717438412c96",
     (0x6, 0x3): "0000000141d008086b3acc6941211369fac656391500",
     (0x6, 0x5): "0000000141d008086b3acc69421b1369fac656391500",
+    (0x6, 0x6): "0000000141d008086b3acc6941af25899e104b258e00",
     (0x6, 0x9): "0000000141d008086b3acc6941a435899e104b1c8a00",
     (0x6, 0xA): "0000000141d008086b3acc69422e0369fac6564b1d00",
     (0x9, 0x3): "0000000141d008086b3acc68c91f7fa8bed612b08a00",
     (0x9, 0xA): "0000000141d008086b3acc68ca2c6fa8bed612bbf500",
     (0x9, 0x6): "0000000141d008086b3acc68c9ae34745f6b095dfa00",
+    (0x9, 0x9): "0000000141d008086b3acc68c9a344745f6b09584500",
     (0x3, 0x9): "0000000141d008086b3acc614d087fa8761255e62b00",
     (0xA, 0x6): "0000000141d008086b3acc707b65036a06ac2577ea00",
     (0xA, 0x9): "0000000141d008086b3acc707b52136a06ac25611500",
@@ -108,6 +112,7 @@ TAILS = {
     (0xF, 0xF): "0000000141d008086b7acc",
     (0x1, 0x7): "0000000141d008086b3acbf3269a7a91944575",
     (0x7, 0x1): "0000000141d008086b3acc332499ec2488aacd",
+    (0x7, 0x7): "0000000141d008086b3acc36849d0ec2488aacde0d0000",
     (0x7, 0x8): "0000000141d008086b3acc332499ec2488aacd",
     (0x8, 0x7): "0000000141d008086b3acbf588e2699065115d",
     (0x1, 0xB): "0000000141d008086b3acbf3269a7a91944576",
@@ -460,6 +465,7 @@ def main() -> int:
         "asymmetric three-plus-one complements, three-block reciprocal complements, "
         "all-but-one reciprocal complements, "
         "same-quadrant all-but-one/singleton mirrors, "
+        "same-mask Cb/Cr controls, "
         "and dense-both Cb+Cr AC masks "
         "plus positive, reciprocal, mixed-sign, asymmetric complement, "
         "and complete +/-32 sign matrices for the targeted all-but-one/singleton "
