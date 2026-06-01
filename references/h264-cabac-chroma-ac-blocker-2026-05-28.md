@@ -533,3 +533,9 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so each coded chroma-AC block in the remaining `Cb0x2/Cr0xd` high-amplitude sign-family and reciprocal `Cb0xd/Cr0x2` strict-pass lane now locks the exact post-CBF residual bin trail from `[CABACRES]`.
 - The new lock keeps the significant/last/level/bypass sequence identical except for the expected sign-dependent bypass bits for `+32` vs `-32`, proving the current failing and passing lanes share the same residual binarization scaffold and diverge below that, in CABAC arithmetic/renormalization/output-byte state.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.
+
+## 2026-06-01 high-amplitude counter ownership guard
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so every remaining `Cb0x2/Cr0xd` high-amplitude miss and the reciprocal `Cb0xd/Cr0x2` strict-pass comparison must also report `cabac_p16x16_mbs=1`, plane-local `cb_ac_mbs=1` / `cr_ac_mbs=1`, exact Cb/Cr AC block counters, and `cavlc_suppressed_bits=` in the RTL simulation log.
+- This keeps the high-amplitude diagnostic tied to the integrated RTL CABAC residual path instead of accidentally accepting a trace from a stream that lost plane-local AC ownership or fell back to legacy CAVLC emission.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.

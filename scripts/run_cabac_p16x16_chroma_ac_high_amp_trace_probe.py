@@ -762,7 +762,7 @@ def parse_terminate_state(text: str) -> dict[str, object]:
     raise SystemExit("[FAIL] HIGH_AMP_TRACE missing CABACTERM state")
 
 
-def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
+def check_case(sim: Path, name: str, spec: dict[str, Any]) -> None:
     fixture, h264, sim_log = run_rtl_case(sim, name, spec)
     stream = h264.read_bytes()
     if len(stream) != spec["stream_size"]:
@@ -800,6 +800,18 @@ def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
         )
 
     text = sim_log.read_text(encoding="utf-8", errors="replace")
+    for needle in (
+        "cabac_p16x16_mbs=1",
+        "cb_ac_mbs=1",
+        "cr_ac_mbs=1",
+        f"cb_ac_blocks={int(spec['cb_mask']).bit_count()}",
+        f"cr_ac_blocks={int(spec['cr_mask']).bit_count()}",
+    ):
+        if needle not in text:
+            raise SystemExit(f"[FAIL] HIGH_AMP_TRACE {name} sim log missing {needle}")
+    if "cavlc_suppressed_bits=" not in text:
+        raise SystemExit(f"[FAIL] HIGH_AMP_TRACE {name} did not suppress legacy CAVLC")
+
     cbf_order = parse_cbf_order(text)
     if cbf_order != spec["cbf_order"]:
         raise SystemExit(f"[FAIL] HIGH_AMP_TRACE {name} CBF order {cbf_order}, expected {spec['cbf_order']}")
