@@ -5,9 +5,9 @@ The Cb singleton + Cr all-but-one high-amplitude complements used to short-decod
 under the shared chroma-AC residual payload context bank.  The RTL now scopes a
 separate Cr payload context bank to these target mask pairs; keep the exact
 promoted strict-decode tails and plane-local SAD locked for those repaired pairs,
-and lock the remaining quadrant-complement high-amplitude singleton/all-but-one
-guards so the old negative probes cannot silently regress into a different
-quadrant.
+and lock the reciprocal all-but-one + singleton guards that already strict-decode
+on the shared bank so the old negative probes cannot silently regress into a
+different quadrant or direction.
 """
 
 from __future__ import annotations
@@ -45,6 +45,18 @@ PROMOTED_CASES = {
     (0x8, 0x7, 96, 160): "0000000141d008086b7fcdff",
     (0x8, 0x7, 160, 96): "0000000141d008086b7eddf7",
     (0x8, 0x7, 96, 96): "0000000141d008086b7eddf7",
+    (0xE, 0x1, 160, 160): "0000000141d008086b7edd7ff6",
+    (0xE, 0x1, 160, 96): "0000000141d008086b7edd7ff6",
+    (0xE, 0x1, 96, 160): "0000000141d008086b7fecfff7",
+    (0xE, 0x1, 96, 96): "0000000141d008086b7fecfff7",
+    (0xD, 0x2, 160, 160): "0000000141d008086b3addf5",
+    (0xD, 0x2, 160, 96): "0000000141d008086b3addf5",
+    (0xD, 0x2, 96, 160): "0000000141d008086b3bed75",
+    (0xD, 0x2, 96, 96): "0000000141d008086b3bed75",
+    (0x7, 0x8, 160, 160): "0000000141d008086b7eddf5ff",
+    (0x7, 0x8, 160, 96): "0000000141d008086b7eddf5ff",
+    (0x7, 0x8, 96, 160): "0000000141d008086b7bce757f",
+    (0x7, 0x8, 96, 96): "0000000141d008086b7bce757f",
 }
 
 
@@ -72,8 +84,9 @@ def main() -> int:
         )
     print(
         "[PASS] CABAC P16x16 cross-plane high-amplitude chroma-AC promotion gate: "
-        "Cb singleton / Cr all-but-one +/-32 quadrant complements strict-decode "
-        "with exact final-slice tails, including former shared-context misses."
+        "Cb singleton / Cr all-but-one +/-32 quadrant complements and reciprocal "
+        "all-but-one / singleton shared-bank controls strict-decode with exact "
+        "final-slice tails, including former shared-context misses."
     )
     return 0
 
