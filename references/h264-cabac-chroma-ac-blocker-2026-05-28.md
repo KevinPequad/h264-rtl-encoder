@@ -515,3 +515,9 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so the same sign-family now locks the residual payload `[CABACEMIT]` rows, not only payload byte values and the pre-residual P-slice tail.
 - The failing `Cb0x2/Cr0xd` cases keep pending residual context clear (`pending_kind=0/pending_sel=0`) across the emitted `bb/ec/f7` or `bb/cc/ff` payload bytes, while the reciprocal strict-pass `Cb0xd/Cr0x2` case emits `3a/dd/f5` with `pending_kind=21/pending_sel=6`. This gives the next source repair a precise handoff-row split at the first payload boundary.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.
+
+## 2026-06-01 high-amplitude CBF context trail lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so the remaining `Cb0x2/Cr0xd` high-amplitude sign-family misses and reciprocal `Cb0xd/Cr0x2` strict-pass lane now lock the CHRAC_CBF `[CABACCTX]` trail, not only the CBF value order.
+- The new lock records each chroma-AC block's CBF selector, context state-in/out, arithmetic low/range/queue/outstanding/pending byte, and plane-bank selector. The miss family keeps the expected Cb singleton / Cr all-but-one walk while the reciprocal pass keeps its mirror walk, so future source experiments cannot silently change the pre-payload context state while chasing the first residual payload byte.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.

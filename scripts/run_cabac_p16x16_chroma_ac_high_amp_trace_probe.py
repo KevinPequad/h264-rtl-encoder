@@ -372,6 +372,60 @@ PAYLOAD_CTX_EXPECTATIONS: dict[str, dict[str, list[tuple[object, ...]] | list[tu
 }
 
 
+CBF_CTX_EXPECTATIONS: dict[str, list[tuple[object, ...]]] = {
+    "fail_cb2_crd_160_160": [
+        (0, 3, 105, 109, "4314", 396, -2, 0, 1, "5"),
+        (1, 2, 124, 126, "87b6", 394, -1, 0, 1, "5"),
+        (2, 1, 119, 123, "2040", 464, -4, 0, 1, "9"),
+        (3, 2, 126, 124, "4080", 448, -3, 0, 1, "9"),
+        (4, 4, 92, 100, "10774", 396, -1, 0, 1, "9"),
+        (5, 7, 105, 109, "1ccc", 324, -5, 0, 1, "d6"),
+        (6, 7, 109, 107, "3998", 428, -4, 0, 1, "d6"),
+        (7, 5, 119, 117, "a41c", 368, -2, 0, 1, "b3"),
+    ],
+    "fail_cb2_crd_096_160": [
+        (0, 3, 105, 109, "4314", 396, -2, 0, 1, "85"),
+        (1, 2, 124, 126, "87b6", 394, -1, 0, 1, "85"),
+        (2, 1, 119, 123, "498", 464, -4, 0, 1, "7"),
+        (3, 2, 126, 124, "930", 448, -3, 0, 1, "7"),
+        (4, 4, 92, 100, "2a34", 396, -1, 0, 1, "7"),
+        (5, 7, 105, 109, "1ccc", 324, -5, 0, 1, "d6"),
+        (6, 7, 109, 107, "3998", 428, -4, 0, 1, "d6"),
+        (7, 5, 119, 117, "a41c", 368, -2, 0, 1, "b3"),
+    ],
+    "fail_cb2_crd_160_096": [
+        (0, 3, 105, 109, "c6b4", 396, -2, 0, 1, "27"),
+        (1, 2, 124, 126, "18ef6", 394, -1, 0, 1, "27"),
+        (2, 1, 119, 123, "2040", 464, -4, 0, 1, "9"),
+        (3, 2, 126, 124, "4080", 448, -3, 0, 1, "9"),
+        (4, 4, 92, 100, "10774", 396, -1, 0, 1, "9"),
+        (5, 7, 105, 109, "2e4", 324, -5, 0, 1, "d2"),
+        (6, 7, 109, 107, "5c8", 428, -4, 0, 1, "d2"),
+        (7, 5, 119, 117, "4800", 368, -2, 0, 1, "b3"),
+    ],
+    "fail_cb2_crd_096_096": [
+        (0, 3, 105, 109, "c6b4", 396, -2, 0, 1, "a7"),
+        (1, 2, 124, 126, "18ef6", 394, -1, 0, 1, "a7"),
+        (2, 1, 119, 123, "498", 464, -4, 0, 1, "7"),
+        (3, 2, 126, 124, "930", 448, -3, 0, 1, "7"),
+        (4, 4, 92, 100, "2a34", 396, -1, 0, 1, "7"),
+        (5, 7, 105, 109, "2e4", 324, -5, 0, 1, "d2"),
+        (6, 7, 109, 107, "5c8", 428, -4, 0, 1, "d2"),
+        (7, 5, 119, 117, "4800", 368, -2, 0, 1, "b3"),
+    ],
+    "pass_cbd_cr2_160_160": [
+        (0, 3, 105, 103, "20914", 275, -1, 0, 1, "19"),
+        (1, 3, 103, 109, "61b4", 444, -3, 0, 1, "4a"),
+        (2, 3, 109, 107, "61b4", 314, -3, 0, 1, "4a"),
+        (3, 1, 119, 117, "4f4", 300, -7, 0, 1, "ad"),
+        (4, 7, 105, 109, "4bc4", 396, -3, 0, 1, "12"),
+        (5, 6, 124, 126, "9916", 394, -2, 0, 1, "12"),
+        (6, 5, 119, 123, "c58c", 284, -1, 0, 1, "dc"),
+        (7, 6, 126, 124, "318", 312, -8, 0, 1, "62"),
+    ],
+}
+
+
 P_SLICE_EMIT_TAIL = [
     (0, 3, 7, "d0", 32, "d008086b0000000000000000", 0, 0),
     (0, 3, 7, "08", 24, "08086b000000000000000000", 0, 0),
@@ -522,6 +576,39 @@ def parse_first_payload_ctx(text: str, expected_blk: int) -> dict[str, object]:
                 "ari_pbyte": m.group(11).lower(),
             }
     raise SystemExit(f"[FAIL] HIGH_AMP_TRACE missing first payload ctx for block {expected_blk}")
+
+
+def parse_cbf_context_trail(text: str) -> list[tuple[object, ...]]:
+    trail: list[tuple[object, ...]] = []
+    for line in text.splitlines():
+        if "[CABACCTX]" not in line or "cat=2" not in line:
+            continue
+        m = re.search(
+            r"blk=(\d+) kind=(\d+) sel=(\d+) in=(\d+) out=(\d+) "
+            r"ari_low=([0-9a-fA-F]+) ari_range=(\d+) ari_queue=(-?\d+) "
+            r"ari_outstanding=(\d+) ari_pending=(\d+) ari_pbyte=([0-9a-fA-F]+)",
+            line,
+        )
+        if not m:
+            continue
+        blk, kind, sel, state_in, state_out = map(int, m.groups()[:5])
+        if kind != 21:
+            continue
+        trail.append(
+            (
+                blk,
+                sel,
+                state_in,
+                state_out,
+                m.group(6).lower(),
+                int(m.group(7)),
+                int(m.group(8)),
+                int(m.group(9)),
+                int(m.group(10)),
+                m.group(11).lower(),
+            )
+        )
+    return trail
 
 
 def parse_payload_context_summary(text: str) -> tuple[list[tuple[int, int]], list[tuple[object, ...]]]:
@@ -677,6 +764,13 @@ def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
             f"[FAIL] HIGH_AMP_TRACE {name} first payload ctx {first_ctx}, expected {spec['first_payload_ctx']}"
         )
 
+    cbf_ctx_trail = parse_cbf_context_trail(text)
+    if cbf_ctx_trail != CBF_CTX_EXPECTATIONS[name]:
+        raise SystemExit(
+            f"[FAIL] HIGH_AMP_TRACE {name} CBF context trail {cbf_ctx_trail}, "
+            f"expected {CBF_CTX_EXPECTATIONS[name]}"
+        )
+
     payload_ctx_counts, payload_final_ctx = parse_payload_context_summary(text)
     expected_payload_ctx = PAYLOAD_CTX_EXPECTATIONS[name]
     if payload_ctx_counts != expected_payload_ctx["counts"]:
@@ -702,7 +796,7 @@ def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
         f"[PASS] HIGH_AMP_TRACE {name}: {status}, tail={tail}, "
         f"CBF={cbf_order}, payload={[f'0x{b:02x}' for b in payload_bytes[:3]]}, "
         f"p_slice_emit_tail={p_slice_emit_tail}, payload_emit_rows={payload_emit_rows}, "
-        f"chunks={chunk_summary}, first_ctx={first_ctx}, "
+        f"chunks={chunk_summary}, first_ctx={first_ctx}, cbf_ctx={cbf_ctx_trail}, "
         f"payload_final_ctx={payload_final_ctx}, term={term_state}"
     )
 
@@ -714,7 +808,7 @@ def main() -> int:
     print(
         "[PASS] CABAC P16x16 high-amplitude chroma-AC trace probe locks the failing "
         "Cb0x2/Cr0xd sign-family against reciprocal Cb0xd/Cr0x2 strict pass, including "
-        "plane-local CBF walks, P-slice emit-tail bit-buffer rows, payload emit rows, residual output chunks, first payload bytes, and "
+        "plane-local CBF walks/context trails, P-slice emit-tail bit-buffer rows, payload emit rows, residual output chunks, first payload bytes, and "
         "first/final-payload and terminate arithmetic context state."
     )
     return 0
