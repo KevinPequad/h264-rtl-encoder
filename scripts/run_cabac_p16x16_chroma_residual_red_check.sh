@@ -11,6 +11,7 @@ INPUT_CB_DC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_dc.yuv"
 INPUT_CB_AC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_ac.yuv"
 INPUT_CR_DC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_dc.yuv"
 INPUT_CR_AC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_ac.yuv"
+INPUT_BOTH_AC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_both_ac.yuv"
 python3 - <<'PY'
 from pathlib import Path
 W = H = 16
@@ -27,6 +28,7 @@ fixtures = {
     'cb_ac': (Path('data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_ac.yuv'), plane_ac, flat_chroma),
     'cr_dc': (Path('data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_dc.yuv'), flat_chroma, plane_dc),
     'cr_ac': (Path('data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_ac.yuv'), flat_chroma, plane_ac),
+    'both_ac': (Path('data/smoke_16x16_2f_cabac_p16x16_chroma_residual_both_ac.yuv'), plane_ac, plane_ac),
 }
 for name, (out, u1, v1) in fixtures.items():
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -103,6 +105,11 @@ run_case() {
     fi
     if [ "$name" = "cr_ac" ] && ! grep -q '\[CABAC_CHROMA\].*cb_ac_mbs=0 cr_ac_mbs=1' "$sim_log"; then
       echo "[FAIL] chroma residual ${name} did not mark the Cr-only CABAC chroma AC plane"
+      tail -80 "$sim_log"
+      exit 1
+    fi
+    if [ "$name" = "both_ac" ] && ! grep -q '\[CABAC_CHROMA\].*cb_ac_mbs=1 cr_ac_mbs=1' "$sim_log"; then
+      echo "[FAIL] chroma residual ${name} did not mark both CABAC chroma AC planes"
       tail -80 "$sim_log"
       exit 1
     fi
@@ -194,6 +201,11 @@ elif name.startswith("cr_"):
         raise SystemExit(
             f"[FAIL] chroma residual {name} decoded plane sanity expected Cr-only change, got U_SAD={u_sad} V_SAD={v_sad}"
         )
+elif name.startswith("both_"):
+    if u_sad == 0 or v_sad == 0:
+        raise SystemExit(
+            f"[FAIL] chroma residual {name} decoded plane sanity expected both chroma planes to change, got U_SAD={u_sad} V_SAD={v_sad}"
+        )
 else:
     raise SystemExit(f"[FAIL] chroma residual {name} has no decoded-plane sanity expectation")
 
@@ -213,5 +225,6 @@ run_case "cb_ac" "$INPUT_CB_AC" 2 1 0 4 0 256 0
 run_case "cr_dc" "$INPUT_CR_DC" 1 0 1 0 0 0 512
 
 run_case "cr_ac" "$INPUT_CR_AC" 2 0 1 0 4 0 256
+run_case "both_ac" "$INPUT_BOTH_AC" 2 1 1 4 4 256 256
 
-echo "[PASS] CABAC P16x16 Cb/Cr DC-only and DC+AC chroma residual smoke streams strict-decoded"
+echo "[PASS] CABAC P16x16 Cb/Cr DC-only, single-plane AC, and both-plane AC chroma residual smoke streams strict-decoded"

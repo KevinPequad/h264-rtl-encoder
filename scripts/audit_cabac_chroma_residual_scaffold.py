@@ -161,9 +161,9 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"expected_u_sad.*?expected_v_sad.*?decoded-plane SAD drift.*?decoded plane sanity expected Cb-only change.*?decoded plane sanity expected Cr-only change.*?\[PASS\] chroma residual \{name\} decoded-plane sanity U_SAD=\{u_sad\} V_SAD=\{v_sad\}.*?run_case \"cb_dc\" \"\$INPUT_CB_DC\" 1 1 0 0 0 512 0.*?run_case \"cb_ac\" \"\$INPUT_CB_AC\" 2 1 0 4 0 256 0.*?run_case \"cr_dc\" \"\$INPUT_CR_DC\" 1 0 1 0 0 0 512.*?run_case \"cr_ac\" \"\$INPUT_CR_AC\" 2 0 1 0 4 0 256",
     ),
     (
-        "gate_promotes_cr_ac_strict_decode",
+        "gate_promotes_cr_ac_and_both_plane_strict_decode",
         "scripts/run_cabac_p16x16_chroma_residual_red_check.sh",
-        r"run_case \"cr_ac\" \"\$INPUT_CR_AC\" 2 0 1 0 4 0 256\s+echo \"\[PASS\] CABAC P16x16 Cb/Cr DC-only and DC\+AC chroma residual smoke streams strict-decoded\"",
+        r"INPUT_BOTH_AC=.*?smoke_16x16_2f_cabac_p16x16_chroma_residual_both_ac\.yuv.*?'both_ac':.*?run_case \"cr_ac\" \"\$INPUT_CR_AC\" 2 0 1 0 4 0 256\s+run_case \"both_ac\" \"\$INPUT_BOTH_AC\" 2 1 1 4 4 256 256\s+echo \"\[PASS\] CABAC P16x16 Cb/Cr DC-only, single-plane AC, and both-plane AC chroma residual smoke streams strict-decoded\"",
     ),
     (
         "probe_promotes_both_plane_ac_strict_pass",
