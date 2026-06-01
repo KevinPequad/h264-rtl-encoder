@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Debug smoke for the scoped Cr payload context split fixing Cb0x2/Cr0xd.
+"""Debug smoke for the scoped Cr payload context split fixing high-amplitude complements.
 
 This keeps a lightweight DEBUG_CABAC_P16X16 guard after the old high-amplitude
 miss was promoted: the targeted Cb-singleton / Cr-all-but-one cases must strict-
@@ -36,6 +36,10 @@ CASES: dict[str, dict[str, Any]] = {
     "promoted_cb2_crd_096_160": {"cb_mask": 0x2, "cr_mask": 0xD, "cb_value": 96, "cr_value": 160, "tail": "0000000141d008086b3aec7f7c", "split": True},
     "promoted_cb2_crd_160_096": {"cb_mask": 0x2, "cr_mask": 0xD, "cb_value": 160, "cr_value": 96, "tail": "0000000141d008086b3adefda6", "split": True},
     "promoted_cb2_crd_096_096": {"cb_mask": 0x2, "cr_mask": 0xD, "cb_value": 96, "cr_value": 96, "tail": "0000000141d008086b3adefdfc", "split": True},
+    "promoted_cb4_crb_160_160": {"cb_mask": 0x4, "cr_mask": 0xB, "cb_value": 160, "cr_value": 160, "tail": "0000000141d008086b3bcf7fbf", "split": True},
+    "promoted_cb4_crb_096_160": {"cb_mask": 0x4, "cr_mask": 0xB, "cb_value": 96, "cr_value": 160, "tail": "0000000141d008086b3bcf7f7f", "split": True},
+    "promoted_cb4_crb_160_096": {"cb_mask": 0x4, "cr_mask": 0xB, "cb_value": 160, "cr_value": 96, "tail": "0000000141d008086b3becf5bf", "split": True},
+    "promoted_cb4_crb_096_096": {"cb_mask": 0x4, "cr_mask": 0xB, "cb_value": 96, "cr_value": 96, "tail": "0000000141d008086b3becf57f", "split": True},
     "control_cbd_cr2_160_160": {"cb_mask": 0xD, "cr_mask": 0x2, "cb_value": 160, "cr_value": 160, "tail": "0000000141d008086b3addf5", "split": False},
 }
 
@@ -115,7 +119,8 @@ def main() -> int:
         check_case(sim, name, spec)
     print(
         "[PASS] CABAC P16x16 high-amplitude chroma-AC trace probe: former Cb0x2/Cr0xd "
-        "miss family strict-decodes through the scoped Cr payload context bank while the reciprocal control remains shared."
+        "and Cb0x4/Cr0xb miss families strict-decode through the scoped Cr payload "
+        "context bank while the reciprocal control remains shared."
     )
     return 0
 
