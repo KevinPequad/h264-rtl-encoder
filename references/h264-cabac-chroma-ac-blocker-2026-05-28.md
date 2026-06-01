@@ -560,3 +560,9 @@ Next useful probe:
 - Each baseline Cr mask must strict-decode both frames with clean FFmpeg stderr, byte-identical IDR, exact `V_SAD = 64 * popcount(mask)`, zero Cb drift, and matching plane-local `cr_ac_blocks` counters. This makes the queue probe symmetric: the source baseline and the staged candidate are both locked across full Cb-only and Cr-only mask lattices before the dense Cb+Cr non-committable regression is evaluated.
 - The static chroma residual scaffold audit now guards that the queue-align probe keeps this Cb/Cr baseline lattice coverage.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_cb_ac_queue_align_probe.py` passes; `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_residual_red_check.sh` passes.
+
+## 2026-06-01 Cb-only arithmetic trace expectation refresh
+
+- Re-ran `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` and found the diagnostic expectations were stale after the checked-in CABAC core queue alignment work: all tracked Cb-only masks `0x1`, `0x2`, `0x3`, `0x4`, `0x5`, `0x6`, `0x8`, and `0xc` now strict-decode both frames (`768/768`) with clean FFmpeg stderr.
+- Refreshed the arithmetic trace locks to treat the previously short masks as strict-pass rows, with exact Cb-only decoded-plane SAD (`64 * popcount(mask)`), stream size/tail, residual byte chunks, CBF arithmetic trail, terminate pre-state, first-payload state, and the common P-slice emit-tail rows preserved.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_cb_ac_arith_trace_probe.sh` passes. The next source target remains the remaining mixed/high-amplitude chroma-AC arithmetic/output-byte cases, not the now-promoted low-amplitude Cb-only mask lattice.
