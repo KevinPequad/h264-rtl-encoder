@@ -11,6 +11,7 @@ INPUT_CB_DC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_dc.yuv"
 INPUT_CB_AC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_ac.yuv"
 INPUT_CR_DC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_dc.yuv"
 INPUT_CR_AC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_ac.yuv"
+INPUT_BOTH_DC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_both_dc.yuv"
 INPUT_BOTH_AC="data/smoke_16x16_2f_cabac_p16x16_chroma_residual_both_ac.yuv"
 python3 - <<'PY'
 from pathlib import Path
@@ -28,6 +29,7 @@ fixtures = {
     'cb_ac': (Path('data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cb_ac.yuv'), plane_ac, flat_chroma),
     'cr_dc': (Path('data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_dc.yuv'), flat_chroma, plane_dc),
     'cr_ac': (Path('data/smoke_16x16_2f_cabac_p16x16_chroma_residual_cr_ac.yuv'), flat_chroma, plane_ac),
+    'both_dc': (Path('data/smoke_16x16_2f_cabac_p16x16_chroma_residual_both_dc.yuv'), plane_dc, plane_dc),
     'both_ac': (Path('data/smoke_16x16_2f_cabac_p16x16_chroma_residual_both_ac.yuv'), plane_ac, plane_ac),
 }
 for name, (out, u1, v1) in fixtures.items():
@@ -225,6 +227,7 @@ run_case "cb_ac" "$INPUT_CB_AC" 2 1 0 4 0 256 0
 run_case "cr_dc" "$INPUT_CR_DC" 1 0 1 0 0 0 512
 
 run_case "cr_ac" "$INPUT_CR_AC" 2 0 1 0 4 0 256
+run_case "both_dc" "$INPUT_BOTH_DC" 1 1 1 0 0 512 512
 run_case "both_ac" "$INPUT_BOTH_AC" 2 1 1 4 4 256 256
 
-echo "[PASS] CABAC P16x16 Cb/Cr DC-only, single-plane AC, and both-plane AC chroma residual smoke streams strict-decoded"
+echo "[PASS] CABAC P16x16 Cb/Cr DC-only, both-plane DC-only, single-plane AC, and both-plane AC chroma residual smoke streams strict-decoded"
