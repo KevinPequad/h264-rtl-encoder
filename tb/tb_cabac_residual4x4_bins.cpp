@@ -493,7 +493,30 @@ int main(int argc, char** argv) {
         {0, 1, 0},
     }, "chroma_ac_three_bit_suffix_payload");
 
-    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma, 4:2:0/4:2:2 chroma-DC zero/nonzero/cbf-increment/clamped-tail, chroma-AC zero/nonzero/cbf-increment/tail-context, multi/three-bit suffix, and output backpressure category blocks\n";
+    tick(dut);
+    auto chroma_ac_full_width_suffix_payload = run_events(dut, {
+        {0, 1, 0, 0, 0},
+        {1, 1, 0, 0, 0},
+        {2, 1, 0, 0, 0},
+        {3, 1, 0, 32771, 1}, // suffix_value=32768 needs all 16 payload bits
+        {4, 1, 0, 32771, 1},
+    });
+    std::vector<Bin> want_full_width_suffix = {
+        {1, 0, 101},
+        {1, 0, 152},
+        {1, 0, 213},
+        {1, 0, 266},
+        {1, 0, 277},
+    };
+    want_full_width_suffix.push_back({1, 1, 0});
+    for (int i = 0; i < 15; ++i) {
+        want_full_width_suffix.push_back({0, 1, 0});
+    }
+    want_full_width_suffix.push_back({1, 1, 0});
+    expect_eq(chroma_ac_full_width_suffix_payload, want_full_width_suffix,
+              "chroma_ac_full_width_suffix_payload");
+
+    std::cout << "[PASS] CABAC residual4x4 bin/context events matched expected luma, 4:2:0/4:2:2 chroma-DC zero/nonzero/cbf-increment/clamped-tail, chroma-AC zero/nonzero/cbf-increment/tail-context, multi/three/full-width suffix, and output backpressure category blocks\n";
     delete dut;
     return 0;
 }

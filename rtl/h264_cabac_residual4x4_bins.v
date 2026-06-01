@@ -54,8 +54,8 @@ module h264_cabac_residual4x4_bins #(
     reg [2:0] state;
     reg [COEFF_W-1:0] pending_abs;
     reg [COEFF_W-1:0] suffix_value;
-    reg [3:0] suffix_bit_idx;
-    reg [3:0] suffix_bits_total;
+    reg [4:0] suffix_bit_idx;
+    reg [4:0] suffix_bits_total;
 
     // Residual context-index maps for coded/significant/last flags.
     // These are ctxIdx values, not local storage indices. The luma default is
@@ -74,7 +74,7 @@ module h264_cabac_residual4x4_bins #(
         end
     endfunction
 
-    function automatic [3:0] suffix_len_for;
+    function automatic [4:0] suffix_len_for;
         input [COEFF_W-1:0] value;
         reg [COEFF_W-1:0] tmp;
         integer i;
@@ -86,11 +86,22 @@ module h264_cabac_residual4x4_bins #(
             // deterministic for integration bring-up. Keep the length detector
             // bounded/synthesis-friendly; do not use a data-dependent while loop.
             tmp = (value > {{(COEFF_W-2){1'b0}}, 2'd2}) ? (value - {{(COEFF_W-2){1'b0}}, 2'd3}) : {COEFF_W{1'b0}};
-            suffix_len_for = 4'd0;
+            suffix_len_for = 5'd0;
             for (i = 0; i < COEFF_W; i = i + 1) begin
                 if (tmp[i])
-                    suffix_len_for = i[3:0] + 4'd1;
+                    suffix_len_for = i[4:0] + 5'd1;
             end
+        end
+    endfunction
+
+    function automatic suffix_bit_for;
+        input [COEFF_W-1:0] value;
+        input [4:0] total;
+        input [3:0] idx;
+        reg [3:0] bit_pos;
+        begin
+            bit_pos = (total == 5'd16) ? (4'd15 - idx) : (total[3:0] - 4'd1 - idx);
+            suffix_bit_for = value[bit_pos];
         end
     endfunction
 
@@ -118,8 +129,8 @@ module h264_cabac_residual4x4_bins #(
             state <= S_IDLE;
             pending_abs <= {COEFF_W{1'b0}};
             suffix_value <= {COEFF_W{1'b0}};
-            suffix_bit_idx <= 4'd0;
-            suffix_bits_total <= 4'd0;
+            suffix_bit_idx <= 5'd0;
+            suffix_bits_total <= 5'd0;
         end else begin
             done <= 1'b0;
             if (bin_valid && !bin_ready) begin
@@ -161,7 +172,7 @@ module h264_cabac_residual4x4_bins #(
                         if (pending_abs > {{(COEFF_W-2){1'b0}}, 2'd2}) begin
                             suffix_value <= pending_abs - {{(COEFF_W-2){1'b0}}, 2'd3};
                             suffix_bits_total <= suffix_len_for(pending_abs);
-                            suffix_bit_idx <= 4'd0;
+                            suffix_bit_idx <= 5'd0;
                             state <= S_LEVEL_SUFFIX;
                         end else begin
                             state <= S_IDLE;
@@ -170,8 +181,8 @@ module h264_cabac_residual4x4_bins #(
 
                     S_LEVEL_SUFFIX: begin
                         if (suffix_bit_idx < suffix_bits_total) begin
-                            emit_bin(suffix_value[suffix_bits_total - 4'd1 - suffix_bit_idx], 1'b1, 9'd0);
-                            suffix_bit_idx <= suffix_bit_idx + 4'd1;
+                            emit_bin(suffix_bit_for(suffix_value, suffix_bits_total, suffix_bit_idx[3:0]), 1'b1, 9'd0);
+                            suffix_bit_idx <= suffix_bit_idx + 5'd1;
                         end else begin
                             state <= S_IDLE;
                         end
