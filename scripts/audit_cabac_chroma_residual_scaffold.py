@@ -236,6 +236,16 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"MISS_CASES\s*=\s*\{.*?\(0x2,\s*0xD,\s*160,\s*160\):\s*\(\"0000000141d008086bbbecf7\",\s*\"bytestream -16\"\).*?\(0x2,\s*0xD,\s*96,\s*160\):\s*\(\"0000000141d008086bbbecf7\",\s*\"bytestream -16\"\).*?\(0x2,\s*0xD,\s*160,\s*96\):\s*\(\"0000000141d008086bbbccff\",\s*\"bytestream -26\"\).*?\(0x2,\s*0xD,\s*96,\s*96\):\s*\(\"0000000141d008086bbbccff\",\s*\"bytestream -26\"\).*?len\(raw\)\s*!=\s*FRAME_SIZE.*?raw\s*!=\s*src\[:FRAME_SIZE\].*?CABAC P16x16 cross-plane high-amplitude chroma-AC miss probe",
     ),
     (
+        "probe_locks_cross_plane_high_amp_payload_mutation_classes",
+        "scripts/run_cabac_p16x16_chroma_ac_high_amp_miss_probe.py",
+        r"FIRST_PAYLOAD_PASS_RANGES\s*=\s*\{.*?\(0x2,\s*0xD,\s*160,\s*160\):\s*\(\s*\(0x00,\s*0xA6\).*?\(0xFC,\s*0xFC\).*?\(0x2,\s*0xD,\s*160,\s*96\):\s*\(\s*\(0x00,\s*0xA6\).*?\(0xF3,\s*0xF3\).*?SECOND_PAYLOAD_PASS_RANGES\s*=\s*\{.*?\(0x2,\s*0xD,\s*160,\s*160\):\s*\(\(0x1A,\s*0x1B\),\).*?\(0x2,\s*0xD,\s*96,\s*96\):\s*\(\(0x1A,\s*0x1B\),\).*?EXPECTED_THIRD_PAYLOAD\s*=\s*\{.*?\(0x2,\s*0xD,\s*160,\s*160\):\s*0xF7.*?\(0x2,\s*0xD,\s*96,\s*96\):\s*0xFF.*?lock_first_payload_pass_range\(stream.*?lock_second_payload_pass_range\(stream.*?lock_third_payload_dead_end\(stream",
+    ),
+    (
+        "probe_locks_cross_plane_high_amp_trace_arithmetic_state",
+        "scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py",
+        r"fail_cb2_crd_160_160.*?\"payload_bytes\":\s*\[0xBB,\s*0xEC,\s*0xF7\].*?\"residual_chunks\":\s*\[\s*\(1,\s*0x05,\s*40\).*?\(7,\s*0xB6,\s*16\).*?\"ari_queue\":\s*-8.*?\"term_state\":\s*\{.*?\"ari_low\":\s*\"620e\".*?pass_cbd_cr2_160_160.*?\"payload_bytes\":\s*\[0x3A,\s*0xDD,\s*0xF5\].*?\"residual_chunks\":\s*\[\s*\(0,\s*0x1A,\s*40\).*?\(5,\s*0xB1,\s*16\).*?parse_coded_residual_bin_trails.*?expected_coded_residual_bin_trails.*?CABAC P16x16 high-amplitude chroma-AC trace probe",
+    ),
+    (
         "probe_locks_cr_ac_first_payload_substitutions",
         "scripts/run_cabac_p16x16_chroma_cr_ac_first_payload_substitution_probe.py",
         r"EXPECTED_FIRST_PAYLOAD\s*=\s*0xEB.*?QUEUE_M8_FIRST_PAYLOAD\s*=\s*0x75.*?BIT7_PROMOTED_PAYLOAD\s*=\s*0x6B.*?STRICT_MASKS\s*=\s*\{0x1,\s*0x2,\s*0x4,\s*0x6,\s*0x8,\s*0x9,\s*0xF\}.*?MISS_SIGNATURES\s*=\s*\{.*?0x3:\s*\"bytestream -6\".*?0xE:\s*\"bytestream -7\".*?for label, value in \(\(\"queue_m8_payload_0x75\", QUEUE_M8_FIRST_PAYLOAD\), \(\"bit7_payload_0x6b\", BIT7_PROMOTED_PAYLOAD\)\).*?assert_cr_only\(mask, fixture, raw, label\).*?check_both_plane_guard",
@@ -318,7 +328,7 @@ def main() -> int:
             print(f"  - {failure}")
         return 1
 
-    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, promoted Cb/Cr chroma-AC mask lattices with exact plane-local SAD, promoted cross-plane Cb+Cr AC strict-decode coverage, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, Cr AC first-payload substitution coverage, Cb/Cr AC promoted shape/amplitude strict-decode coverage, Cb AC phase/polarity tail plus first-payload substitution coverage, Cr AC phase/polarity tail plus first-payload substitution coverage, and combined plus single-plane luma/chroma DC-only/AC residual strict-decode smoke coverage with locked current decoded-plane metrics")
+    print("[PASS] CABAC chroma residual wiring preserves CBP, scan, context bases, edge-coded plane-local chroma AC CBF context selection, state-dispatch, category scheduling, decoded-plane sanity coverage, dense Cr strict-pass promotion, Cr sparse strict-pass promotion, promoted Cb/Cr chroma-AC mask lattices with exact plane-local SAD, promoted cross-plane Cb+Cr AC strict-decode coverage, dense Cb and both-plane AC strict-pass controls plus decoded-plane sanity, chroma AC per-plane block counters, high-amplitude cross-plane miss payload mutation and trace arithmetic-state locks, Cr AC first-payload substitution coverage, Cb/Cr AC promoted shape/amplitude strict-decode coverage, Cb AC phase/polarity tail plus first-payload substitution coverage, Cr AC phase/polarity tail plus first-payload substitution coverage, and combined plus single-plane luma/chroma DC-only/AC residual strict-decode smoke coverage with locked current decoded-plane metrics")
     return 0
 
 
