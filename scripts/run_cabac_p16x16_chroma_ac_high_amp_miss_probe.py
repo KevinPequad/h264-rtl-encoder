@@ -102,6 +102,25 @@ FIRST_PAYLOAD_PASS_RANGES = {
     ),
 }
 
+# Mutating only the second CABAC payload byte gives a much narrower repair class
+# for these high-amplitude complement misses. This keeps the diagnostic pointed
+# at CABAC arithmetic/renormalization state instead of a literal first-byte
+# patch: the checked-in baseline second payload remains outside the strict
+# expected-SAD class for every sign combination.
+EXPECTED_SECOND_PAYLOAD = {
+    (0x2, 0xD, 160, 160): 0xEC,
+    (0x2, 0xD, 96, 160): 0xEC,
+    (0x2, 0xD, 160, 96): 0xCC,
+    (0x2, 0xD, 96, 96): 0xCC,
+}
+
+SECOND_PAYLOAD_PASS_RANGES = {
+    (0x2, 0xD, 160, 160): ((0x1A, 0x1B),),
+    (0x2, 0xD, 96, 160): ((0x1A, 0x1B),),
+    (0x2, 0xD, 160, 96): ((0x1A, 0x1B),),
+    (0x2, 0xD, 96, 96): ((0x1A, 0x1B),),
+}
+
 
 def expanded_values(ranges: tuple[tuple[int, int], ...]) -> set[int]:
     values: set[int] = set()
@@ -180,6 +199,27 @@ def first_payload_index(stream: bytes, label: str) -> int:
     return first_idx
 
 
+def second_payload_index(
+    stream: bytes,
+    cb_mask: int,
+    cr_mask: int,
+    cb_value: int,
+    cr_value: int,
+    label: str,
+) -> int:
+    first_idx = first_payload_index(stream, label)
+    second_idx = first_idx + 1
+    if second_idx >= len(stream):
+        raise SystemExit(f"[FAIL] CROSS_PLANE_HIGH_AMP_MISS {label} missing second CABAC payload byte")
+    expected = EXPECTED_SECOND_PAYLOAD[(cb_mask, cr_mask, cb_value, cr_value)]
+    if stream[second_idx] != expected:
+        raise SystemExit(
+            f"[FAIL] CROSS_PLANE_HIGH_AMP_MISS {label} second payload 0x{stream[second_idx]:02x}, "
+            f"expected 0x{expected:02x}"
+        )
+    return second_idx
+
+
 def lock_first_payload_pass_range(
     stream: bytes,
     fixture: Path,
@@ -220,6 +260,46 @@ def lock_first_payload_pass_range(
     )
 
 
+def lock_second_payload_pass_range(
+    stream: bytes,
+    fixture: Path,
+    cb_mask: int,
+    cr_mask: int,
+    cb_value: int,
+    cr_value: int,
+    label: str,
+) -> None:
+    second_idx = second_payload_index(stream, cb_mask, cr_mask, cb_value, cr_value, label)
+    actual: set[int] = set()
+    for value in range(256):
+        mutated = bytearray(stream)
+        mutated[second_idx] = value
+        raw, err = decode_stream(bytes(mutated))
+        if err.strip() or len(raw) != EXPECTED_BYTES:
+            continue
+        try:
+            assert_planes(cb_mask, cr_mask, fixture, raw, cb_value, cr_value)
+        except SystemExit:
+            continue
+        actual.add(value)
+
+    expected = expanded_values(SECOND_PAYLOAD_PASS_RANGES[(cb_mask, cr_mask, cb_value, cr_value)])
+    if actual != expected:
+        raise SystemExit(
+            f"[FAIL] CROSS_PLANE_HIGH_AMP_MISS {label} second-payload pass range drift: "
+            f"got {len(actual)} [{format_ranges(actual)}], expected {len(expected)} [{format_ranges(expected)}]"
+        )
+    if stream[second_idx] in actual:
+        raise SystemExit(
+            f"[FAIL] CROSS_PLANE_HIGH_AMP_MISS {label} baseline second payload "
+            f"0x{stream[second_idx]:02x} unexpectedly entered the expected-SAD class"
+        )
+    print(
+        f"[PASS] CROSS_PLANE_HIGH_AMP_MISS {label} second-payload expected-SAD class locked: "
+        f"count={len(actual)} ranges={format_ranges(actual)}"
+    )
+
+
 def check_miss_case(
     sim: Path,
     cb_mask: int,
@@ -250,6 +330,7 @@ def check_miss_case(
     if raw != src[:FRAME_SIZE]:
         raise SystemExit(f"[FAIL] CROSS_PLANE_HIGH_AMP_MISS {label} changed IDR reference frame")
     lock_first_payload_pass_range(stream, fixture, cb_mask, cr_mask, cb_value, cr_value, label)
+    lock_second_payload_pass_range(stream, fixture, cb_mask, cr_mask, cb_value, cr_value, label)
     print(
         f"[PASS] CROSS_PLANE_HIGH_AMP_MISS {label} remains bounded one-frame miss: "
         f"decoded={len(raw)}/{EXPECTED_BYTES} signature={expected_signature} tail={tail}"
@@ -264,7 +345,7 @@ def main() -> int:
         "[PASS] CABAC P16x16 cross-plane high-amplitude chroma-AC miss probe: "
         "Cb/Cr 0x2/0xd +/-32 complement cases keep exact final-slice tails, "
         "strict one-frame FFmpeg miss signatures, byte-identical IDR frames, and "
-        "locked first-payload expected-SAD mutation classes."
+        "locked first/second-payload expected-SAD mutation classes."
     )
     return 0
 

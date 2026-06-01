@@ -463,3 +463,9 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_miss_probe.py` so the remaining high-amplitude Cb singleton / Cr all-but-one `0x2/0xd` complement misses no longer lock only the short-output FFmpeg signatures and final tails.
 - The probe now sweeps the first CABAC payload byte after the shared `d0 08 08 6b` P-slice prefix for all four `±32` sign combinations and locks the exact byte-value classes that produce strict two-frame decode with byte-identical IDR and expected plane-local SAD.
 - Both known repair-family values (`0x75` and `0x6b`) are inside the expected-SAD class for all four cases, while the generated baseline first payload remains `0xbb` and stays outside those classes. This keeps the high-amplitude miss scoped to the same CABAC first-payload arithmetic/renormalization boundary as the Cb-only, Cr-only, and sparse mixed-plane blockers.
+
+## 2026-05-31 high-amplitude 0x2/0xd second-payload range lock
+
+- Extended `scripts/run_cabac_p16x16_chroma_ac_high_amp_miss_probe.py` again so the same four high-amplitude `Cb0x2/Cr0xd` sign combinations also sweep the second CABAC payload byte after the locked `d0 08 08 6b bb` prefix.
+- The generated baseline second payloads are `0xec` for the `Cr=+32` cases and `0xcc` for the `Cr=-32` cases; all stay outside the strict expected-SAD repair class.
+- Mutating only the second payload byte has a narrow shared strict expected-SAD class, `0x1a-0x1b`, for all four cases. This reinforces that the repair target is CABAC arithmetic/renormalization/output-byte state across the first residual bytes, not a literal first-payload byte patch.
