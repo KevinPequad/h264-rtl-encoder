@@ -3,12 +3,12 @@
 
 The dense luma+chroma AC gates prove all four chroma AC blocks active.  This
 focused check covers representative sparse mixed cases with luma residual plus
-one active chroma AC block, including single-plane Cb/Cr, same-block Cb+Cr
-corner cases, and opposite-diagonal Cb+Cr pairs.  It locks strict FFmpeg decode,
-plane-local CABAC counters, CAVLC suppression counts, final P-slice bytes,
-current decoded-plane metrics, and per-4x4 chroma-block locality so sparse
-residuals cannot silently land in the wrong chroma quadrant while preserving the
-same aggregate SAD.
+one active chroma AC block, including all four single-plane Cb/Cr quadrants,
+same-block Cb+Cr quadrant cases, and opposite-diagonal Cb+Cr pairs.  It locks
+strict FFmpeg decode, plane-local CABAC counters, CAVLC suppression counts,
+final P-slice bytes, current decoded-plane metrics, and per-4x4 chroma-block
+locality so sparse residuals cannot silently land in the wrong chroma quadrant
+while preserving the same aggregate SAD.
 """
 
 from __future__ import annotations
@@ -72,6 +72,26 @@ CASES = (
         expected_v_sad=0,
     ),
     Case(
+        name="cb_ac_m2",
+        cb_mask=0x2,
+        cr_mask=0x0,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76a08ea",
+        expected_cavlc_suppressed_bits=151,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=64,
+        expected_v_sad=0,
+    ),
+    Case(
+        name="cb_ac_m4",
+        cb_mask=0x4,
+        cr_mask=0x0,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76a46",
+        expected_cavlc_suppressed_bits=151,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=64,
+        expected_v_sad=0,
+    ),
+    Case(
         name="cb_ac_m8",
         cb_mask=0x8,
         cr_mask=0x0,
@@ -92,6 +112,26 @@ CASES = (
         expected_v_sad=64,
     ),
     Case(
+        name="cr_ac_m2",
+        cb_mask=0x0,
+        cr_mask=0x2,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76a408b",
+        expected_cavlc_suppressed_bits=151,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=0,
+        expected_v_sad=64,
+    ),
+    Case(
+        name="cr_ac_m4",
+        cb_mask=0x0,
+        cr_mask=0x4,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76a3db8",
+        expected_cavlc_suppressed_bits=151,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=0,
+        expected_v_sad=64,
+    ),
+    Case(
         name="cr_ac_m8",
         cb_mask=0x0,
         cr_mask=0x8,
@@ -106,6 +146,26 @@ CASES = (
         cb_mask=0x1,
         cr_mask=0x1,
         expected_final_slice="0000000141d008086b3ab6e931d045573d34f76966740000",
+        expected_cavlc_suppressed_bits=162,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=64,
+        expected_v_sad=64,
+    ),
+    Case(
+        name="cbcr_ac_m2",
+        cb_mask=0x2,
+        cr_mask=0x2,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76a57890000",
+        expected_cavlc_suppressed_bits=162,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=64,
+        expected_v_sad=64,
+    ),
+    Case(
+        name="cbcr_ac_m4",
+        cb_mask=0x4,
+        cr_mask=0x4,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76a1f1a0000",
         expected_cavlc_suppressed_bits=162,
         expected_y_sad=EXPECTED_Y_SAD,
         expected_u_sad=64,
@@ -341,7 +401,7 @@ def main() -> int:
     sim = build_baseline_sim()
     for case in CASES:
         run_case(sim, case)
-    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including opposite-diagonal mixed-plane pairs, strict-decode with plane-local counters and per-block chroma locality")
+    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-quadrant mixed pairs, and opposite-diagonal mixed-plane pairs, strict-decode with plane-local counters and per-block chroma locality")
     return 0
 
 
