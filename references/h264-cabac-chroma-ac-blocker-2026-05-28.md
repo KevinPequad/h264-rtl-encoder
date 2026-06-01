@@ -475,3 +475,10 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_miss_probe.py` to mutate the third/final CABAC payload byte for the same four `Cb0x2/Cr0xd` high-amplitude complement misses after the locked `d0 08 08 6b bb {ec,cc}` prefix.
 - The generated third payload is `0xf7` for the `Cr=+32` cases and `0xff` for the `Cr=-32` cases. No single third-payload byte value strict-decodes both frames with byte-identical IDR and expected plane-local SAD for any sign combination.
 - This boundary lock keeps the next source repair focused on first/second residual output-byte arithmetic/renormalization state instead of chasing the terminating tail byte.
+
+## 2026-06-01 high-amplitude reciprocal trace lock
+
+- Added `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py`, a DEBUG_CABAC_P16X16 comparison for the remaining high-amplitude `Cb0x2/Cr0xd +32/+32` one-frame miss against the reciprocal strict-pass `Cb0xd/Cr0x2` lane.
+- The failing lane remains `384/768` with `bytestream -16`, final tail `0000000141d008086bbbecf7`, CBF walk `[(0,0),(1,1),(2,0),(3,0),(4,1),(5,0),(6,1),(7,1)]`, payload bytes `bb ec f7`, and first payload context `{blk=1 kind=22 sel=0 in=122 out=120 ari_low=36c ari_range=414 ari_queue=-8 pending=1 pbyte=43}`.
+- The reciprocal strict control decodes `768/768` with tail `0000000141d008086b3addf5`, CBF walk `[(0,1),(1,0),(2,1),(3,1),(4,0),(5,1),(6,0),(7,0)]`, payload bytes `3a dd f5`, and first payload context `{blk=0 kind=22 sel=0 in=122 out=120 ari_low=228 ari_range=294 ari_queue=-8 pending=1 pbyte=4}`.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes. This makes the next source repair target the first residual output-byte arithmetic/renormalization state after different plane-local CBF walks, not another broad CBF selector remap or bytestream literal patch.
