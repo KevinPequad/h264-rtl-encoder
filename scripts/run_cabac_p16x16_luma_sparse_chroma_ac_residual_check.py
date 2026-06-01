@@ -3,13 +3,13 @@
 
 The dense luma+chroma AC gates prove all four chroma AC blocks active.  This
 focused check covers representative sparse mixed cases with luma residual plus
-one active chroma AC block, including all four single-plane Cb/Cr quadrants,
-same-block Cb+Cr quadrant cases, both row-adjacent directions, both
-column-adjacent directions, and true opposite-diagonal Cb+Cr pairs.  It locks
-strict FFmpeg decode, plane-local CABAC counters, CAVLC suppression counts,
-final P-slice bytes, current decoded-plane metrics, and per-4x4 chroma-block
-locality so sparse residuals cannot silently land in the wrong chroma quadrant
-while preserving the same aggregate SAD.
+one or two active chroma AC blocks, including all four single-plane Cb/Cr
+quadrants, same-plane row/column pairs, same-block Cb+Cr quadrant cases, both
+row-adjacent directions, both column-adjacent directions, and true
+opposite-diagonal Cb+Cr pairs.  It locks strict FFmpeg decode, plane-local CABAC
+counters, CAVLC suppression counts, final P-slice bytes, current decoded-plane
+metrics, and per-4x4 chroma-block locality so sparse residuals cannot silently
+land in the wrong chroma quadrant while preserving the same aggregate SAD.
 """
 
 from __future__ import annotations
@@ -103,6 +103,46 @@ CASES = (
         expected_v_sad=0,
     ),
     Case(
+        name="cb_ac_m3",
+        cb_mask=0x3,
+        cr_mask=0x0,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76c734600000300",
+        expected_cavlc_suppressed_bits=168,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=128,
+        expected_v_sad=0,
+    ),
+    Case(
+        name="cb_ac_m5",
+        cb_mask=0x5,
+        cr_mask=0x0,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76cc5c200000300",
+        expected_cavlc_suppressed_bits=166,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=128,
+        expected_v_sad=0,
+    ),
+    Case(
+        name="cb_ac_m10",
+        cb_mask=0xA,
+        cr_mask=0x0,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76ccb1700000300",
+        expected_cavlc_suppressed_bits=166,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=128,
+        expected_v_sad=0,
+    ),
+    Case(
+        name="cb_ac_m12",
+        cb_mask=0xC,
+        cr_mask=0x0,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76c7a4100000300",
+        expected_cavlc_suppressed_bits=168,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=128,
+        expected_v_sad=0,
+    ),
+    Case(
         name="cr_ac_m1",
         cb_mask=0x0,
         cr_mask=0x1,
@@ -141,6 +181,46 @@ CASES = (
         expected_y_sad=EXPECTED_Y_SAD,
         expected_u_sad=0,
         expected_v_sad=64,
+    ),
+    Case(
+        name="cr_ac_m3",
+        cb_mask=0x0,
+        cr_mask=0x3,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76ad6a000000300",
+        expected_cavlc_suppressed_bits=168,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=0,
+        expected_v_sad=128,
+    ),
+    Case(
+        name="cr_ac_m5",
+        cb_mask=0x0,
+        cr_mask=0x5,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76af31d00000300",
+        expected_cavlc_suppressed_bits=166,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=0,
+        expected_v_sad=128,
+    ),
+    Case(
+        name="cr_ac_m10",
+        cb_mask=0x0,
+        cr_mask=0xA,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76af4fd00000300",
+        expected_cavlc_suppressed_bits=166,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=0,
+        expected_v_sad=128,
+    ),
+    Case(
+        name="cr_ac_m12",
+        cb_mask=0x0,
+        cr_mask=0xC,
+        expected_final_slice="0000000141d008086b3ab6e931d045573d34f76ad8e400000300",
+        expected_cavlc_suppressed_bits=168,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=0,
+        expected_v_sad=128,
     ),
     Case(
         name="cbcr_ac_m1",
@@ -502,7 +582,7 @@ def main() -> int:
     sim = build_baseline_sim()
     for case in CASES:
         run_case(sim, case)
-    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-quadrant, row-adjacent both directions, column-adjacent both directions, and opposite-diagonal mixed-plane pairs, strict-decode with plane-local counters and per-block chroma locality")
+    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, and opposite-diagonal mixed-plane pairs, strict-decode with plane-local counters and per-block chroma locality")
     return 0
 
 
