@@ -5,8 +5,10 @@ The dense luma+chroma AC gates prove all four chroma AC blocks active.  This
 focused check covers representative sparse mixed cases with luma residual plus
 one active chroma AC block, including single-plane Cb/Cr, same-block Cb+Cr
 corner cases, and opposite-diagonal Cb+Cr pairs.  It locks strict FFmpeg decode,
-plane-local CABAC counters, CAVLC suppression counts, final P-slice bytes, and
-current decoded-plane metrics.
+plane-local CABAC counters, CAVLC suppression counts, final P-slice bytes,
+current decoded-plane metrics, and per-4x4 chroma-block locality so sparse
+residuals cannot silently land in the wrong chroma quadrant while preserving the
+same aggregate SAD.
 """
 
 from __future__ import annotations
@@ -282,7 +284,31 @@ def check_decoded_planes(fixture: Path, raw: bytes, case: Case) -> tuple[int, in
     actual = (y_sad, u_sad, v_sad)
     if actual != expected:
         raise SystemExit(f"[FAIL] LUMA_SPARSE_CHROMA_RES {case.name} SAD YUV={actual}, expected {expected}")
+    u_block_sads = chroma_block_sads(raw, src, u0)
+    v_block_sads = chroma_block_sads(raw, src, v0)
+    expected_u_blocks = tuple(64 if (case.cb_mask >> block) & 1 else 0 for block in range(4))
+    expected_v_blocks = tuple(64 if (case.cr_mask >> block) & 1 else 0 for block in range(4))
+    if u_block_sads != expected_u_blocks or v_block_sads != expected_v_blocks:
+        raise SystemExit(
+            f"[FAIL] LUMA_SPARSE_CHROMA_RES {case.name} chroma-block SAD drift: "
+            f"U={u_block_sads} V={v_block_sads}, expected U={expected_u_blocks} V={expected_v_blocks}"
+        )
     return actual
+
+
+def chroma_block_sads(raw: bytes, src: bytes, plane0: int) -> tuple[int, int, int, int]:
+    sads: list[int] = []
+    chroma_width = WIDTH // 2
+    for block in range(4):
+        bx = (block & 1) * 4
+        by = (block >> 1) * 4
+        sad = 0
+        for y in range(4):
+            for x in range(4):
+                idx = plane0 + (by + y) * chroma_width + bx + x
+                sad += abs(raw[idx] - src[idx])
+        sads.append(sad)
+    return (sads[0], sads[1], sads[2], sads[3])
 
 
 def run_case(sim: Path, case: Case) -> None:
@@ -306,7 +332,8 @@ def run_case(sim: Path, case: Case) -> None:
         f"[PASS] CABAC P16x16 luma+sparse {case.name} residual smoke strict-decodes "
         f"{len(raw)}/{EXPECTED_BYTES} bytes with cavlc_suppressed_bits={case.expected_cavlc_suppressed_bits}, "
         f"cb_ac_blocks={case.expected_cb_ac_blocks} cr_ac_blocks={case.expected_cr_ac_blocks}, "
-        f"Y_SAD={y_sad} U_SAD={u_sad} V_SAD={v_sad}, final_slice={final_slice}"
+        f"Y_SAD={y_sad} U_SAD={u_sad} V_SAD={v_sad}, sparse block locality locked, "
+        f"final_slice={final_slice}"
     )
 
 
@@ -314,7 +341,7 @@ def main() -> int:
     sim = build_baseline_sim()
     for case in CASES:
         run_case(sim, case)
-    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including opposite-diagonal mixed-plane pairs, strict-decode with plane-local counters")
+    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including opposite-diagonal mixed-plane pairs, strict-decode with plane-local counters and per-block chroma locality")
     return 0
 
 
