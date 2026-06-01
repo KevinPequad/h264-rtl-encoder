@@ -527,3 +527,9 @@ Next useful probe:
 - Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so each remaining `Cb0x2/Cr0xd` high-amplitude sign-family miss and the reciprocal `Cb0xd/Cr0x2` strict-pass lane must keep the exact generated H.264 stream size (`448` bytes), in addition to final P-slice tail, CBF/order/context trail, payload emit rows, residual chunks, and terminate arithmetic state.
 - This prevents a future CABAC arithmetic experiment from preserving the final tail while silently moving SPS/PPS/AUD/slice framing or adding/removing payload bytes around the same residual boundary.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.
+
+## 2026-06-01 high-amplitude residual-bin trail lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` so each coded chroma-AC block in the remaining `Cb0x2/Cr0xd` high-amplitude sign-family and reciprocal `Cb0xd/Cr0x2` strict-pass lane now locks the exact post-CBF residual bin trail from `[CABACRES]`.
+- The new lock keeps the significant/last/level/bypass sequence identical except for the expected sign-dependent bypass bits for `+32` vs `-32`, proving the current failing and passing lanes share the same residual binarization scaffold and diverge below that, in CABAC arithmetic/renormalization/output-byte state.
+- Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_high_amp_trace_probe.py` passes.

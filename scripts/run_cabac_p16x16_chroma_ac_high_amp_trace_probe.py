@@ -438,6 +438,49 @@ P_SLICE_EMIT_TAIL = [
     (0, 3, 7, "6b", 8, "6b0000000000000000000000", 0, 0),
 ]
 
+CHRAC_RESIDUAL_BIN_PREFIX = [
+    (152, 0, 0, 1),
+    (153, 0, 0, 2),
+    (154, 0, 0, 3),
+    (155, 0, 0, 4),
+    (156, 0, 0, 5),
+    (157, 0, 0, 6),
+    (158, 0, 0, 7),
+    (159, 0, 0, 8),
+    (160, 0, 0, 9),
+    (161, 1, 0, 9),
+    (222, 0, 0, 10),
+    (162, 0, 0, 11),
+    (163, 1, 0, 11),
+    (224, 0, 0, 12),
+    (164, 0, 0, 13),
+    (165, 0, 0, 13),
+    (266, 1, 0, 14),
+    (277, 1, 0, 14),
+]
+
+CHRAC_RESIDUAL_BIN_POS_TRAIL = CHRAC_RESIDUAL_BIN_PREFIX + [
+    (0, 1, 1, 14),
+    (0, 1, 1, 14),
+    (266, 0, 0, 11),
+    (277, 0, 0, 11),
+    (0, 1, 1, 11),
+    (266, 0, 0, 9),
+    (277, 0, 0, 9),
+    (0, 1, 1, 9),
+]
+
+CHRAC_RESIDUAL_BIN_NEG_TRAIL = CHRAC_RESIDUAL_BIN_PREFIX + [
+    (0, 1, 1, 14),
+    (0, 0, 1, 14),
+    (266, 0, 0, 11),
+    (277, 0, 0, 11),
+    (0, 0, 1, 11),
+    (266, 0, 0, 9),
+    (277, 0, 0, 9),
+    (0, 0, 1, 9),
+]
+
 
 def build_debug_sim() -> Path:
     workspace = Path(stage_workspace("h264_cabac_high_amp_trace_"))
@@ -552,6 +595,33 @@ def parse_residual_chunks(text: str) -> list[tuple[int, int, int]]:
         bit_cnt = int(m.group(4))
         chunks.append((blk, byte, bit_cnt))
     return chunks
+
+
+def parse_coded_residual_bin_trails(text: str) -> dict[int, list[tuple[int, int, int, int]]]:
+    by_block: dict[int, list[tuple[int, int, int, int]]] = {}
+    for line in text.splitlines():
+        if "[CABACRES]" not in line or "cat=2" not in line:
+            continue
+        m = re.search(r"blk=(\d+) ctx=(\d+) val=(\d+) bypass=(\d+) coeff=(\d+)", line)
+        if not m:
+            continue
+        blk, ctx, val, bypass, coeff = map(int, m.groups())
+        by_block.setdefault(blk, []).append((ctx, val, bypass, coeff))
+
+    coded: dict[int, list[tuple[int, int, int, int]]] = {}
+    for blk, rows in by_block.items():
+        if rows and rows[0] == (101, 1, 0, 0):
+            coded[blk] = rows[1:]
+    return coded
+
+
+def expected_coded_residual_bin_trails(spec: dict[str, Any]) -> dict[int, list[tuple[int, int, int, int]]]:
+    expected: dict[int, list[tuple[int, int, int, int]]] = {}
+    for blk_obj in spec["coded_blocks"]:
+        blk = int(blk_obj)
+        plane_value = int(spec["cb_value"] if blk < 4 else spec["cr_value"])
+        expected[blk] = CHRAC_RESIDUAL_BIN_POS_TRAIL if plane_value > 128 else CHRAC_RESIDUAL_BIN_NEG_TRAIL
+    return expected
 
 
 def parse_first_payload_ctx(text: str, expected_blk: int) -> dict[str, object]:
@@ -767,6 +837,14 @@ def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
             f"expected {spec['residual_chunks']}"
         )
 
+    coded_residual_bins = parse_coded_residual_bin_trails(text)
+    expected_residual_bins = expected_coded_residual_bin_trails(spec)
+    if coded_residual_bins != expected_residual_bins:
+        raise SystemExit(
+            f"[FAIL] HIGH_AMP_TRACE {name} residual bin trails {coded_residual_bins}, "
+            f"expected {expected_residual_bins}"
+        )
+
     first_ctx = parse_first_payload_ctx(text, coded_blocks[0])
     if first_ctx != spec["first_payload_ctx"]:
         raise SystemExit(
@@ -805,7 +883,7 @@ def check_case(sim: Path, name: str, spec: dict[str, object]) -> None:
         f"[PASS] HIGH_AMP_TRACE {name}: {status}, tail={tail}, "
         f"stream_size={len(stream)}, CBF={cbf_order}, payload={[f'0x{b:02x}' for b in payload_bytes[:3]]}, "
         f"p_slice_emit_tail={p_slice_emit_tail}, payload_emit_rows={payload_emit_rows}, "
-        f"chunks={chunk_summary}, first_ctx={first_ctx}, cbf_ctx={cbf_ctx_trail}, "
+        f"chunks={chunk_summary}, residual_bins={coded_residual_bins}, first_ctx={first_ctx}, cbf_ctx={cbf_ctx_trail}, "
         f"payload_final_ctx={payload_final_ctx}, term={term_state}"
     )
 
@@ -817,7 +895,7 @@ def main() -> int:
     print(
         "[PASS] CABAC P16x16 high-amplitude chroma-AC trace probe locks the failing "
         "Cb0x2/Cr0xd sign-family against reciprocal Cb0xd/Cr0x2 strict pass, including "
-        "plane-local CBF walks/context trails, P-slice emit-tail bit-buffer rows, payload emit rows, residual output chunks, first payload bytes, and "
+        "plane-local CBF walks/context trails, exact coded-block residual bin trails, P-slice emit-tail bit-buffer rows, payload emit rows, residual output chunks, first payload bytes, and "
         "stream sizes plus first/final-payload and terminate arithmetic context state."
     )
     return 0
