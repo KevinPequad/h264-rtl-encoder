@@ -1064,6 +1064,13 @@ Current verified milestone outputs:
   10-bit 4:2:2 chroma-DC isolation lanes to produce a changed P-frame
   FFmpeg framehash, so the green Cr-positive / Cr-only / Cb-negative probes
   remain reconstruction evidence and not just syntax-survivable neutral output
+- a scheduled 2026-06-02 source probe rejected one tempting Cb-positive fix:
+  changing the second-plane chroma-DC coded_block_flag selection so Cr uses
+  ctx 98 after a nonzero Cb DC payload made the previously green two-plane
+  `cabac_p16x16_chroma_dc_residual_10b422_probe` fail strict FFmpeg decode at
+  MB 0 (`bytestream -12`).  Leave the unavailable-neighbor ctx 97 mapping alone
+  for now; the remaining Cb-positive blocker is more likely in the Cb-positive
+  coefficient/sign/finalization sequence before the following zero Cr-DC CBF.
 
 ## Not Done Yet
 
