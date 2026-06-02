@@ -74,6 +74,8 @@ out_dir = root / "output"
 out_dir.mkdir(exist_ok=True)
 ac_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_16x16_2f.yuv")
 dc_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_16x16_2f.yuv")
+dc_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_cb_only_16x16_2f.yuv")
+dc_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_cr_only_16x16_2f.yuv")
 ac_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_cb_only_16x16_2f.yuv")
 ac_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_cr_only_16x16_2f.yuv")
 ac_422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_16x16_2f.yuv")
@@ -136,6 +138,11 @@ with dc_input_path.open("wb") as f:
         cr = 96 if frame_idx == 1 else 128
         f.write(bytes([cb]) * (8 * 8))
         f.write(bytes([cr]) * (8 * 8))
+
+# Plane-isolated 4:2:0 DC probes guard the CABAC chroma DC coded_block_flag
+# and coefficient payload path when only one chroma plane carries residuals.
+write_420_probe(dc_cb_only_input_path, cb_mode="dc", cr_mode="flat")
+write_420_probe(dc_cr_only_input_path, cb_mode="flat", cr_mode="dc")
 
 # Plane-isolated 4:2:0 probes make sure a one-plane chroma AC residual still
 # emits the proper CABAC coded_block_flag payload while the opposite plane keeps
@@ -373,19 +380,37 @@ try:
     run_chroma_probe(sim_bin, "cabac_p16x16_chroma_dc_residual_probe", dc_input_path, require_dc_only=True)
     run_chroma_probe(
         sim_bin,
+        "cabac_p16x16_chroma_dc_residual_cb_only_probe",
+        dc_cb_only_input_path,
+        require_dc_only=True,
+        expected_dc_planes=("cb",),
+        expected_nonzero_dc_planes=("cb",),
+    )
+    run_chroma_probe(
+        sim_bin,
+        "cabac_p16x16_chroma_dc_residual_cr_only_probe",
+        dc_cr_only_input_path,
+        require_dc_only=True,
+        expected_dc_planes=("cr",),
+        expected_nonzero_dc_planes=("cr",),
+    )
+    run_chroma_probe(
+        sim_bin,
         "cabac_p16x16_chroma_residual_cb_only_probe",
         ac_cb_only_input_path,
         require_dc_only=False,
+        expected_dc_planes=("cb",),
         expected_ac_planes=("cb",),
-        expected_nonzero_dc_planes=(),
+        expected_nonzero_dc_planes=("cb",),
     )
     run_chroma_probe(
         sim_bin,
         "cabac_p16x16_chroma_residual_cr_only_probe",
         ac_cr_only_input_path,
         require_dc_only=False,
+        expected_dc_planes=("cr",),
         expected_ac_planes=("cr",),
-        expected_nonzero_dc_planes=(),
+        expected_nonzero_dc_planes=("cr",),
     )
 finally:
     shutil.rmtree(workspace, ignore_errors=True)

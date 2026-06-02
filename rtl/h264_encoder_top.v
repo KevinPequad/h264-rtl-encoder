@@ -120,6 +120,7 @@ module h264_encoder_top #(
     localparam CHR_BLOCK_ROWS       = CHR_MB_HEIGHT / 4;
     localparam CHR_BLOCK_COLS       = CHR_MB_WIDTH / 4;
     localparam CHR_BLOCKS_PER_PLANE = CHR_BLOCK_COLS * CHR_BLOCK_ROWS;
+    localparam integer CABAC_CHROMA_DC_COEFFS = (CHROMA_FORMAT_IDC == 2) ? 8 : 4;
     // Storage-sized to the largest chroma plane this RTL supports (4:4:4 => 16
     // 4x4 blocks) so parameter-gated 4:2:2 DC paths do not leave static
     // out-of-range selects when linting the default 4:2:0 configuration.
@@ -589,6 +590,22 @@ module h264_encoder_top #(
         end
     endfunction
 
+    function automatic cabac_chroma_dc_plane_nonzero;
+        input plane_is_cr;
+        integer coeff_i;
+        integer bit_i;
+        reg signed [15:0] coeff_val;
+        begin
+            cabac_chroma_dc_plane_nonzero = 1'b0;
+            for (coeff_i = 0; coeff_i < CABAC_CHROMA_DC_COEFFS; coeff_i = coeff_i + 1) begin
+                bit_i = (plane_is_cr ? 256 : 0) + (coeff_i * 16);
+                coeff_val = $signed(cabac_chroma_dc_scan_flat_reg[bit_i +: 16]);
+                if (coeff_val != 16'sd0)
+                    cabac_chroma_dc_plane_nonzero = 1'b1;
+            end
+        end
+    endfunction
+
     function automatic [SUB_BLK_W-1:0] chroma_sub_blk_from_rc;
         input plane_is_cr;
         input [1:0] blk_r;
@@ -875,8 +892,8 @@ module h264_encoder_top #(
         (CHROMA_FORMAT_IDC == 1) ? 16'h00f0 :
         (CHROMA_FORMAT_IDC == 2) ? 16'hff00 :
                                   16'h0000;
-    wire        cabac_chroma_cb_dc_nonzero_w = (cabac_chroma_dc_scan_flat_reg[0 +: 256] != 256'd0);
-    wire        cabac_chroma_cr_dc_nonzero_w = (cabac_chroma_dc_scan_flat_reg[256 +: 256] != 256'd0);
+    wire        cabac_chroma_cb_dc_nonzero_w = cabac_chroma_dc_plane_nonzero(1'b0);
+    wire        cabac_chroma_cr_dc_nonzero_w = cabac_chroma_dc_plane_nonzero(1'b1);
     wire [15:0] cabac_chroma_cb_ac_mask_w = cabac_chroma_nz_mask_reg & CABAC_CHROMA_CB_ACTIVE_BLK_MASK;
     wire [15:0] cabac_chroma_cr_ac_mask_w = cabac_chroma_nz_mask_reg & CABAC_CHROMA_CR_ACTIVE_BLK_MASK;
     wire [4:0]  cabac_chroma_cb_ac_block_count_w = cabac_popcount16(cabac_chroma_cb_ac_mask_w);
@@ -5964,7 +5981,10 @@ pred_buf = {(256*BD){1'b0}};
         // debug trace block read-only to avoid multi-driver/reset lint noise.
         if (dbg_detail_mb && zz_done) begin
             $display("[ZZD] F%0d MB%0d sb=%0d isL=%0d isCb=%0d isCr=%0d nC=%0d TC=%0d T1=%0d last=%0d chDC=%0d chAC=%0d",
-                dbg_frame_cnt, mb_count, sub_blk, is_luma, is_cb, is_cr, nC_val, total_coeffs, trailing_ones, last_nonzero_idx, cavlc_is_chroma_dc, cavlc_is_chroma_ac);
+                dbg_frame_cnt, mb_count, sub_blk, is_luma,
+                cavlc_is_chroma_dc ? (chr_phase == 3'd3) : is_cb,
+                cavlc_is_chroma_dc ? (chr_phase == 3'd4) : is_cr,
+                nC_val, total_coeffs, trailing_ones, last_nonzero_idx, cavlc_is_chroma_dc, cavlc_is_chroma_ac);
             $display("[ZZS] F%0d MB%0d sb=%0d scan=%064x_%064x_%064x_%064x",
                 dbg_frame_cnt, mb_count, sub_blk,
                 scan_flat[255:192], scan_flat[191:128], scan_flat[127:64], scan_flat[63:0]);
