@@ -105,7 +105,7 @@ partition/tool coverage, and the final long-run target.
 | `scripts/run_deblock_reference_check.sh` | Public-decoder and two-frame reconstructed-reference consumption check for in-loop deblocking |
 | `scripts/run_cabac_residual4x4_scan_check.sh` | Standalone Verilator check for the CABAC residual 4x4 scan-event helper |
 | `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for CABAC `P_L0_16x16` luma residual syntax; requires actual decoded luma reconstruction and serves as the checkpoint proof for the coefficient-driven residual path |
-| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | Focused CABAC `P_L0_16x16` chroma residual gate covering 4:2:0, 4:2:2, plane-isolated 10-bit 4:2:0 chroma-only luma-empty residuals, plane-isolated DC/AC payloads, and strict FFmpeg decode |
+| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | Focused CABAC `P_L0_16x16` chroma residual gate covering 4:2:0, 4:2:2, plane-isolated 10-bit 4:2:0 chroma-only luma-empty residuals, plane-isolated DC/AC payloads including 10-bit 4:2:2 Cr-only DC, optional Cb-only DC blocker repro, and strict FFmpeg decode |
 | `docker/Dockerfile` | Containerized smoke-run environment |
 | `docker/run_one_frame.sh` | One-frame Docker smoke flow |
 | `tools/parse_422.c` | Small debug/parser utility |
@@ -1031,14 +1031,14 @@ Current verified milestone outputs:
 - deferred inter headers and FIFO discard now prevent illegal zero-residual
   CAVLC payloads from leaking after `cbp=0` or `P_SKIP`, which is what made
   the earlier zero-residual inter-header attempt invalid
-- a scheduled 2026-06-02 probe found that the current CABAC `P_L0_16x16`
-  chroma residual lane is not closed for plane-isolated `10-bit 4:2:2` chroma
-  DC payloads: adding `cabac_p16x16_chroma_dc_residual_10b422_cb_only_probe`
-  to the focused gate produced RTL counters with `cb_dc_mbs=1`, `cr_dc_mbs=0`,
-  and empty luma, but strict FFmpeg decode failed on the P macroblock with
-  `bytestream -14`; the existing combined-plane `10-bit 4:2:2` DC probe remains
-  green, so the next fix should target the one-plane chroma DC CABAC bin/context
-  schedule before promoting that isolated probe into the gate
+- a scheduled 2026-06-02 probe narrowed the CABAC `P_L0_16x16` `10-bit 4:2:2`
+  chroma DC isolation gap: the default focused gate now includes a strict
+  FFmpeg-decodable Cr-only DC probe with empty luma, while the optional
+  `CABAC_EXPECT_10B422_DC_ISOLATION_FAIL=1` repro still shows the Cb-only DC
+  lane failing strict FFmpeg decode on the P macroblock (`bytestream -22`) with
+  RTL counters `cb_dc_mbs=1`, `cr_dc_mbs=0`, and empty luma; the next source fix
+  should target the Cb-only chroma DC CABAC bin/context or finalization schedule
+  before promoting that Cb-only probe into the default gate
 
 ## Not Done Yet
 

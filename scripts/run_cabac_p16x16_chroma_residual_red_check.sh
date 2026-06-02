@@ -89,6 +89,8 @@ ac_422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_cb_
 ac_422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_cr_only_16x16_2f.yuv")
 ac_10b422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b422_16x16_2f.yuv")
 dc_10b422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_16x16_2f.yuv")
+dc_10b422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_only_16x16_2f.yuv")
+dc_10b422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cr_only_16x16_2f.yuv")
 ac_10b422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b422_cb_only_16x16_2f.yuv")
 ac_10b422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b422_cr_only_16x16_2f.yuv")
 ac_10b_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b420_16x16_2f.yuv")
@@ -194,8 +196,12 @@ def write_422_probe_10b(path, *, cb_mode, cr_mode):
         plane = [512] * (8 * 16)
         if mode == "dc":
             plane = [640] * (8 * 16)
+        elif mode == "dc_small":
+            plane = [528] * (8 * 16)
         elif mode == "dc_neg":
             plane = [384] * (8 * 16)
+        elif mode == "dc_neg_small":
+            plane = [496] * (8 * 16)
         elif mode == "ac_pos":
             # Mirror the 8-bit 4:2:2 AC probe into the high-bit-depth lane and
             # keep the lower-row coverage that proves the widened AC cursor.
@@ -324,6 +330,8 @@ write_422_probe(ac_422_cr_only_input_path, cb_mode="flat", cr_mode="ac_neg")
 # Luma stays flat so the P16x16 CABAC lane must accept chroma-owned residuals
 # without a luma payload while also proving the lower 4:2:2 chroma rows.
 write_422_probe_10b(dc_10b422_input_path, cb_mode="dc", cr_mode="dc_neg")
+write_422_probe_10b(dc_10b422_cb_only_input_path, cb_mode="dc_small", cr_mode="flat")
+write_422_probe_10b(dc_10b422_cr_only_input_path, cb_mode="flat", cr_mode="dc_neg_small")
 write_422_probe_10b(ac_10b422_input_path, cb_mode="ac_pos", cr_mode="ac_neg")
 write_422_probe_10b(ac_10b422_cb_only_input_path, cb_mode="ac_pos", cr_mode="flat")
 write_422_probe_10b(ac_10b422_cr_only_input_path, cb_mode="flat", cr_mode="ac_neg")
@@ -705,6 +713,41 @@ try:
         require_dc_only=True,
         require_luma_empty=True,
     )
+    run_chroma_probe(
+        sim_bin_10b422,
+        "cabac_p16x16_chroma_dc_residual_10b422_cr_only_probe",
+        dc_10b422_cr_only_input_path,
+        require_dc_only=True,
+        expected_dc_planes=("cr",),
+        expected_nonzero_dc_planes=("cr",),
+        require_luma_empty=True,
+    )
+    if os.environ.get("CABAC_EXPECT_10B422_DC_ISOLATION_FAIL") == "1":
+        xfail_cases = [
+            (
+                "cabac_p16x16_chroma_dc_residual_10b422_cb_only_probe",
+                dc_10b422_cb_only_input_path,
+                ("cb",),
+            ),
+        ]
+        for xfail_name, xfail_path, xfail_plane in xfail_cases:
+            try:
+                run_chroma_probe(
+                    sim_bin_10b422,
+                    xfail_name,
+                    xfail_path,
+                    require_dc_only=True,
+                    expected_dc_planes=xfail_plane,
+                    expected_nonzero_dc_planes=xfail_plane,
+                    require_luma_empty=True,
+                )
+            except SystemExit as exc:
+                msg = str(exc)
+                if "error while decoding MB 0 0" not in msg and "corrupt decoded frame" not in msg:
+                    raise
+                print(f"[PASS] {xfail_name}: reproduced expected FFmpeg decode blocker ({msg.splitlines()[0]})")
+            else:
+                raise SystemExit(f"{xfail_name} unexpectedly strict-decoded; promote it into the default gate")
     run_chroma_probe(
         sim_bin_10b422,
         "cabac_p16x16_chroma_residual_10b422_probe",
