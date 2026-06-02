@@ -357,6 +357,11 @@ module h264_bitstream #(
     reg [3:0]  cabac_res_coeff_idx;
     reg [15:0] cabac_res_coeff_abs;
     reg [3:0]  cabac_res_level_step;
+    reg        cabac_res_payload_is_chroma;
+    reg        cabac_res_chroma_payload_is_dc;
+    reg        cabac_res_chroma_plane_is_cr;
+    reg [3:0]  cabac_res_chroma_blk_idx;
+    reg [3:0]  cabac_res_payload_coeff_limit;
     reg [3:0]  cabac_pending_cbf_ctx_sel;
     reg [4:0]  cabac_pending_ctx_kind;
     reg [1:0]  cabac_pending_ctx_sel;
@@ -396,6 +401,10 @@ module h264_bitstream #(
     localparam [4:0] CABAC_CTX_LUMA_LAST0 = 5'd15;
     localparam [4:0] CABAC_CTX_LUMA_LEVEL1 = 5'd16;
     localparam [4:0] CABAC_CTX_LUMA_LEVELGT1 = 5'd17;
+
+    localparam [3:0] CABAC_CHROMA_PAYLOAD_DC_CB = 4'd0;
+    localparam [3:0] CABAC_CHROMA_PAYLOAD_DC_CR = 4'd1;
+    localparam [3:0] CABAC_CHROMA_PAYLOAD_AC_FIRST = 4'd2;
 
     function automatic [6:0] cabac_init_state;
         input integer m;
@@ -678,6 +687,38 @@ module h264_bitstream #(
         end
     endfunction
 
+    function automatic [3:0] cabac_chroma_payload_coeff_limit;
+        input payload_is_dc_i;
+        begin
+            cabac_chroma_payload_coeff_limit = payload_is_dc_i ?
+                ((CHROMA_FORMAT_IDC == 2) ? 4'd8 : 4'd4) :
+                4'd15;
+        end
+    endfunction
+
+    function automatic cabac_chroma_payload_cursor_is_dc;
+        input [3:0] payload_idx_i;
+        begin
+            cabac_chroma_payload_cursor_is_dc = (payload_idx_i <= CABAC_CHROMA_PAYLOAD_DC_CR);
+        end
+    endfunction
+
+    function automatic cabac_chroma_payload_cursor_plane_is_cr;
+        input [3:0] payload_idx_i;
+        begin
+            cabac_chroma_payload_cursor_plane_is_cr = (payload_idx_i == CABAC_CHROMA_PAYLOAD_DC_CR) ||
+                (payload_idx_i >= (CABAC_CHROMA_PAYLOAD_AC_FIRST + ((CHROMA_FORMAT_IDC == 2) ? 4'd8 : 4'd4)));
+        end
+    endfunction
+
+    function automatic [3:0] cabac_chroma_payload_cursor_blk_idx;
+        input [3:0] payload_idx_i;
+        begin
+            cabac_chroma_payload_cursor_blk_idx = (payload_idx_i < CABAC_CHROMA_PAYLOAD_AC_FIRST) ? 4'd0 :
+                (payload_idx_i - CABAC_CHROMA_PAYLOAD_AC_FIRST);
+        end
+    endfunction
+
     // UE(v) encoder — general-purpose unsigned Exp-Golomb
     // Used by SPS and other parameter sets
     reg [9:0] ue_input;   // codeNum (unsigned, max ~1023)
@@ -910,6 +951,11 @@ module h264_bitstream #(
             cabac_res_coeff_idx <= 4'd0;
             cabac_res_coeff_abs <= 16'd0;
             cabac_res_level_step <= 4'd0;
+            cabac_res_payload_is_chroma <= 1'b0;
+            cabac_res_chroma_payload_is_dc <= 1'b0;
+            cabac_res_chroma_plane_is_cr <= 1'b0;
+            cabac_res_chroma_blk_idx <= 4'd0;
+            cabac_res_payload_coeff_limit <= 4'd0;
             cabac_pending_cbf_ctx_sel <= 4'd0;
             cabac_pending_ctx_kind <= CABAC_CTX_NONE;
             cabac_pending_ctx_sel <= 2'd0;
@@ -1570,6 +1616,11 @@ module h264_bitstream #(
                                     cabac_res_coeff_idx <= 4'd0;
                                     cabac_res_coeff_abs <= 16'd0;
                                     cabac_res_level_step <= 4'd0;
+                                    cabac_res_payload_is_chroma <= 1'b0;
+                                    cabac_res_chroma_payload_is_dc <= 1'b0;
+                                    cabac_res_chroma_plane_is_cr <= 1'b0;
+                                    cabac_res_chroma_blk_idx <= 4'd0;
+                                    cabac_res_payload_coeff_limit <= 4'd0;
                                     cabac_pending_cbf_ctx_sel <= 4'd0;
                                     cabac_start <= 1'b1;
                                 end
