@@ -92,6 +92,7 @@ dc_10b422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_16
 dc_10b422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_only_16x16_2f.yuv")
 dc_10b422_cb_neg_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_neg_only_16x16_2f.yuv")
 dc_10b422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cr_only_16x16_2f.yuv")
+dc_10b422_cr_pos_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cr_pos_only_16x16_2f.yuv")
 ac_10b422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b422_cb_only_16x16_2f.yuv")
 ac_10b422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b422_cr_only_16x16_2f.yuv")
 ac_10b_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b420_16x16_2f.yuv")
@@ -336,6 +337,7 @@ write_422_probe_10b(dc_10b422_input_path, cb_mode="dc", cr_mode="dc_neg")
 write_422_probe_10b(dc_10b422_cb_only_input_path, cb_mode="dc_small", cr_mode="flat")
 write_422_probe_10b(dc_10b422_cb_neg_only_input_path, cb_mode="dc_neg_tiny", cr_mode="flat")
 write_422_probe_10b(dc_10b422_cr_only_input_path, cb_mode="flat", cr_mode="dc_neg_small")
+write_422_probe_10b(dc_10b422_cr_pos_only_input_path, cb_mode="flat", cr_mode="dc_small")
 write_422_probe_10b(ac_10b422_input_path, cb_mode="ac_pos", cr_mode="ac_neg")
 write_422_probe_10b(ac_10b422_cb_only_input_path, cb_mode="ac_pos", cr_mode="flat")
 write_422_probe_10b(ac_10b422_cr_only_input_path, cb_mode="flat", cr_mode="ac_neg")
@@ -721,6 +723,15 @@ try:
         sim_bin_10b422,
         "cabac_p16x16_chroma_dc_residual_10b422_cr_only_probe",
         dc_10b422_cr_only_input_path,
+        require_dc_only=True,
+        expected_dc_planes=("cr",),
+        expected_nonzero_dc_planes=("cr",),
+        require_luma_empty=True,
+    )
+    run_chroma_probe(
+        sim_bin_10b422,
+        "cabac_p16x16_chroma_dc_residual_10b422_cr_pos_only_probe",
+        dc_10b422_cr_pos_only_input_path,
         require_dc_only=True,
         expected_dc_planes=("cr",),
         expected_nonzero_dc_planes=("cr",),
