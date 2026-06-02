@@ -617,3 +617,10 @@ Next useful probe:
 - Re-probed the high-amplitude `Cb0x5/Cr0x5` same-mask checker lane after the scoped plane-local CBF-walk repair and found all four +/-32 sign combinations strict-decode both FFmpeg frames with byte-identical IDR and exact plane-local `U_SAD=512 V_SAD=512`.
 - Tightened `scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py` so the bounded cross-plane gate now locks the full sign matrix, not only the `+32/+32` row: `(+,+)` and `(-,+)` share tail `0000000141d008086b3add`, while `(+,-)` and `(-,-)` share tail `0000000141d008086b7bfd`.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 /tmp/h264_probe_same_mask_5.py` proved the four rows, and the canonical gate now guards the sign matrix in-tree. The next repair target remains broader mixed/high-amplitude chroma-AC coverage and reconstruction parity beyond strict decode.
+
+## 2026-06-01 high-amplitude same-mask all-but-one partition lock
+
+- Added `scripts/run_cabac_p16x16_chroma_ac_same_mask_high_amp_probe.py` to split the high-amplitude same-mask lane into strict rows and exact expected misses instead of relying on stale broad status text.
+- The new probe locks the promoted `Cb0x5/Cr0x5` +/-32 sign matrix, strict all-but-one rows `Cb0xD/Cr0xD +32/+32` / `+32/-32`, and `Cb0xE/Cr0xE -32/+32` as full two-frame FFmpeg decodes with exact plane-local SAD and final P-slice tails.
+- It also preserves exact one-frame FFmpeg miss signatures for `Cb0x7/Cr0x7`, `Cb0xB/Cr0xB`, and the remaining `Cb0xD/Cr0xD` / `Cb0xE/Cr0xE` sign rows, so future repair attempts can show actual strict-decode promotion without overclaiming the whole all-but-one same-mask family.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_same_mask_high_amp_probe.py` passes.

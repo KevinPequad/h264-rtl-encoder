@@ -276,6 +276,11 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
         r"STRICT_TAILS\s*=\s*\{.*?\(0x5,\s*0xA,\s*160,\s*160\):\s*\"0000000141d008086b7fff\".*?\(0x5,\s*0xA,\s*160,\s*96\):\s*\"0000000141d008086b3acc6e\".*?\(0x5,\s*0xA,\s*96,\s*96\):\s*\"0000000141d008086b3acc6e\".*?\(0xA,\s*0x5,\s*160,\s*160\):\s*\"0000000141d008086b7bef\".*?\(0xA,\s*0x5,\s*160,\s*96\):\s*\"0000000141d008086b3aec7e\".*?\(0xA,\s*0x5,\s*96,\s*96\):\s*\"0000000141d008086b3aec7e\".*?locks all \+/-32 lanes as strict FFmpeg decodes",
     ),
     (
+        "probe_locks_same_mask_high_amp_partition",
+        "scripts/run_cabac_p16x16_chroma_ac_same_mask_high_amp_probe.py",
+        r"STRICT_TAILS\s*=\s*\{.*?\(0x5,\s*0x5,\s*160,\s*160\):\s*\"0000000141d008086b3add\".*?\(0x5,\s*0x5,\s*96,\s*96\):\s*\"0000000141d008086b7bfd\".*?\(0xD,\s*0xD,\s*160,\s*160\):\s*\"0000000141d008086bfadf7d7ede79ffedb7d7\".*?\(0xE,\s*0xE,\s*96,\s*160\):\s*\"0000000141d008086bfbce75777d9feffbf7ba\".*?EXPECTED_MISSES\s*=\s*\{.*?\(0x7,\s*0x7,\s*160,\s*160\):\s*\(FRAME_SIZE,\s*\"bytestream -18\".*?\(0xB,\s*0xB,\s*96,\s*96\):\s*\(FRAME_SIZE,\s*\"bytestream -17\".*?\(0xD,\s*0xD,\s*96,\s*96\):\s*\(FRAME_SIZE,\s*\"bytestream -23\".*?\(0xE,\s*0xE,\s*96,\s*96\):\s*\(FRAME_SIZE,\s*\"bytestream -7\".*?preserving exact one-frame miss signatures",
+    ),
+    (
         "probe_promotes_cross_plane_high_amp_miss_target",
         "scripts/run_cabac_p16x16_chroma_ac_high_amp_miss_probe.py",
         r"PROMOTED_CASES\s*=\s*\{.*?\(0x1,\s*0xE,\s*160,\s*160\):\s*\"0000000141d008086b3bcdfd\".*?\(0x2,\s*0xD,\s*160,\s*160\):\s*\"0000000141d008086b3aec7fe6\".*?\(0x2,\s*0xD,\s*96,\s*160\):\s*\"0000000141d008086b3aec7f7c\".*?\(0x2,\s*0xD,\s*160,\s*96\):\s*\"0000000141d008086b3adefda6\".*?\(0x2,\s*0xD,\s*96,\s*96\):\s*\"0000000141d008086b3adefdfc\".*?\(0x4,\s*0xB,\s*160,\s*160\):\s*\"0000000141d008086b3bcf7fbf\".*?\(0x4,\s*0xB,\s*96,\s*160\):\s*\"0000000141d008086b3bcf7f7f\".*?\(0x4,\s*0xB,\s*160,\s*96\):\s*\"0000000141d008086b3becf5bf\".*?\(0x4,\s*0xB,\s*96,\s*96\):\s*\"0000000141d008086b3becf57f\".*?\(0x8,\s*0x7,\s*96,\s*96\):\s*\"0000000141d008086b7eddf7\".*?\(0xE,\s*0x1,\s*96,\s*96\):\s*\"0000000141d008086b7fecfff7\".*?\(0xD,\s*0x2,\s*96,\s*96\):\s*\"0000000141d008086b3bed75\".*?\(0x7,\s*0x8,\s*96,\s*96\):\s*\"0000000141d008086b7bce757f\".*?Cb singleton / Cr all-but-one.*?reciprocal",
