@@ -69,9 +69,8 @@ module h264_bitstream #(
     input  wire [1:0]  cabac_cbp_luma_ctx2_sel,
     input  wire [3:0]  cabac_cbp_luma,
     // CABAC chroma coded_block_pattern value: 0=none, 1=DC, 2=DC+AC.
-    // The top-level CABAC P16x16 lane still wires this to zero until the
-    // chroma residual payload scheduler is complete, but the bitstream writer
-    // owns the dormant bin emission path now.
+    // The top-level CABAC P16x16 lane feeds this from captured chroma residual
+    // snapshots so the bitstream writer owns the chroma CBP and DC/AC bins.
     input  wire [1:0]  cabac_cbp_chroma,
     input  wire [511:0] cabac_chroma_dc_scan_flat,
     input  wire [4095:0] cabac_chroma_scan_flat,

@@ -137,6 +137,47 @@ with dc_422_input_path.open("wb") as f:
         f.write(bytes([cr]) * (8 * 16))
 
 
+def signed_scan_values_from_line(scan_line):
+    try:
+        scan_hex = scan_line.split("scan=", 1)[1].replace("_", "").strip()
+    except IndexError:
+        return []
+    values = []
+    for off in range(0, len(scan_hex), 4):
+        word = scan_hex[off:off + 4]
+        if len(word) != 4:
+            continue
+        raw = int(word, 16)
+        values.append(raw - 0x10000 if raw & 0x8000 else raw)
+    return values
+
+
+def collect_nonzero_chroma_scan_values(sim_text, *, marker, plane_marker=None):
+    values = []
+    lines = sim_text.splitlines()
+    for idx, line in enumerate(lines):
+        if "[ZZD]" not in line or marker not in line:
+            continue
+        if plane_marker is not None and plane_marker not in line:
+            continue
+        tc = re.search(r"TC=([0-9]+)", line)
+        if tc is not None and int(tc.group(1)) == 0:
+            continue
+        if idx + 1 >= len(lines) or "[ZZS]" not in lines[idx + 1]:
+            continue
+        values.extend(v for v in signed_scan_values_from_line(lines[idx + 1]) if v != 0)
+    return values
+
+
+def require_signed_nonunity_evidence(values, name, label):
+    if not values:
+        raise SystemExit(f"{name} missing nonzero signed-scan evidence for {label}")
+    if not any(v > 0 for v in values) or not any(v < 0 for v in values):
+        raise SystemExit(f"{name} expected both positive and negative {label} coefficients, got: {values[:16]}")
+    if not any(abs(v) > 1 for v in values):
+        raise SystemExit(f"{name} expected at least one non-unity {label} coefficient, got: {values[:16]}")
+
+
 def run_chroma_probe(sim_bin, name, input_path, require_dc_only, min_ac_blocks_per_plane=1):
     output_path = out_dir / f"{name}.h264"
     sim_log = out_dir / f"{name}.sim.log"
@@ -152,6 +193,9 @@ def run_chroma_probe(sim_bin, name, input_path, require_dc_only, min_ac_blocks_p
         raise SystemExit(f"{name} did not produce Cb/Cr scan evidence")
     if "chDC=1" not in sim_text:
         raise SystemExit(f"{name} did not produce chroma DC residual scan evidence")
+    dc_values = collect_nonzero_chroma_scan_values(sim_text, marker="chDC=1")
+    require_signed_nonunity_evidence(dc_values, name, "chroma DC")
+
     if require_dc_only:
         nonzero_chroma_ac = [
             line for line in sim_text.splitlines()
@@ -161,6 +205,11 @@ def run_chroma_probe(sim_bin, name, input_path, require_dc_only, min_ac_blocks_p
             raise SystemExit(f"{name} unexpectedly produced nonzero chroma AC residuals: {nonzero_chroma_ac[:2]}")
     elif "chAC=1" not in sim_text:
         raise SystemExit(f"{name} did not produce chroma AC residual scan evidence")
+    else:
+        cb_ac_values = collect_nonzero_chroma_scan_values(sim_text, marker="chAC=1", plane_marker="isCb=1")
+        cr_ac_values = collect_nonzero_chroma_scan_values(sim_text, marker="chAC=1", plane_marker="isCr=1")
+        require_signed_nonunity_evidence(cb_ac_values, name, "Cb chroma AC")
+        require_signed_nonunity_evidence(cr_ac_values, name, "Cr chroma AC")
 
     chroma_counter_lines = [
         line for line in sim_text.splitlines()
