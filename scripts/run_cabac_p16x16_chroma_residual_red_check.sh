@@ -83,6 +83,10 @@ ac_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_cb_only_16x
 ac_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_cr_only_16x16_2f.yuv")
 ac_422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_16x16_2f.yuv")
 dc_422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_422_16x16_2f.yuv")
+dc_422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_422_cb_only_16x16_2f.yuv")
+dc_422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_422_cr_only_16x16_2f.yuv")
+ac_422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_cb_only_16x16_2f.yuv")
+ac_422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_cr_only_16x16_2f.yuv")
 ac_10b_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b420_16x16_2f.yuv")
 build_log = out_dir / "cabac_p16x16_chroma_residual_probe.build.log"
 
@@ -146,6 +150,37 @@ def write_420_probe_10b(path, *, cb_mode, cr_mode):
                 f.write(struct.pack("<H", sample))
             for sample in cr:
                 f.write(struct.pack("<H", sample))
+
+
+def write_422_probe(path, *, cb_mode, cr_mode):
+    def plane_for(mode):
+        plane = bytearray([128] * (8 * 16))
+        if mode == "dc":
+            plane[:] = bytes([160]) * (8 * 16)
+        elif mode == "ac_pos":
+            # Deliberately span lower chroma block rows that do not exist in
+            # 4:2:0 so isolated-plane probes also cover the widened 4:2:2
+            # payload cursor and active-mask mapping.
+            for y in range(3, 11):
+                for x in range(2, 6):
+                    plane[y * 8 + x] = 160
+        elif mode == "ac_neg":
+            for y in range(1, 9):
+                for x in range(3, 7):
+                    plane[y * 8 + x] = 96
+        elif mode != "flat":
+            raise ValueError(f"unknown 4:2:2 chroma plane mode {mode!r}")
+        return plane
+
+    with path.open("wb") as f:
+        for frame_idx in range(2):
+            f.write(bytes([64]) * (16 * 16))
+            if frame_idx == 0:
+                f.write(bytes([128]) * (8 * 16))
+                f.write(bytes([128]) * (8 * 16))
+            else:
+                f.write(plane_for(cb_mode))
+                f.write(plane_for(cr_mode))
 
 # 16x16 yuv420p, two frames.  Keep luma flat while changing both chroma
 # planes on frame 1 so the P MB stays in the CABAC P16x16 lane but carries
@@ -222,6 +257,15 @@ with dc_422_input_path.open("wb") as f:
         cr = 96 if frame_idx == 1 else 128
         f.write(bytes([cb]) * (8 * 16))
         f.write(bytes([cr]) * (8 * 16))
+
+# Plane-isolated 4:2:2 probes guard the widened chroma DC coefficient count,
+# the lower-row AC payload cursor, and Cb/Cr active masks independently.  The
+# two-plane 4:2:2 probes can miss a swapped or duplicated plane because both
+# planes carry residual evidence at once.
+write_422_probe(dc_422_cb_only_input_path, cb_mode="dc", cr_mode="flat")
+write_422_probe(dc_422_cr_only_input_path, cb_mode="flat", cr_mode="dc")
+write_422_probe(ac_422_cb_only_input_path, cb_mode="ac_pos", cr_mode="flat")
+write_422_probe(ac_422_cr_only_input_path, cb_mode="flat", cr_mode="ac_neg")
 
 
 def signed_scan_values_from_line(scan_line):
@@ -506,6 +550,42 @@ try:
         "cabac_p16x16_chroma_dc_residual_422_probe",
         dc_422_input_path,
         require_dc_only=True,
+    )
+    run_chroma_probe(
+        sim_bin_422,
+        "cabac_p16x16_chroma_dc_residual_422_cb_only_probe",
+        dc_422_cb_only_input_path,
+        require_dc_only=True,
+        expected_dc_planes=("cb",),
+        expected_nonzero_dc_planes=("cb",),
+    )
+    run_chroma_probe(
+        sim_bin_422,
+        "cabac_p16x16_chroma_dc_residual_422_cr_only_probe",
+        dc_422_cr_only_input_path,
+        require_dc_only=True,
+        expected_dc_planes=("cr",),
+        expected_nonzero_dc_planes=("cr",),
+    )
+    run_chroma_probe(
+        sim_bin_422,
+        "cabac_p16x16_chroma_residual_422_cb_only_probe",
+        ac_422_cb_only_input_path,
+        require_dc_only=False,
+        min_ac_blocks_per_plane=5,
+        expected_dc_planes=("cb",),
+        expected_ac_planes=("cb",),
+        expected_nonzero_dc_planes=("cb",),
+    )
+    run_chroma_probe(
+        sim_bin_422,
+        "cabac_p16x16_chroma_residual_422_cr_only_probe",
+        ac_422_cr_only_input_path,
+        require_dc_only=False,
+        min_ac_blocks_per_plane=5,
+        expected_dc_planes=("cr",),
+        expected_ac_planes=("cr",),
+        expected_nonzero_dc_planes=("cr",),
     )
 finally:
     shutil.rmtree(workspace_422, ignore_errors=True)
