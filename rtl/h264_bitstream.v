@@ -73,6 +73,8 @@ module h264_bitstream #(
     // chroma residual payload scheduler is complete, but the bitstream writer
     // owns the dormant bin emission path now.
     input  wire [1:0]  cabac_cbp_chroma,
+    input  wire [4095:0] cabac_chroma_scan_flat,
+    input  wire [15:0] cabac_chroma_nz_mask,
     input  wire [4095:0] cabac_luma_scan_flat,
     input  wire [15:0] cabac_luma_nz_mask,
     input  wire [1:0]  slice_num_ref_idx_l0_active_minus1,
@@ -515,6 +517,57 @@ module h264_bitstream #(
         begin
             coeff_i = cabac_luma_coeff_at(blk_idx_i, coeff_idx_i);
             cabac_luma_coeff_sign_at = coeff_i[15];
+        end
+    endfunction
+
+    function automatic signed [15:0] cabac_chroma_coeff_at;
+        input [3:0] blk_idx_i;
+        input [3:0] coeff_idx_i;
+        integer bit_i;
+        begin
+            bit_i = (blk_idx_i * 256) + (coeff_idx_i * 16);
+            cabac_chroma_coeff_at = $signed(cabac_chroma_scan_flat[bit_i +: 16]);
+        end
+    endfunction
+
+    function automatic cabac_chroma_cbf_at;
+        input [3:0] blk_idx_i;
+        begin
+            cabac_chroma_cbf_at = cabac_chroma_nz_mask[blk_idx_i];
+        end
+    endfunction
+
+    function automatic [15:0] cabac_chroma_coeff_abs_at;
+        input [3:0] blk_idx_i;
+        input [3:0] coeff_idx_i;
+        reg signed [15:0] coeff_i;
+        begin
+            coeff_i = cabac_chroma_coeff_at(blk_idx_i, coeff_idx_i);
+            cabac_chroma_coeff_abs_at = coeff_i[15] ? ((~coeff_i) + 16'd1) : coeff_i[15:0];
+        end
+    endfunction
+
+    function automatic [3:0] cabac_chroma_last_nonzero_coeff_idx;
+        input [3:0] blk_idx_i;
+        integer coeff_i;
+        reg signed [15:0] coeff_val;
+        begin
+            cabac_chroma_last_nonzero_coeff_idx = 4'd0;
+            for (coeff_i = 0; coeff_i < 16; coeff_i = coeff_i + 1) begin
+                coeff_val = cabac_chroma_coeff_at(blk_idx_i, coeff_i[3:0]);
+                if (coeff_val != 16'sd0)
+                    cabac_chroma_last_nonzero_coeff_idx = coeff_i[3:0];
+            end
+        end
+    endfunction
+
+    function automatic cabac_chroma_coeff_sign_at;
+        input [3:0] blk_idx_i;
+        input [3:0] coeff_idx_i;
+        reg signed [15:0] coeff_i;
+        begin
+            coeff_i = cabac_chroma_coeff_at(blk_idx_i, coeff_idx_i);
+            cabac_chroma_coeff_sign_at = coeff_i[15];
         end
     endfunction
 

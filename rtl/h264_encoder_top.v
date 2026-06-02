@@ -510,12 +510,14 @@ module h264_encoder_top #(
     wire        cabac_slice_enable_w = cabac_feature_enable_w && is_p_frame;
 
     // CABAC P16x16 residual payload captured while the normal residual
-    // pipeline walks the 16 luma 4x4 blocks.  h264_bitstream emits the
-    // deferred CABAC macroblock header after residual processing, so it needs
-    // a stable whole-MB snapshot instead of the live zigzag block wires.
+    // pipeline walks the MB's 4x4 blocks.  h264_bitstream emits the deferred
+    // CABAC macroblock header after residual processing, so it needs stable
+    // whole-MB snapshots instead of the live zigzag block wires.
     reg [3:0]    cabac_cbp_luma_reg;
     reg [4095:0] cabac_luma_scan_flat_reg;
     reg [15:0]   cabac_luma_nz_mask_reg;
+    reg [4095:0] cabac_chroma_scan_flat_reg;
+    reg [15:0]   cabac_chroma_nz_mask_reg;
 
     // Neighbor storage
     reg [MB_COLS*16*BIT_DEPTH-1:0] top_ref_flat;
@@ -549,6 +551,16 @@ module h264_encoder_top #(
         begin
             idx_i = 16 + (plane_is_cr ? CHR_BLOCKS_PER_PLANE : 0) + blk_idx;
             chroma_sub_blk_from_idx = idx_i[SUB_BLK_W-1:0];
+        end
+    endfunction
+
+    function automatic [3:0] cabac_chroma_payload_blk_idx;
+        input plane_is_cr;
+        input [CHR_BLK_W-1:0] blk_idx;
+        integer idx_i;
+        begin
+            idx_i = (plane_is_cr ? CHR_BLOCKS_PER_PLANE : 0) + blk_idx;
+            cabac_chroma_payload_blk_idx = idx_i[3:0];
         end
     endfunction
 
@@ -2413,9 +2425,12 @@ pred_buf = {(256*BD){1'b0}};
         .cabac_cbp_luma_ctx2_sel(cabac_cbp_luma_ctx2_sel_w),
         .cabac_cbp_luma(cabac_cbp_luma_reg),
         // Chroma residual CABAC payload is still guarded at the top level;
-        // keep the new bitstream chroma-CBP bins dormant until that scheduler
-        // provides stable DC/AC payload inputs.
+        // keep the bitstream chroma-CBP bins dormant until the DC/AC payload
+        // scheduler is connected, even though stable AC snapshots are now
+        // captured alongside the luma payload.
         .cabac_cbp_chroma(2'd0),
+        .cabac_chroma_scan_flat(cabac_chroma_scan_flat_reg),
+        .cabac_chroma_nz_mask(cabac_chroma_nz_mask_reg),
         .cabac_luma_scan_flat(cabac_luma_scan_flat_reg),
         .cabac_luma_nz_mask(cabac_luma_nz_mask_reg),
         .slice_num_ref_idx_l0_active_minus1(slice_num_ref_idx_l0_active_minus1),
@@ -2453,6 +2468,8 @@ pred_buf = {(256*BD){1'b0}};
             cabac_cbp_luma_reg <= 4'd0;
             cabac_luma_scan_flat_reg <= 4096'd0;
             cabac_luma_nz_mask_reg <= 16'd0;
+            cabac_chroma_scan_flat_reg <= 4096'd0;
+            cabac_chroma_nz_mask_reg <= 16'd0;
             me_best_mvx <= 8'sd0; me_best_mvy <= 8'sd0; me_best_mvx_l0 <= 8'sd0; me_best_mvy_l0 <= 8'sd0; me_best_mvx_l1 <= 8'sd0; me_best_mvy_l1 <= 8'sd0; me_best_sad <= 18'd0; me_fullpel_best_sad <= 18'd0;
             inter_pred_buf <= {(256*BD){1'b0}}; ref_wr_idx <= 9'd0;
             deblock_fetch_phase <= DBF_IDLE; deblock_wr_phase <= DBW_CUR_LUMA; deblock_fetch_idx <= 7'd0; deblock_fetch_started <= 1'b0;
@@ -3775,6 +3792,8 @@ pred_buf = {(256*BD){1'b0}};
                     cabac_cbp_luma_reg <= 4'd0;
                     cabac_luma_scan_flat_reg <= 4096'd0;
                     cabac_luma_nz_mask_reg <= 16'd0;
+                    cabac_chroma_scan_flat_reg <= 4096'd0;
+                    cabac_chroma_nz_mask_reg <= 16'd0;
                     if (use_ipcm_mb_reg) begin
                         mb_has_residual <= 1'b0;
                         sub_blk <= 5'd0;
@@ -5078,6 +5097,8 @@ pred_buf = {(256*BD){1'b0}};
                                     if (iq_done)
                                         iq_done_latched <= 1'b1;
                                     if (zz_done) begin
+                                        cabac_chroma_scan_flat_reg[cabac_chroma_payload_blk_idx(chr_is_cr, chr_blk) * 256 +: 256] <= scan_flat;
+                                        cabac_chroma_nz_mask_reg[cabac_chroma_payload_blk_idx(chr_is_cr, chr_blk)] <= (total_coeffs != 5'd0);
                                         nz_coeff[chroma_sub_blk_from_idx(chr_is_cr, chr_blk)] <= total_coeffs;
                                         if (total_coeffs != 5'd0)
                                             i16_chroma_ac_nonzero <= 1'b1;
@@ -5575,6 +5596,8 @@ pred_buf = {(256*BD){1'b0}};
                                     blk_state <= BS_ZIGZAG;
                                 end
                                 BS_ZIGZAG: if (zz_done) begin
+                                    cabac_chroma_scan_flat_reg[cabac_chroma_payload_blk_idx(chr_is_cr, chr_blk) * 256 +: 256] <= scan_flat;
+                                    cabac_chroma_nz_mask_reg[cabac_chroma_payload_blk_idx(chr_is_cr, chr_blk)] <= (total_coeffs != 5'd0);
                                     nz_coeff[chroma_sub_blk_from_idx(chr_is_cr, chr_blk)] <= total_coeffs;
                                     if (total_coeffs != 5'd0)
                                         i16_chroma_ac_nonzero <= 1'b1;
