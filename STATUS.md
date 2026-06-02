@@ -1089,6 +1089,12 @@ Current verified milestone outputs:
   `+19`.  This keeps the blocker pinned to Cb-positive CABAC emission or
   finalization after the intended coefficient is present, not to input stimulus
   drift or hidden quantizer magnitude changes.
+- a follow-up scheduled 2026-06-02 xfail probe added a two-plane tiny-DC case
+  with exact `Cb=+2` and `Cr=-2` scan evidence.  It still fails strict FFmpeg at
+  MB 0 (`bytestream -12`) and non-strict framehash still conceals the P frame,
+  so the remaining blocker is not limited to the Cr-empty CBF path; compare the
+  green large two-plane `Cb=+157`/`Cr=-157` case against this tiny pair when
+  debugging CABAC coefficient/sign/finalization sequencing.
 
 ## Not Done Yet
 
