@@ -756,14 +756,16 @@ try:
                 "cabac_p16x16_chroma_dc_residual_10b422_cb_pos_tiny_probe",
                 dc_10b422_cb_pos_tiny_input_path,
                 ("cb",),
+                "bytestream -8",
             ),
             (
                 "cabac_p16x16_chroma_dc_residual_10b422_cb_only_probe",
                 dc_10b422_cb_only_input_path,
                 ("cb",),
+                "bytestream -22",
             ),
         ]
-        for xfail_name, xfail_path, xfail_plane in xfail_cases:
+        for xfail_name, xfail_path, xfail_plane, expected_fragment in xfail_cases:
             try:
                 run_chroma_probe(
                     sim_bin_10b422,
@@ -778,7 +780,15 @@ try:
                 msg = str(exc)
                 if "error while decoding MB 0 0" not in msg and "corrupt decoded frame" not in msg:
                     raise
-                print(f"[PASS] {xfail_name}: reproduced expected FFmpeg decode blocker ({msg.splitlines()[0]})")
+                if expected_fragment not in msg:
+                    raise SystemExit(
+                        f"{xfail_name} reproduced a different FFmpeg decode blocker; "
+                        f"expected {expected_fragment!r}, got: {msg.splitlines()[0]}"
+                    )
+                print(
+                    f"[PASS] {xfail_name}: reproduced expected FFmpeg decode blocker "
+                    f"({msg.splitlines()[0]})"
+                )
             else:
                 raise SystemExit(f"{xfail_name} unexpectedly strict-decoded; promote it into the default gate")
     run_chroma_probe(

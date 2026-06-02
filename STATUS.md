@@ -1041,6 +1041,12 @@ Current verified milestone outputs:
   target the sign-sensitive Cb-only positive chroma DC CABAC bin/context or
   finalization schedule before promoting that Cb-positive probe into the
   default gate
+- a later scheduled 2026-06-02 check tightened that optional Cb-positive
+  isolation repro so it now requires the exact FFmpeg signatures
+  `bytestream -8` for the tiny positive-DC lane and `bytestream -22` for the
+  larger positive-DC lane; this keeps future work from accidentally replacing
+  the known blocker with a different decode failure while still leaving the
+  strict default gate green
 
 ## Not Done Yet
 
