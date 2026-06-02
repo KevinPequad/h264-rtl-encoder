@@ -1110,6 +1110,13 @@ Current verified milestone outputs:
   the unity Cb sign bin against the following Cr DC level path; the blocker is
   not all unity-Cb-positive two-plane emission, only the larger following Cr
   negative payload variant and the existing Cb-only/tiny/mixed lanes.
+- this H.264 cron tick added the midpoint `Cb=+1`/`Cr=-19` 10-bit 4:2:2 DC
+  repro to the optional blocker suite.  It now pins a distinct MB 0
+  `bytestream -11` strict-decode failure with exact signed RTL scan evidence and
+  neutral non-strict concealment, while the existing `Cb=+1`/`Cr=-2` default
+  lane stays green.  The next source probe should compare the Cr DC
+  coeff_abs_levelgt1/finalization path between `-2`, `-19`, and `-157` after the
+  unity positive Cb sign bin.
 
 ## Not Done Yet
 

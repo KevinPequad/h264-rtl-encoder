@@ -93,6 +93,7 @@ dc_10b422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_1
 dc_10b422_cb_pos_unity_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_16x16_2f.yuv")
 dc_10b422_cb_pos_tiny_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_tiny_16x16_2f.yuv")
 dc_10b422_cb_pos_unity_cr_neg_tiny_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_cr_neg_tiny_16x16_2f.yuv")
+dc_10b422_cb_pos_unity_cr_neg_small_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_cr_neg_small_16x16_2f.yuv")
 dc_10b422_cb_pos_unity_cr_neg_large_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_cr_neg_large_16x16_2f.yuv")
 dc_10b422_cb_pos_tiny_cr_neg_tiny_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_tiny_cr_neg_tiny_16x16_2f.yuv")
 dc_10b422_cb_pos_large_cr_neg_tiny_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_large_cr_neg_tiny_16x16_2f.yuv")
@@ -349,6 +350,7 @@ write_422_probe_10b(dc_10b422_cb_only_input_path, cb_mode="dc_small", cr_mode="f
 write_422_probe_10b(dc_10b422_cb_pos_unity_input_path, cb_mode="dc_pos_unity", cr_mode="flat")
 write_422_probe_10b(dc_10b422_cb_pos_tiny_input_path, cb_mode="dc_pos_tiny", cr_mode="flat")
 write_422_probe_10b(dc_10b422_cb_pos_unity_cr_neg_tiny_input_path, cb_mode="dc_pos_unity", cr_mode="dc_neg_tiny")
+write_422_probe_10b(dc_10b422_cb_pos_unity_cr_neg_small_input_path, cb_mode="dc_pos_unity", cr_mode="dc_neg_small")
 write_422_probe_10b(dc_10b422_cb_pos_unity_cr_neg_large_input_path, cb_mode="dc_pos_unity", cr_mode="dc_neg")
 write_422_probe_10b(dc_10b422_cb_pos_tiny_cr_neg_tiny_input_path, cb_mode="dc_pos_tiny", cr_mode="dc_neg_tiny")
 write_422_probe_10b(dc_10b422_cb_pos_large_cr_neg_tiny_input_path, cb_mode="dc", cr_mode="dc_neg_tiny")
@@ -909,6 +911,16 @@ try:
                 ("cb",),
                 (),
                 {"cb": 2},
+            ),
+            (
+                "cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_cr_neg_small_probe",
+                dc_10b422_cb_pos_unity_cr_neg_small_input_path,
+                ("cb", "cr"),
+                "bytestream -11",
+                False,
+                ("cb",),
+                ("cr",),
+                {"cb": 1, "cr": -19},
             ),
             (
                 "cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_cr_neg_large_probe",
