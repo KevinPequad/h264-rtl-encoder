@@ -1125,6 +1125,13 @@ Current verified milestone outputs:
   and neutral non-strict concealment.  The next source probe should compare the
   isolated negative-Cr CABAC tail for `-2`, `-19`, and `-157`, especially the
   small-magnitude path that differs from the green midpoint/large cases.
+- this H.264 cron tick added an isolated large positive-Cb 10-bit 4:2:2 DC
+  blocker repro.  `Cb=+157` with flat Cr still fails strict FFmpeg at MB 0
+  (`bytestream -14`) with exact RTL scan evidence and neutral non-strict
+  concealment, even though the two-plane large `Cb=+157`/`Cr=-157` default lane
+  remains strict-decode/recon-hash green.  That narrows the remaining red lane
+  away from input magnitude capture and toward Cb-positive CABAC finalization or
+  the following zero/Cr CBF context sequence.
 
 ## Not Done Yet
 
