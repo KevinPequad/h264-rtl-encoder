@@ -560,6 +560,16 @@ module h264_bitstream #(
         end
     endfunction
 
+    function automatic cabac_chroma_dc_coeff_sign_at;
+        input plane_is_cr_i;
+        input [3:0] coeff_idx_i;
+        reg signed [15:0] coeff_i;
+        begin
+            coeff_i = cabac_chroma_dc_coeff_at(plane_is_cr_i, coeff_idx_i);
+            cabac_chroma_dc_coeff_sign_at = coeff_i[15];
+        end
+    endfunction
+
     function automatic [3:0] cabac_chroma_dc_last_nonzero_coeff_idx;
         input plane_is_cr_i;
         integer coeff_i;

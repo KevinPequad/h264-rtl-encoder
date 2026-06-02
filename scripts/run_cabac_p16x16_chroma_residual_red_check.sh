@@ -15,6 +15,7 @@ checks = {
     "bitstream_has_chroma_payload_ports": "input  wire [511:0] cabac_chroma_dc_scan_flat" in bitstream and "input  wire [4095:0] cabac_chroma_scan_flat" in bitstream and "input  wire [15:0] cabac_chroma_nz_mask" in bitstream,
     "bitstream_has_second_chroma_cbp_context": "cabac_cbp_chroma_ctx_state_78" in bitstream,
     "bitstream_has_chroma_coeff_helpers": "function automatic signed [15:0] cabac_chroma_coeff_at" in bitstream and "function automatic signed [15:0] cabac_chroma_dc_coeff_at" in bitstream and "function automatic cabac_chroma_cbf_at" in bitstream and "function automatic [3:0] cabac_chroma_last_nonzero_coeff_idx" in bitstream,
+    "bitstream_has_chroma_dc_sign_helper": "function automatic cabac_chroma_dc_coeff_sign_at" in bitstream and "cabac_chroma_dc_coeff_sign_at = coeff_i[15];" in bitstream,
     "bitstream_bounds_chroma_coeff_helpers": "localparam integer CABAC_CHROMA_AC_COEFFS = 15;" in bitstream and "localparam integer CABAC_CHROMA_DC_COEFFS = (CHROMA_FORMAT_IDC == 2) ? 8 : 4;" in bitstream and "coeff_i < CABAC_CHROMA_AC_COEFFS" in bitstream and "coeff_i < CABAC_CHROMA_DC_COEFFS" in bitstream,
     "bitstream_emits_chroma_cbp_nonzero_bin": "cabac_bin_value <= (cabac_cbp_chroma != 2'd0);" in bitstream,
     "bitstream_emits_chroma_cbp_ac_bin": "cabac_bin_value <= (cabac_cbp_chroma == 2'd2);" in bitstream,
