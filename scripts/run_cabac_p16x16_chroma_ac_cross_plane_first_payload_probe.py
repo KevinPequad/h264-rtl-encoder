@@ -38,7 +38,8 @@ EXPECTED_HEADER_TAIL = 0x6B
 # two-block off-diagonal, diagonal-skew, edge-adjacent reciprocal pairs, and
 # checker/three-block cross-row complements,
 # high-amplitude skew-pair sign partitions,
-# asymmetric three-plus-one complements, three-block reciprocal complements,
+# asymmetric three-plus-one complements, default-amplitude singleton/three-block
+# row-complement gaps, three-block reciprocal complements,
 # all-but-one reciprocal complements including same-quadrant and adjacent
 # singleton mirrors, the complete default-amplitude same-mask Cb/Cr lattice,
 # and dense-both controls.  This is
@@ -56,20 +57,27 @@ TAILS = {
     (0x1, 0x8): "0000000141d008086b3acbb8b517a6",
     (0x1, 0x9): "0000000141d008086b3acc0d611934f5232b32",
     (0x1, 0xA): "0000000141d008086b3acc11363269ecb24a",
+    (0x1, 0xC): "0000000141d008086b3acc0a2ea545e43924",
+    (0x1, 0xD): "0000000141d008086b3acbf3269a7a91953e1d",
+    (0x1, 0xE): "0000000141d008086b3acbf3269a7b2c9214bf",
     (0x2, 0x1): "0000000141d008086b3acbeb2d4098",
     (0x2, 0x2): "0000000141d008086b3acbeb2d409d",
     (0x2, 0x3): "0000000141d008086b3acc09a95b50261328",
     (0x2, 0x4): "0000000141d008086b3acbeb2d408a",
     (0x2, 0x5): "0000000141d008086b3acc10c842e8a71d253e",
     (0x2, 0x6): "0000000141d008086b3acc0da221745404ca",
+    (0x2, 0x7): "0000000141d008086b3acbf5cad40984ca22ba",
     (0x2, 0x8): "0000000141d008086b3acbeb2d4097",
     (0x2, 0x9): "0000000141d008086b3acc0d662174538e92cc",
+    (0x2, 0xA): "0000000141d008086b3acc114042e8a80995",
+    (0x2, 0xC): "0000000141d008086b3acc0a3a5b50228892",
     (0x3, 0x1): "0000000141d008086b3acc61364743b092af",
     (0x3, 0x2): "0000000141d008086b3acc61364743b092b0",
     (0x3, 0x3): "0000000141d008086b3acc614c11ff50ec24abcc54",
     (0x3, 0x4): "0000000141d008086b3acc61364743b092aa",
     (0x3, 0x5): "0000000141d008086b3acc614deaff50ec24abcc56",
     (0x3, 0x6): "0000000141d008086b3acc614d1b6fa87612560a3a",
+    (0x3, 0x7): "0000000141d008086b3acc614660267b092af3153900",
     (0x3, 0x8): "0000000141d008086b3acc61364743b092ae",
     (0x4, 0x1): "0000000141d008086b3acbdfe134e8",
     (0x4, 0x2): "0000000141d008086b3acbdfe134f0",
@@ -115,6 +123,7 @@ TAILS = {
     (0xC, 0x5): "0000000141d008086b3acc626fed72133cb0958456",
     (0xA, 0x3): "0000000141d008086b3acc707a5226d40d584ac22a",
     (0x3, 0xA): "0000000141d008086b3acc614e10df50ec24ac1476",
+    (0x3, 0xB): "0000000141d008086b3acc614660267b092af315390000",
     (0x6, 0xC): "0000000141d008086b3acc6941340369fac655f00a",
     (0xC, 0x6): "0000000141d008086b3acc626f1ca9099e584aefd5",
     (0x1, 0xF): "0000000141d008086b3acbf59d7451ccca22bad74d",
@@ -511,7 +520,8 @@ def main() -> int:
         "two-block off-diagonal, diagonal-skew, edge-adjacent reciprocal pairs, "
         "checker/three-block cross-row complements, dense-Cb, dense-Cr, "
         "high-amplitude skew-pair sign partitions, "
-        "asymmetric three-plus-one complements, three-block reciprocal complements, "
+        "asymmetric three-plus-one complements, default-amplitude singleton/three-block "
+        "row-complement gaps, three-block reciprocal complements, "
         "all-but-one reciprocal complements, "
         "same-quadrant all-but-one/singleton mirrors, "
         "the complete default-amplitude same-mask Cb/Cr lattice, "
