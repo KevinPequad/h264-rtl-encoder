@@ -1078,6 +1078,11 @@ Current verified milestone outputs:
   must carry negative Cb evidence.  This keeps the remaining red lane narrowed
   to Cb-positive/Cr-empty strict-decode behavior rather than a hidden plane or
   sign swap.
+- the following scheduled 2026-06-02 xfail tightening made the optional
+  Cb-positive 10-bit 4:2:2 DC blocker repro assert positive Cb signed-scan
+  evidence before accepting the known strict FFmpeg failures.  The red lane is
+  now guarded against both hidden Cb sign inversion and neutral non-strict
+  concealment while the default strict-decode gate stays green.
 
 ## Not Done Yet
 

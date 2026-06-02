@@ -865,6 +865,7 @@ try:
                 ("cb",),
                 "bytestream -9",
                 False,
+                ("cb",),
             ),
             (
                 "cabac_p16x16_chroma_dc_residual_10b422_cb_pos_tiny_probe",
@@ -872,6 +873,7 @@ try:
                 ("cb",),
                 "bytestream -8",
                 True,
+                ("cb",),
             ),
             (
                 "cabac_p16x16_chroma_dc_residual_10b422_cb_only_probe",
@@ -879,9 +881,17 @@ try:
                 ("cb",),
                 "bytestream -22",
                 True,
+                ("cb",),
             ),
         ]
-        for xfail_name, xfail_path, xfail_plane, expected_fragment, require_nonunity_dc in xfail_cases:
+        for (
+            xfail_name,
+            xfail_path,
+            xfail_plane,
+            expected_fragment,
+            require_nonunity_dc,
+            expected_positive_dc_planes,
+        ) in xfail_cases:
             try:
                 run_chroma_probe(
                     sim_bin_10b422,
@@ -892,6 +902,7 @@ try:
                     expected_nonzero_dc_planes=xfail_plane,
                     require_luma_empty=True,
                     require_nonunity_dc=require_nonunity_dc,
+                    expected_positive_dc_planes=expected_positive_dc_planes,
                 )
             except SystemExit as exc:
                 msg = str(exc)
