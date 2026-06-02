@@ -59,6 +59,7 @@ THREADS="${THREADS:-1}" BUILD_JOBS="${BUILD_JOBS:-1}" \
   python3 - <<'PY'
 from pathlib import Path
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -69,16 +70,14 @@ from rtl_runner import BuildConfig, build_sim, run_sim, stage_workspace
 
 out_dir = root / "output"
 out_dir.mkdir(exist_ok=True)
-input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_16x16_2f.yuv")
-output_path = out_dir / "cabac_p16x16_chroma_residual_probe.h264"
+ac_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_16x16_2f.yuv")
+dc_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_16x16_2f.yuv")
 build_log = out_dir / "cabac_p16x16_chroma_residual_probe.build.log"
-sim_log = out_dir / "cabac_p16x16_chroma_residual_probe.sim.log"
-ffmpeg_log = out_dir / "cabac_p16x16_chroma_residual_probe.ffmpeg.log"
 
 # 16x16 yuv420p, two frames.  Keep luma flat while changing both chroma
 # planes on frame 1 so the P MB stays in the CABAC P16x16 lane but carries
-# nonzero chroma residual snapshots into the bitstream writer.
-with input_path.open("wb") as f:
+# nonzero chroma AC residual snapshots into the bitstream writer.
+with ac_input_path.open("wb") as f:
     for frame_idx in range(2):
         f.write(bytes([64]) * (16 * 16))
         cb = bytearray([128] * (8 * 8))
@@ -92,6 +91,56 @@ with input_path.open("wb") as f:
                     cr[y * 8 + x] = 96
         f.write(cb)
         f.write(cr)
+
+# Uniform chroma deltas should exercise Cb/Cr DC residual payloads while keeping
+# every chroma AC block at total_coeffs=0. This guards the cbp_chroma==1 lane
+# separately from the DC+AC probe above.
+with dc_input_path.open("wb") as f:
+    for frame_idx in range(2):
+        f.write(bytes([64]) * (16 * 16))
+        cb = 160 if frame_idx == 1 else 128
+        cr = 96 if frame_idx == 1 else 128
+        f.write(bytes([cb]) * (8 * 8))
+        f.write(bytes([cr]) * (8 * 8))
+
+
+def run_chroma_probe(sim_bin, name, input_path, require_dc_only):
+    output_path = out_dir / f"{name}.h264"
+    sim_log = out_dir / f"{name}.sim.log"
+    ffmpeg_log = out_dir / f"{name}.ffmpeg.log"
+    proc = run_sim(sim_bin, 2, 20_000_000, input_path, output_path, capture=True)
+    sim_text = (proc.stdout or "") + (proc.stderr or "")
+    sim_log.write_text(sim_text, encoding="utf-8")
+    if "[TB] 2 frames encoded" not in sim_text:
+        raise SystemExit(f"missing two-frame encode summary in {name}")
+    if "cabac_p16x16_mbs=1" not in sim_text:
+        raise SystemExit(f"{name} did not exercise a CABAC P16x16 MB")
+    if "isCb=1" not in sim_text or "isCr=1" not in sim_text:
+        raise SystemExit(f"{name} did not produce Cb/Cr scan evidence")
+    if "chDC=1" not in sim_text:
+        raise SystemExit(f"{name} did not produce chroma DC residual scan evidence")
+    if require_dc_only:
+        nonzero_chroma_ac = [
+            line for line in sim_text.splitlines()
+            if "[ZZD]" in line and "chAC=1" in line and re.search(r"TC=([1-9][0-9]*)", line)
+        ]
+        if nonzero_chroma_ac:
+            raise SystemExit(f"{name} unexpectedly produced nonzero chroma AC residuals: {nonzero_chroma_ac[:2]}")
+    elif "chAC=1" not in sim_text:
+        raise SystemExit(f"{name} did not produce chroma AC residual scan evidence")
+
+    ff = subprocess.run(
+        ["ffmpeg", "-y", "-v", "error", "-xerror", "-i", str(output_path), "-f", "null", "-"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    ffmpeg_text = (ff.stdout or "") + (ff.stderr or "")
+    ffmpeg_log.write_text(ffmpeg_text, encoding="utf-8")
+    if ff.returncode != 0:
+        raise SystemExit(ffmpeg_text or f"ffmpeg strict decode failed for {name} with exit {ff.returncode}")
+    print(f"[PASS] {name}: strict FFmpeg decode ok ({output_path})")
+
 
 workspace = stage_workspace("h264_cabac_p16x16_chroma_residual_")
 try:
@@ -107,27 +156,8 @@ try:
         enable_cabac_p16x16_fullpel_only=1,
     )
     sim_bin = build_sim(workspace, cfg, build_log)
-    proc = run_sim(sim_bin, 2, 20_000_000, input_path, output_path, capture=True)
-    sim_text = (proc.stdout or "") + (proc.stderr or "")
-    sim_log.write_text(sim_text, encoding="utf-8")
-    if "[TB] 2 frames encoded" not in sim_text:
-        raise SystemExit("missing two-frame encode summary in chroma residual probe")
-    if "cabac_p16x16_mbs=1" not in sim_text:
-        raise SystemExit("chroma residual probe did not exercise a CABAC P16x16 MB")
-    if "isCb=1" not in sim_text or "isCr=1" not in sim_text or "chAC=1" not in sim_text:
-        raise SystemExit("chroma residual probe did not produce Cb/Cr AC residual scan evidence")
-
-    ff = subprocess.run(
-        ["ffmpeg", "-y", "-v", "error", "-xerror", "-i", str(output_path), "-f", "null", "-"],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    ffmpeg_text = (ff.stdout or "") + (ff.stderr or "")
-    ffmpeg_log.write_text(ffmpeg_text, encoding="utf-8")
-    if ff.returncode != 0:
-        raise SystemExit(ffmpeg_text or f"ffmpeg strict decode failed with exit {ff.returncode}")
-    print(f"[PASS] cabac_p16x16_chroma_residual_probe: strict FFmpeg decode ok ({output_path})")
+    run_chroma_probe(sim_bin, "cabac_p16x16_chroma_residual_probe", ac_input_path, require_dc_only=False)
+    run_chroma_probe(sim_bin, "cabac_p16x16_chroma_dc_residual_probe", dc_input_path, require_dc_only=True)
 finally:
     shutil.rmtree(workspace, ignore_errors=True)
 PY
