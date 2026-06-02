@@ -182,6 +182,8 @@ module h264_bitstream #(
     localparam integer CHR_MB_HEIGHT = (CHROMA_FORMAT_IDC == 1) ? 8 : 16;
     localparam integer CHR_MB_PIXELS = CHR_MB_WIDTH * CHR_MB_HEIGHT;
     localparam integer IPCM_TOTAL_SAMPLES = 256 + 2*CHR_MB_PIXELS;
+    localparam integer CABAC_CHROMA_AC_COEFFS = 15;
+    localparam integer CABAC_CHROMA_DC_COEFFS = (CHROMA_FORMAT_IDC == 2) ? 8 : 4;
     reg [6:0]  slice_multi_ref_bits;
     reg [3:0]  slice_multi_ref_bits_len;
     reg [11:0] slice_multi_ref_bits_qp;
@@ -564,7 +566,7 @@ module h264_bitstream #(
         reg signed [15:0] coeff_val;
         begin
             cabac_chroma_dc_last_nonzero_coeff_idx = 4'd0;
-            for (coeff_i = 0; coeff_i < 16; coeff_i = coeff_i + 1) begin
+            for (coeff_i = 0; coeff_i < CABAC_CHROMA_DC_COEFFS; coeff_i = coeff_i + 1) begin
                 coeff_val = cabac_chroma_dc_coeff_at(plane_is_cr_i, coeff_i[3:0]);
                 if (coeff_val != 16'sd0)
                     cabac_chroma_dc_last_nonzero_coeff_idx = coeff_i[3:0];
@@ -588,7 +590,7 @@ module h264_bitstream #(
         reg signed [15:0] coeff_val;
         begin
             cabac_chroma_last_nonzero_coeff_idx = 4'd0;
-            for (coeff_i = 0; coeff_i < 16; coeff_i = coeff_i + 1) begin
+            for (coeff_i = 0; coeff_i < CABAC_CHROMA_AC_COEFFS; coeff_i = coeff_i + 1) begin
                 coeff_val = cabac_chroma_coeff_at(blk_idx_i, coeff_i[3:0]);
                 if (coeff_val != 16'sd0)
                     cabac_chroma_last_nonzero_coeff_idx = coeff_i[3:0];
