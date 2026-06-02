@@ -1054,6 +1054,12 @@ Current verified milestone outputs:
   should focus the CABAC-coded Cb-positive DC bin/context/finalization path
   rather than treating public-decoder fallback output as useful reconstruction
   evidence
+- a later scheduled 2026-06-02 test tightening moved that fallback check into
+  `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` under
+  `CABAC_EXPECT_10B422_DC_ISOLATION_FAIL=1`: all three Cb-positive DC xfails
+  must now reproduce their exact strict FFmpeg bytestream errors and also prove
+  that non-strict FFmpeg framehash merely conceals the corrupted P MB by keeping
+  the P-frame hash identical to the neutral IDR hash
 
 ## Not Done Yet
 

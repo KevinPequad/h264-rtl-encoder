@@ -396,6 +396,47 @@ def require_signed_nonunity_evidence(values, name, label):
         raise SystemExit(f"{name} expected both positive and negative {label} coefficients, got: {values[:16]}")
 
 
+def require_non_strict_framehash_stays_neutral(name, expected_fragment):
+    """Guard the optional Cb-positive xfails against false reconstruction evidence.
+
+    FFmpeg without -xerror currently returns two framehash rows for the failing
+    positive-Cb DC probes, but both hashes match the neutral IDR frame because
+    the decoder conceals the corrupted P MB.  Keep that fallback behavior
+    explicit so this xfail cannot be mistaken for useful reconstruction proof.
+    """
+    output_path = out_dir / f"{name}.h264"
+    framehash_log = out_dir / f"{name}.framehash.log"
+    fh = subprocess.run(
+        ["ffmpeg", "-v", "error", "-i", str(output_path), "-f", "framehash", "-"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    framehash_text = (fh.stdout or "") + (fh.stderr or "")
+    framehash_log.write_text(framehash_text, encoding="utf-8")
+    if expected_fragment not in framehash_text:
+        raise SystemExit(
+            f"{name} non-strict framehash no longer reports {expected_fragment!r}; "
+            "re-check whether the strict-decode blocker moved"
+        )
+    frame_lines = [
+        line for line in framehash_text.splitlines()
+        if line.startswith("0,")
+    ]
+    if len(frame_lines) != 2:
+        raise SystemExit(
+            f"{name} expected two non-strict framehash rows for the concealed IDR/P pair, "
+            f"got {len(frame_lines)} rows"
+        )
+    hashes = [line.rsplit(",", 1)[-1].strip() for line in frame_lines]
+    if hashes[0] != hashes[1]:
+        raise SystemExit(
+            f"{name} non-strict framehash now shows a changed P frame; "
+            "promote this probe toward strict decode/recon validation before leaving it xfail"
+        )
+    print(f"[PASS] {name}: non-strict FFmpeg fallback keeps concealed P frame neutral ({hashes[1]})")
+
+
 def run_chroma_probe(
     sim_bin,
     name,
@@ -807,6 +848,7 @@ try:
                     f"[PASS] {xfail_name}: reproduced expected FFmpeg decode blocker "
                     f"({msg.splitlines()[0]})"
                 )
+                require_non_strict_framehash_stays_neutral(xfail_name, expected_fragment)
             else:
                 raise SystemExit(f"{xfail_name} unexpectedly strict-decoded; promote it into the default gate")
     run_chroma_probe(
