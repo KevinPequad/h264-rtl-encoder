@@ -360,6 +360,7 @@ module h264_bitstream #(
     reg        cabac_res_payload_is_chroma;
     reg        cabac_res_chroma_payload_is_dc;
     reg        cabac_res_chroma_plane_is_cr;
+    reg [4:0]  cabac_res_chroma_payload_idx;
     reg [3:0]  cabac_res_chroma_blk_idx;
     reg [3:0]  cabac_res_payload_coeff_limit;
     reg [3:0]  cabac_pending_cbf_ctx_sel;
@@ -960,6 +961,7 @@ module h264_bitstream #(
             cabac_res_payload_is_chroma <= 1'b0;
             cabac_res_chroma_payload_is_dc <= 1'b0;
             cabac_res_chroma_plane_is_cr <= 1'b0;
+            cabac_res_chroma_payload_idx <= 5'd0;
             cabac_res_chroma_blk_idx <= 4'd0;
             cabac_res_payload_coeff_limit <= 4'd0;
             cabac_pending_cbf_ctx_sel <= 4'd0;
@@ -1625,6 +1627,7 @@ module h264_bitstream #(
                                     cabac_res_payload_is_chroma <= 1'b0;
                                     cabac_res_chroma_payload_is_dc <= 1'b0;
                                     cabac_res_chroma_plane_is_cr <= 1'b0;
+                                    cabac_res_chroma_payload_idx <= 5'd0;
                                     cabac_res_chroma_blk_idx <= 4'd0;
                                     cabac_res_payload_coeff_limit <= 4'd0;
                                     cabac_pending_cbf_ctx_sel <= 4'd0;
@@ -2277,6 +2280,12 @@ module h264_bitstream #(
                                     return_state <= S_MB_HDR;
                                 end
                                 if (mb_has_residual && (cabac_cbp_luma != 4'd0)) begin
+                                    cabac_res_chroma_payload_idx <= CABAC_CHROMA_PAYLOAD_DC_CB;
+                                    cabac_res_chroma_payload_is_dc <= cabac_chroma_payload_cursor_is_dc(CABAC_CHROMA_PAYLOAD_DC_CB);
+                                    cabac_res_chroma_plane_is_cr <= cabac_chroma_payload_cursor_plane_is_cr(CABAC_CHROMA_PAYLOAD_DC_CB);
+                                    cabac_res_chroma_blk_idx <= cabac_chroma_payload_cursor_blk_idx(CABAC_CHROMA_PAYLOAD_DC_CB);
+                                    cabac_res_payload_coeff_limit <= cabac_chroma_payload_coeff_limit(
+                                        cabac_chroma_payload_cursor_is_dc(CABAC_CHROMA_PAYLOAD_DC_CB));
                                     cabac_ctx_state_in <= cabac_qp_delta_ctx_state_60;
                                     cabac_pending_ctx_kind <= CABAC_CTX_QPDELTA;
                                     cabac_pending_ctx_sel <= 2'd0;
