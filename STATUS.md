@@ -1042,11 +1042,18 @@ Current verified milestone outputs:
   finalization schedule before promoting that Cb-positive probe into the
   default gate
 - a later scheduled 2026-06-02 check tightened that optional Cb-positive
-  isolation repro so it now requires the exact FFmpeg signatures
-  `bytestream -8` for the tiny positive-DC lane and `bytestream -22` for the
-  larger positive-DC lane; this keeps future work from accidentally replacing
-  the known blocker with a different decode failure while still leaving the
-  strict default gate green
+  isolation repro so it now requires exact FFmpeg signatures: `bytestream -9`
+  for the unity positive-DC lane, `bytestream -8` for the tiny positive-DC lane,
+  and `bytestream -22` for the larger positive-DC lane; this keeps future work
+  from accidentally replacing the known blocker with a different decode failure
+  while still leaving the strict default gate green
+- a follow-up scheduled 2026-06-02 probe re-ran the optional Cb-positive
+  isolation suite and confirmed the strict decoder fails before producing the
+  intended Cb residual: non-strict FFmpeg framehash keeps the unity-positive
+  Cb-only P frame identical to the neutral IDR frame, so the next source change
+  should focus the CABAC-coded Cb-positive DC bin/context/finalization path
+  rather than treating public-decoder fallback output as useful reconstruction
+  evidence
 
 ## Not Done Yet
 
