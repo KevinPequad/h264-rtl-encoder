@@ -632,6 +632,52 @@ module h264_bitstream #(
         end
     endfunction
 
+    function automatic cabac_chroma_payload_cbf_at;
+        input payload_is_dc_i;
+        input plane_is_cr_i;
+        input [3:0] blk_idx_i;
+        begin
+            cabac_chroma_payload_cbf_at = payload_is_dc_i ?
+                cabac_chroma_dc_cbf_at(plane_is_cr_i) :
+                cabac_chroma_cbf_at(blk_idx_i);
+        end
+    endfunction
+
+    function automatic [3:0] cabac_chroma_payload_last_nonzero_coeff_idx;
+        input payload_is_dc_i;
+        input plane_is_cr_i;
+        input [3:0] blk_idx_i;
+        begin
+            cabac_chroma_payload_last_nonzero_coeff_idx = payload_is_dc_i ?
+                cabac_chroma_dc_last_nonzero_coeff_idx(plane_is_cr_i) :
+                cabac_chroma_last_nonzero_coeff_idx(blk_idx_i);
+        end
+    endfunction
+
+    function automatic [15:0] cabac_chroma_payload_coeff_abs_at;
+        input payload_is_dc_i;
+        input plane_is_cr_i;
+        input [3:0] blk_idx_i;
+        input [3:0] coeff_idx_i;
+        begin
+            cabac_chroma_payload_coeff_abs_at = payload_is_dc_i ?
+                cabac_chroma_dc_coeff_abs_at(plane_is_cr_i, coeff_idx_i) :
+                cabac_chroma_coeff_abs_at(blk_idx_i, coeff_idx_i);
+        end
+    endfunction
+
+    function automatic cabac_chroma_payload_coeff_sign_at;
+        input payload_is_dc_i;
+        input plane_is_cr_i;
+        input [3:0] blk_idx_i;
+        input [3:0] coeff_idx_i;
+        begin
+            cabac_chroma_payload_coeff_sign_at = payload_is_dc_i ?
+                cabac_chroma_dc_coeff_sign_at(plane_is_cr_i, coeff_idx_i) :
+                cabac_chroma_coeff_sign_at(blk_idx_i, coeff_idx_i);
+        end
+    endfunction
+
     // UE(v) encoder — general-purpose unsigned Exp-Golomb
     // Used by SPS and other parameter sets
     reg [9:0] ue_input;   // codeNum (unsigned, max ~1023)
