@@ -9,7 +9,8 @@ row-adjacent directions, both column-adjacent directions, opposite-diagonal Cb+C
 and complementary two-block row/column pairs on both chroma planes, plus
 high-amplitude same-quadrant and row/column-complement subsets with luma
 residual present, same-mask row/diagonal controls, including their high-amplitude
-forms, default all-but-one same-mask mirrors, the complementary split-row/column
+forms, default all-but-one same-mask mirrors, the high-amplitude top-row
+same-mask all-but-one +/-32 sign matrix, the complementary split-row/column
 +/-32 sign matrix, reciprocal high-amplitude right-column/diagonal skew pairs,
 and mirrored
 high-amplitude three-plus-one edge complements with mixed Cb/Cr signs, including
@@ -526,6 +527,42 @@ CASES = (
         expected_v_sad=768,
         cb_sample_value=160,
         cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m7_hi_same_cbpos_crneg",
+        cb_mask=0x7,
+        cr_mask=0x7,
+        expected_final_slice="0000000141d008086b3abf",
+        expected_cavlc_suppressed_bits=356,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=768,
+        expected_v_sad=768,
+        cb_sample_value=160,
+        cr_sample_value=96,
+    ),
+    Case(
+        name="cbcr_ac_m7_hi_same_cbneg_crpos",
+        cb_mask=0x7,
+        cr_mask=0x7,
+        expected_final_slice="0000000141d008086b3ab7",
+        expected_cavlc_suppressed_bits=356,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=768,
+        expected_v_sad=768,
+        cb_sample_value=96,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m7_hi_same_cbneg_crneg",
+        cb_mask=0x7,
+        cr_mask=0x7,
+        expected_final_slice="0000000141d008086b3abf",
+        expected_cavlc_suppressed_bits=352,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=768,
+        expected_v_sad=768,
+        cb_sample_value=96,
+        cr_sample_value=96,
     ),
     Case(
         name="cbcr_ac_m11_hi_same",
@@ -1496,7 +1533,7 @@ def main() -> int:
     sim = build_baseline_sim()
     for case in CASES:
         run_case(sim, case)
-    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, opposite-diagonal mixed-plane pairs, complementary two-block row/column mixed-plane pairs, default/high-amplitude same-mask row/diagonal controls, default and high-amplitude all-but-one same-mask mirrors, high-amplitude same-quadrant pairs, reciprocal high-amplitude right-column/diagonal skew pairs, mirrored high-amplitude three-plus-one edge complements with mixed Cb/Cr signs, the single-right/three-right, middle-left/middle-right, and corner-left/corner-right all-but-one luma mirrors, and the high-amplitude complementary split-row/column +/-32 sign matrix, strict-decode with plane-local counters and per-block chroma locality")
+    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, opposite-diagonal mixed-plane pairs, complementary two-block row/column mixed-plane pairs, default/high-amplitude same-mask row/diagonal controls, default and high-amplitude all-but-one same-mask mirrors, a high-amplitude top-row same-mask all-but-one +/-32 sign matrix, high-amplitude same-quadrant pairs, reciprocal high-amplitude right-column/diagonal skew pairs, mirrored high-amplitude three-plus-one edge complements with mixed Cb/Cr signs, the single-right/three-right, middle-left/middle-right, and corner-left/corner-right all-but-one luma mirrors, and the high-amplitude complementary split-row/column +/-32 sign matrix, strict-decode with plane-local counters and per-block chroma locality")
     return 0
 
 
