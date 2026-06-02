@@ -28,6 +28,7 @@ EXPECTED_BYTES = FRAME_SIZE * 2
 EXPECTED_HEADER_TAIL = 0x6B
 
 # Representative cross-plane cases: sparse/sparse top-row, diagonal, split-row,
+# a sparse Cb singleton plus two-block Cr row/column mix,
 # sparse singleton mirror gaps, orthogonal axis-pair, one-vs-two-block row/axis pairs,
 # bottom/top mirror pairs, bottom-row cross-corners,
 # reciprocal diagonal singletons,
@@ -51,6 +52,7 @@ TAILS = {
     (0x1, 0x3): "0000000141d008086b3acc099da545ea4651",
     (0x1, 0x4): "0000000141d008086b3acbb8b51790",
     (0x1, 0x5): "0000000141d008086b3acc10be3269ea4654",
+    (0x1, 0x6): "0000000141d008086b3acc0d9d1934f65924",
     (0x1, 0x8): "0000000141d008086b3acbb8b517a6",
     (0x2, 0x1): "0000000141d008086b3acbeb2d4098",
     (0x2, 0x2): "0000000141d008086b3acbeb2d409d",
@@ -491,6 +493,7 @@ def main() -> int:
         "[PASS] CABAC P16x16 cross-plane chroma-AC gate promoted: representative "
         "sparse/sparse, mirror, split-row, bottom-row cross-corner, "
         "sparse singleton mirror gaps, "
+        "sparse Cb singleton plus two-block Cr row/column mix, "
         "orthogonal axis-pair, reciprocal diagonal singleton, "
         "one-vs-two-block row/axis pairs, "
         "sparse+dense right-column/bottom-row, same-diagonal dense, "
