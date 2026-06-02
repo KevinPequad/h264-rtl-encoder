@@ -43,6 +43,7 @@ checks = {
     "top_tracks_chroma_cbp_dc_class": "cabac_cbp_chroma_reg <= (cabac_cbp_chroma_reg == 2'd2) ? 2'd2 : 2'd1;" in top,
     "top_tracks_chroma_cbp_ac_class": "cabac_cbp_chroma_reg <= 2'd2;" in top,
     "top_feeds_chroma_cbp_to_bitstream": ".cabac_cbp_chroma(cabac_cbp_chroma_reg)" in top and "cabac_cbp_chroma_dormant_w" not in top and "cabac_cbp_chroma_reg & 2'd0" not in top,
+    "top_reports_chroma_residual_counters": "frame_cabac_chroma_cb_dc_mb_count" in top and "frame_cabac_chroma_cr_dc_mb_count" in top and "frame_cabac_chroma_cb_ac_block_count" in top and "[CABAC_CHROMA] Frame %0d" in top,
     "rtl_runner_honors_build_jobs_env": "os.environ.get(\"BUILD_JOBS\")" in runner,
 }
 failed = [name for name, ok in checks.items() if not ok]
@@ -128,6 +129,49 @@ def run_chroma_probe(sim_bin, name, input_path, require_dc_only):
             raise SystemExit(f"{name} unexpectedly produced nonzero chroma AC residuals: {nonzero_chroma_ac[:2]}")
     elif "chAC=1" not in sim_text:
         raise SystemExit(f"{name} did not produce chroma AC residual scan evidence")
+
+    chroma_counter_lines = [
+        line for line in sim_text.splitlines()
+        if line.startswith("[CABAC_CHROMA] Frame 1 ")
+    ]
+    if not chroma_counter_lines:
+        raise SystemExit(f"{name} missing CABAC chroma counter summary")
+    counter_line = chroma_counter_lines[-1]
+    counters = {
+        key: int(value)
+        for key, value in re.findall(
+            r"(cabac_chroma_mbs|cabac_chroma_dc_mbs|cabac_chroma_ac_mbs|cb_dc_mbs|cr_dc_mbs|cb_ac_mbs|cr_ac_mbs|cb_ac_blocks|cr_ac_blocks)=([0-9]+)",
+            counter_line,
+        )
+    }
+    required_keys = {
+        "cabac_chroma_mbs",
+        "cabac_chroma_dc_mbs",
+        "cabac_chroma_ac_mbs",
+        "cb_dc_mbs",
+        "cr_dc_mbs",
+        "cb_ac_mbs",
+        "cr_ac_mbs",
+        "cb_ac_blocks",
+        "cr_ac_blocks",
+    }
+    missing_keys = sorted(required_keys - counters.keys())
+    if missing_keys:
+        raise SystemExit(f"{name} CABAC chroma counter line missing keys {missing_keys}: {counter_line}")
+    if counters["cabac_chroma_mbs"] != 1:
+        raise SystemExit(f"{name} expected one CABAC chroma MB, got: {counter_line}")
+    if counters["cb_dc_mbs"] != 1 or counters["cr_dc_mbs"] != 1:
+        raise SystemExit(f"{name} expected both Cb and Cr DC payloads, got: {counter_line}")
+    if require_dc_only:
+        if counters["cabac_chroma_dc_mbs"] != 1 or counters["cabac_chroma_ac_mbs"] != 0:
+            raise SystemExit(f"{name} expected DC-only chroma CBP class, got: {counter_line}")
+        if counters["cb_ac_mbs"] != 0 or counters["cr_ac_mbs"] != 0 or counters["cb_ac_blocks"] != 0 or counters["cr_ac_blocks"] != 0:
+            raise SystemExit(f"{name} unexpectedly reported chroma AC payloads: {counter_line}")
+    else:
+        if counters["cabac_chroma_dc_mbs"] != 0 or counters["cabac_chroma_ac_mbs"] != 1:
+            raise SystemExit(f"{name} expected DC+AC chroma CBP class, got: {counter_line}")
+        if counters["cb_ac_mbs"] != 1 or counters["cr_ac_mbs"] != 1 or counters["cb_ac_blocks"] <= 0 or counters["cr_ac_blocks"] <= 0:
+            raise SystemExit(f"{name} expected Cb and Cr AC payload counters, got: {counter_line}")
 
     ff = subprocess.run(
         ["ffmpeg", "-y", "-v", "error", "-xerror", "-i", str(output_path), "-f", "null", "-"],

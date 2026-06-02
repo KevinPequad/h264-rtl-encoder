@@ -467,6 +467,15 @@ module h264_encoder_top #(
     reg [15:0] frame_b_direct_nonzero_ref_mb_count;
     reg [15:0] frame_b_direct_from_l1_mb_count;
     reg [15:0] frame_cabac_p16x16_mb_count;
+    reg [15:0] frame_cabac_chroma_mb_count;
+    reg [15:0] frame_cabac_chroma_dc_mb_count;
+    reg [15:0] frame_cabac_chroma_ac_mb_count;
+    reg [15:0] frame_cabac_chroma_cb_dc_mb_count;
+    reg [15:0] frame_cabac_chroma_cr_dc_mb_count;
+    reg [15:0] frame_cabac_chroma_cb_ac_mb_count;
+    reg [15:0] frame_cabac_chroma_cr_ac_mb_count;
+    reg [15:0] frame_cabac_chroma_cb_ac_block_count;
+    reg [15:0] frame_cabac_chroma_cr_ac_block_count;
 
     // Reference-bank MB metadata for colocated/direct derivation.
     reg        refmeta_is_intra [0:4][0:TOTAL_MBS-1];
@@ -565,6 +574,18 @@ module h264_encoder_top #(
         begin
             idx_i = (plane_is_cr ? CHR_BLOCKS_PER_PLANE : 0) + blk_idx;
             cabac_chroma_payload_blk_idx = idx_i[3:0];
+        end
+    endfunction
+
+    function automatic [4:0] cabac_popcount16;
+        input [15:0] mask_i;
+        integer bit_i;
+        begin
+            cabac_popcount16 = 5'd0;
+            for (bit_i = 0; bit_i < 16; bit_i = bit_i + 1) begin
+                if (mask_i[bit_i])
+                    cabac_popcount16 = cabac_popcount16 + 5'd1;
+            end
         end
     endfunction
 
@@ -846,6 +867,20 @@ module h264_encoder_top #(
         (CHROMA_FORMAT_IDC == 1) ? 16'h00ff :
         (CHROMA_FORMAT_IDC == 2) ? 16'hffff :
                                   16'h0000;
+    localparam [15:0] CABAC_CHROMA_CB_ACTIVE_BLK_MASK =
+        (CHROMA_FORMAT_IDC == 1) ? 16'h000f :
+        (CHROMA_FORMAT_IDC == 2) ? 16'h00ff :
+                                  16'h0000;
+    localparam [15:0] CABAC_CHROMA_CR_ACTIVE_BLK_MASK =
+        (CHROMA_FORMAT_IDC == 1) ? 16'h00f0 :
+        (CHROMA_FORMAT_IDC == 2) ? 16'hff00 :
+                                  16'h0000;
+    wire        cabac_chroma_cb_dc_nonzero_w = (cabac_chroma_dc_scan_flat_reg[0 +: 256] != 256'd0);
+    wire        cabac_chroma_cr_dc_nonzero_w = (cabac_chroma_dc_scan_flat_reg[256 +: 256] != 256'd0);
+    wire [15:0] cabac_chroma_cb_ac_mask_w = cabac_chroma_nz_mask_reg & CABAC_CHROMA_CB_ACTIVE_BLK_MASK;
+    wire [15:0] cabac_chroma_cr_ac_mask_w = cabac_chroma_nz_mask_reg & CABAC_CHROMA_CR_ACTIVE_BLK_MASK;
+    wire [4:0]  cabac_chroma_cb_ac_block_count_w = cabac_popcount16(cabac_chroma_cb_ac_mask_w);
+    wire [4:0]  cabac_chroma_cr_ac_block_count_w = cabac_popcount16(cabac_chroma_cr_ac_mask_w);
     wire        cabac_chroma_dc_payload_ready_w =
         (cabac_cbp_chroma_reg == 2'd0) ||
         (cabac_chroma_dc_valid_mask_reg == 2'b11);
@@ -2576,6 +2611,15 @@ pred_buf = {(256*BD){1'b0}};
             frame_b_direct_nonzero_ref_mb_count <= 16'd0;
             frame_b_direct_from_l1_mb_count <= 16'd0;
             frame_cabac_p16x16_mb_count <= 16'd0;
+            frame_cabac_chroma_mb_count <= 16'd0;
+            frame_cabac_chroma_dc_mb_count <= 16'd0;
+            frame_cabac_chroma_ac_mb_count <= 16'd0;
+            frame_cabac_chroma_cb_dc_mb_count <= 16'd0;
+            frame_cabac_chroma_cr_dc_mb_count <= 16'd0;
+            frame_cabac_chroma_cb_ac_mb_count <= 16'd0;
+            frame_cabac_chroma_cr_ac_mb_count <= 16'd0;
+            frame_cabac_chroma_cb_ac_block_count <= 16'd0;
+            frame_cabac_chroma_cr_ac_block_count <= 16'd0;
             for (meta_bank_i = 0; meta_bank_i < 5; meta_bank_i = meta_bank_i + 1) begin
                 for (meta_mb_i = 0; meta_mb_i < TOTAL_MBS; meta_mb_i = meta_mb_i + 1) begin
                     refmeta_is_intra[meta_bank_i][meta_mb_i] = 1'b1;
@@ -2628,6 +2672,15 @@ pred_buf = {(256*BD){1'b0}};
                     frame_b_direct_nonzero_ref_mb_count <= 16'd0;
                     frame_b_direct_from_l1_mb_count <= 16'd0;
                     frame_cabac_p16x16_mb_count <= 16'd0;
+                    frame_cabac_chroma_mb_count <= 16'd0;
+                    frame_cabac_chroma_dc_mb_count <= 16'd0;
+                    frame_cabac_chroma_ac_mb_count <= 16'd0;
+                    frame_cabac_chroma_cb_dc_mb_count <= 16'd0;
+                    frame_cabac_chroma_cr_dc_mb_count <= 16'd0;
+                    frame_cabac_chroma_cb_ac_mb_count <= 16'd0;
+                    frame_cabac_chroma_cr_ac_mb_count <= 16'd0;
+                    frame_cabac_chroma_cb_ac_block_count <= 16'd0;
+                    frame_cabac_chroma_cr_ac_block_count <= 16'd0;
                     left_is_skip <= 1'b0;
                     cabac_skip_ctx_reg <= 2'd0;
                     for (idx_rb = 0; idx_rb < MB_COLS; idx_rb = idx_rb + 1)
@@ -4517,6 +4570,25 @@ pred_buf = {(256*BD){1'b0}};
                         frame_b_direct_from_l1_mb_count <= frame_b_direct_from_l1_mb_count + 16'd1;
                     if (cabac_non_skip_subset_ok_w)
                         frame_cabac_p16x16_mb_count <= frame_cabac_p16x16_mb_count + 16'd1;
+                    if (cabac_non_skip_subset_ok_w && (cabac_cbp_chroma_reg != 2'd0)) begin
+                        frame_cabac_chroma_mb_count <= frame_cabac_chroma_mb_count + 16'd1;
+                        if (cabac_cbp_chroma_reg == 2'd1)
+                            frame_cabac_chroma_dc_mb_count <= frame_cabac_chroma_dc_mb_count + 16'd1;
+                        else
+                            frame_cabac_chroma_ac_mb_count <= frame_cabac_chroma_ac_mb_count + 16'd1;
+                        if (cabac_chroma_cb_dc_nonzero_w)
+                            frame_cabac_chroma_cb_dc_mb_count <= frame_cabac_chroma_cb_dc_mb_count + 16'd1;
+                        if (cabac_chroma_cr_dc_nonzero_w)
+                            frame_cabac_chroma_cr_dc_mb_count <= frame_cabac_chroma_cr_dc_mb_count + 16'd1;
+                        if (cabac_chroma_cb_ac_mask_w != 16'd0) begin
+                            frame_cabac_chroma_cb_ac_mb_count <= frame_cabac_chroma_cb_ac_mb_count + 16'd1;
+                            frame_cabac_chroma_cb_ac_block_count <= frame_cabac_chroma_cb_ac_block_count + {11'd0, cabac_chroma_cb_ac_block_count_w};
+                        end
+                        if (cabac_chroma_cr_ac_mask_w != 16'd0) begin
+                            frame_cabac_chroma_cr_ac_mb_count <= frame_cabac_chroma_cr_ac_mb_count + 16'd1;
+                            frame_cabac_chroma_cr_ac_block_count <= frame_cabac_chroma_cr_ac_block_count + {11'd0, cabac_chroma_cr_ac_block_count_w};
+                        end
+                    end
                     top_is_skip[mb_x] <= is_skip_mb_reg;
                     left_is_skip <= is_skip_mb_reg;
                     if (is_inter_mb_reg && !is_b_frame && !is_skip_mb_reg) begin
@@ -5808,8 +5880,11 @@ pred_buf = {(256*BD){1'b0}};
                          else if (!flush_accepted) flush_accepted <= 1'b1;
                          else if (bs_cmd_done) begin
                              done <= 1'b1;
-                            $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d",
-                                     cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count);
+                            $display("[PSKIP] Frame %0d skip_mbs=%0d b_l1_mbs=%0d b_bi_mbs=%0d b_direct_mbs=%0d b_l0_refgt0_mbs=%0d b_direct_refgt0_mbs=%0d b_direct_l1src_mbs=%0d cabac_p16x16_mbs=%0d cabac_chroma_mbs=%0d cabac_chroma_dc_mbs=%0d cabac_chroma_ac_mbs=%0d cabac_chroma_cb_dc_mbs=%0d cabac_chroma_cr_dc_mbs=%0d cabac_chroma_cb_ac_mbs=%0d cabac_chroma_cr_ac_mbs=%0d cabac_chroma_cb_ac_blocks=%0d cabac_chroma_cr_ac_blocks=%0d",
+                                     cur_frame_num, frame_skip_mb_count, frame_b_l1_mb_count, frame_b_bi_mb_count, frame_b_direct_mb_count, frame_b_l0_nonzero_ref_mb_count, frame_b_direct_nonzero_ref_mb_count, frame_b_direct_from_l1_mb_count, frame_cabac_p16x16_mb_count,
+                                     frame_cabac_chroma_mb_count, frame_cabac_chroma_dc_mb_count, frame_cabac_chroma_ac_mb_count, frame_cabac_chroma_cb_dc_mb_count, frame_cabac_chroma_cr_dc_mb_count, frame_cabac_chroma_cb_ac_mb_count, frame_cabac_chroma_cr_ac_mb_count, frame_cabac_chroma_cb_ac_block_count, frame_cabac_chroma_cr_ac_block_count);
+                            $display("[CABAC_CHROMA] Frame %0d cabac_chroma_mbs=%0d cabac_chroma_dc_mbs=%0d cabac_chroma_ac_mbs=%0d cb_dc_mbs=%0d cr_dc_mbs=%0d cb_ac_mbs=%0d cr_ac_mbs=%0d cb_ac_blocks=%0d cr_ac_blocks=%0d",
+                                     cur_frame_num, frame_cabac_chroma_mb_count, frame_cabac_chroma_dc_mb_count, frame_cabac_chroma_ac_mb_count, frame_cabac_chroma_cb_dc_mb_count, frame_cabac_chroma_cr_dc_mb_count, frame_cabac_chroma_cb_ac_mb_count, frame_cabac_chroma_cr_ac_mb_count, frame_cabac_chroma_cb_ac_block_count, frame_cabac_chroma_cr_ac_block_count);
                              refbank_poc_lsb[current_write_bank] <= cur_pic_order_cnt_lsb;
                             if (is_p_frame) begin
                                 refbank_has_l0_ref0[current_write_bank] <= (valid_ref_count != 3'd0);
