@@ -1034,12 +1034,13 @@ Current verified milestone outputs:
 - a scheduled 2026-06-02 probe narrowed the CABAC `P_L0_16x16` `10-bit 4:2:2`
   chroma DC isolation gap: the default focused gate now includes a strict
   FFmpeg-decodable Cr-only DC probe plus a Cb-only negative-DC probe with empty
-  luma, while the optional `CABAC_EXPECT_10B422_DC_ISOLATION_FAIL=1` repro still
-  shows the Cb-only positive-DC lane failing strict FFmpeg decode on the P
-  macroblock (`bytestream -22`) with RTL counters `cb_dc_mbs=1`, `cr_dc_mbs=0`,
-  and empty luma; the next source fix should target the sign-sensitive Cb-only
-  positive chroma DC CABAC bin/context or finalization schedule before promoting
-  that Cb-positive probe into the default gate
+  luma, while the optional `CABAC_EXPECT_10B422_DC_ISOLATION_FAIL=1` repro now
+  shows both tiny and larger Cb-only positive-DC lanes failing strict FFmpeg
+  decode on the P macroblock (`bytestream -8`/`-22`) with RTL counters
+  `cb_dc_mbs=1`, `cr_dc_mbs=0`, and empty luma; the next source fix should
+  target the sign-sensitive Cb-only positive chroma DC CABAC bin/context or
+  finalization schedule before promoting that Cb-positive probe into the
+  default gate
 
 ## Not Done Yet
 

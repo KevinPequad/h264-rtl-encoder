@@ -90,6 +90,7 @@ ac_422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_cr_
 ac_10b422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b422_16x16_2f.yuv")
 dc_10b422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_16x16_2f.yuv")
 dc_10b422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_only_16x16_2f.yuv")
+dc_10b422_cb_pos_tiny_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_tiny_16x16_2f.yuv")
 dc_10b422_cb_neg_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_neg_only_16x16_2f.yuv")
 dc_10b422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cr_only_16x16_2f.yuv")
 dc_10b422_cr_pos_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cr_pos_only_16x16_2f.yuv")
@@ -206,6 +207,8 @@ def write_422_probe_10b(path, *, cb_mode, cr_mode):
             plane = [496] * (8 * 16)
         elif mode == "dc_neg_tiny":
             plane = [510] * (8 * 16)
+        elif mode == "dc_pos_tiny":
+            plane = [514] * (8 * 16)
         elif mode == "ac_pos":
             # Mirror the 8-bit 4:2:2 AC probe into the high-bit-depth lane and
             # keep the lower-row coverage that proves the widened AC cursor.
@@ -335,6 +338,7 @@ write_422_probe(ac_422_cr_only_input_path, cb_mode="flat", cr_mode="ac_neg")
 # without a luma payload while also proving the lower 4:2:2 chroma rows.
 write_422_probe_10b(dc_10b422_input_path, cb_mode="dc", cr_mode="dc_neg")
 write_422_probe_10b(dc_10b422_cb_only_input_path, cb_mode="dc_small", cr_mode="flat")
+write_422_probe_10b(dc_10b422_cb_pos_tiny_input_path, cb_mode="dc_pos_tiny", cr_mode="flat")
 write_422_probe_10b(dc_10b422_cb_neg_only_input_path, cb_mode="dc_neg_tiny", cr_mode="flat")
 write_422_probe_10b(dc_10b422_cr_only_input_path, cb_mode="flat", cr_mode="dc_neg_small")
 write_422_probe_10b(dc_10b422_cr_pos_only_input_path, cb_mode="flat", cr_mode="dc_small")
@@ -748,6 +752,11 @@ try:
     )
     if os.environ.get("CABAC_EXPECT_10B422_DC_ISOLATION_FAIL") == "1":
         xfail_cases = [
+            (
+                "cabac_p16x16_chroma_dc_residual_10b422_cb_pos_tiny_probe",
+                dc_10b422_cb_pos_tiny_input_path,
+                ("cb",),
+            ),
             (
                 "cabac_p16x16_chroma_dc_residual_10b422_cb_only_probe",
                 dc_10b422_cb_only_input_path,
