@@ -1031,6 +1031,14 @@ Current verified milestone outputs:
 - deferred inter headers and FIFO discard now prevent illegal zero-residual
   CAVLC payloads from leaking after `cbp=0` or `P_SKIP`, which is what made
   the earlier zero-residual inter-header attempt invalid
+- a scheduled 2026-06-02 probe found that the current CABAC `P_L0_16x16`
+  chroma residual lane is not closed for plane-isolated `10-bit 4:2:2` chroma
+  DC payloads: adding `cabac_p16x16_chroma_dc_residual_10b422_cb_only_probe`
+  to the focused gate produced RTL counters with `cb_dc_mbs=1`, `cr_dc_mbs=0`,
+  and empty luma, but strict FFmpeg decode failed on the P macroblock with
+  `bytestream -14`; the existing combined-plane `10-bit 4:2:2` DC probe remains
+  green, so the next fix should target the one-plane chroma DC CABAC bin/context
+  schedule before promoting that isolated probe into the gate
 
 ## Not Done Yet
 
