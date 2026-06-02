@@ -483,12 +483,16 @@ def run_chroma_probe(
     require_luma_empty=False,
     require_nonunity_dc=True,
     require_changed_framehash=False,
+    expected_positive_dc_planes=(),
+    expected_negative_dc_planes=(),
 ):
     expected_dc_planes = set(expected_dc_planes)
     expected_ac_planes = set(expected_ac_planes)
     expected_nonzero_dc_planes = (
         None if expected_nonzero_dc_planes is None else set(expected_nonzero_dc_planes)
     )
+    expected_positive_dc_planes = set(expected_positive_dc_planes)
+    expected_negative_dc_planes = set(expected_negative_dc_planes)
     output_path = out_dir / f"{name}.h264"
     sim_log = out_dir / f"{name}.sim.log"
     ffmpeg_log = out_dir / f"{name}.ffmpeg.log"
@@ -530,6 +534,15 @@ def run_chroma_probe(
                 # some AC-focused probes; plane isolation is enforced on the AC
                 # payload counters below.
                 pass
+        for plane, values in (("cb", cb_dc_values), ("cr", cr_dc_values)):
+            if plane in expected_positive_dc_planes and not any(v > 0 for v in values):
+                raise SystemExit(
+                    f"{name} expected positive {plane.upper()} chroma DC coefficient evidence, got: {values[:16]}"
+                )
+            if plane in expected_negative_dc_planes and not any(v < 0 for v in values):
+                raise SystemExit(
+                    f"{name} expected negative {plane.upper()} chroma DC coefficient evidence, got: {values[:16]}"
+                )
 
     if require_dc_only:
         nonzero_chroma_ac = [
@@ -809,6 +822,8 @@ try:
         require_dc_only=True,
         require_luma_empty=True,
         require_changed_framehash=True,
+        expected_positive_dc_planes=("cb",),
+        expected_negative_dc_planes=("cr",),
     )
     run_chroma_probe(
         sim_bin_10b422,
@@ -829,6 +844,7 @@ try:
         expected_nonzero_dc_planes=("cr",),
         require_luma_empty=True,
         require_changed_framehash=True,
+        expected_positive_dc_planes=("cr",),
     )
     run_chroma_probe(
         sim_bin_10b422,
@@ -839,6 +855,7 @@ try:
         expected_nonzero_dc_planes=("cb",),
         require_luma_empty=True,
         require_changed_framehash=True,
+        expected_negative_dc_planes=("cb",),
     )
     if os.environ.get("CABAC_EXPECT_10B422_DC_ISOLATION_FAIL") == "1":
         xfail_cases = [

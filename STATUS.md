@@ -1071,6 +1071,13 @@ Current verified milestone outputs:
   MB 0 (`bytestream -12`).  Leave the unavailable-neighbor ctx 97 mapping alone
   for now; the remaining Cb-positive blocker is more likely in the Cb-positive
   coefficient/sign/finalization sequence before the following zero Cr-DC CBF.
+- a later scheduled 2026-06-02 gate tightening made the green 10-bit 4:2:2
+  chroma-DC probes assert signed plane polarity directly: the two-plane probe
+  must carry positive Cb and negative Cr DC evidence, the Cr-positive isolation
+  probe must carry positive Cr evidence, and the Cb-negative isolation probe
+  must carry negative Cb evidence.  This keeps the remaining red lane narrowed
+  to Cb-positive/Cr-empty strict-decode behavior rather than a hidden plane or
+  sign swap.
 
 ## Not Done Yet
 
