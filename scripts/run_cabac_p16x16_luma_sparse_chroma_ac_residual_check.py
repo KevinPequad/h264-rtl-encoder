@@ -11,8 +11,8 @@ high-amplitude same-quadrant and row/column-complement subsets with luma
 residual present, same-mask row/diagonal controls, including their high-amplitude
 forms, the complementary split-row/column +/-32 sign matrix, and mirrored
 high-amplitude three-plus-one edge complements with mixed Cb/Cr signs, including
-single-right/three-right and middle-left/middle-right all-but-one mirrors under
-luma residual.
+single-right/three-right, middle-left/middle-right, and corner-left/corner-right
+all-but-one mirrors under luma residual.
 It locks strict FFmpeg decode, plane-local CABAC counters, CAVLC suppression
 counts, final P-slice bytes, current decoded-plane metrics, and per-4x4
 chroma-block locality so sparse residuals cannot silently land in the wrong
@@ -1026,6 +1026,102 @@ CASES = (
         cb_sample_value=96,
         cr_sample_value=96,
     ),
+    Case(
+        name="cbcr_ac_m14_1_hi",
+        cb_mask=0xE,
+        cr_mask=0x1,
+        expected_final_slice="0000000141d008086b3ab7ebbddfd7f7fdfef7eeff",
+        expected_cavlc_suppressed_bits=298,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=768,
+        expected_v_sad=256,
+        cb_sample_value=160,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m14_1_hi_cbpos_crneg",
+        cb_mask=0xE,
+        cr_mask=0x1,
+        expected_final_slice="0000000141d008086b3ab7ebbddfd7f7fdfef7eeff",
+        expected_cavlc_suppressed_bits=298,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=768,
+        expected_v_sad=256,
+        cb_sample_value=160,
+        cr_sample_value=96,
+    ),
+    Case(
+        name="cbcr_ac_m14_1_hi_cbneg_crpos",
+        cb_mask=0xE,
+        cr_mask=0x1,
+        expected_final_slice="0000000141d008086b3ab7e9f9ffd7d77ffeff6eff",
+        expected_cavlc_suppressed_bits=294,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=768,
+        expected_v_sad=256,
+        cb_sample_value=96,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m14_1_hi_cbneg_crneg",
+        cb_mask=0xE,
+        cr_mask=0x1,
+        expected_final_slice="0000000141d008086b3ab7e9f9ffd7d77ffeff6eff",
+        expected_cavlc_suppressed_bits=294,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=768,
+        expected_v_sad=256,
+        cb_sample_value=96,
+        cr_sample_value=96,
+    ),
+    Case(
+        name="cbcr_ac_m1_14_hi",
+        cb_mask=0x1,
+        cr_mask=0xE,
+        expected_final_slice="0000000141d008086b3af6f9b5f7d7f7bfbcff6def",
+        expected_cavlc_suppressed_bits=298,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=256,
+        expected_v_sad=768,
+        cb_sample_value=160,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m1_14_hi_cbpos_crneg",
+        cb_mask=0x1,
+        cr_mask=0xE,
+        expected_final_slice="0000000141d008086b3af6f9b5f7d7d73dbcf7efef",
+        expected_cavlc_suppressed_bits=294,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=256,
+        expected_v_sad=768,
+        cb_sample_value=160,
+        cr_sample_value=96,
+    ),
+    Case(
+        name="cbcr_ac_m1_14_hi_cbneg_crpos",
+        cb_mask=0x1,
+        cr_mask=0xE,
+        expected_final_slice="0000000141d008086b3af6e9b1f7d7f7bfbcff6def",
+        expected_cavlc_suppressed_bits=298,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=256,
+        expected_v_sad=768,
+        cb_sample_value=96,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m1_14_hi_cbneg_crneg",
+        cb_mask=0x1,
+        cr_mask=0xE,
+        expected_final_slice="0000000141d008086b3af6e9b1f7d7d73dbcf7efef",
+        expected_cavlc_suppressed_bits=294,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=256,
+        expected_v_sad=768,
+        cb_sample_value=96,
+        cr_sample_value=96,
+    ),
 )
 
 
@@ -1235,7 +1331,7 @@ def main() -> int:
     sim = build_baseline_sim()
     for case in CASES:
         run_case(sim, case)
-    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, opposite-diagonal mixed-plane pairs, complementary two-block row/column mixed-plane pairs, default/high-amplitude same-mask row/diagonal controls, high-amplitude same-quadrant pairs, mirrored high-amplitude three-plus-one edge complements with mixed Cb/Cr signs, the single-right/three-right and middle-left/middle-right all-but-one luma mirrors, and the high-amplitude complementary split-row/column +/-32 sign matrix, strict-decode with plane-local counters and per-block chroma locality")
+    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, opposite-diagonal mixed-plane pairs, complementary two-block row/column mixed-plane pairs, default/high-amplitude same-mask row/diagonal controls, high-amplitude same-quadrant pairs, mirrored high-amplitude three-plus-one edge complements with mixed Cb/Cr signs, the single-right/three-right, middle-left/middle-right, and corner-left/corner-right all-but-one luma mirrors, and the high-amplitude complementary split-row/column +/-32 sign matrix, strict-decode with plane-local counters and per-block chroma locality")
     return 0
 
 
