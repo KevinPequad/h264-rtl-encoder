@@ -87,6 +87,9 @@ dc_422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_422_
 dc_422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_422_cr_only_16x16_2f.yuv")
 ac_422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_cb_only_16x16_2f.yuv")
 ac_422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_cr_only_16x16_2f.yuv")
+ac_10b422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b422_16x16_2f.yuv")
+ac_10b422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b422_cb_only_16x16_2f.yuv")
+ac_10b422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b422_cr_only_16x16_2f.yuv")
 ac_10b_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b420_16x16_2f.yuv")
 ac_10b_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b420_cb_only_16x16_2f.yuv")
 ac_10b_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b420_cr_only_16x16_2f.yuv")
@@ -184,6 +187,41 @@ def write_422_probe(path, *, cb_mode, cr_mode):
                 f.write(plane_for(cb_mode))
                 f.write(plane_for(cr_mode))
 
+
+def write_422_probe_10b(path, *, cb_mode, cr_mode):
+    def plane_for(mode):
+        plane = [512] * (8 * 16)
+        if mode == "dc":
+            plane = [640] * (8 * 16)
+        elif mode == "ac_pos":
+            # Mirror the 8-bit 4:2:2 AC probe into the high-bit-depth lane and
+            # keep the lower-row coverage that proves the widened AC cursor.
+            for y in range(3, 11):
+                for x in range(2, 6):
+                    plane[y * 8 + x] = 640
+        elif mode == "ac_neg":
+            for y in range(1, 9):
+                for x in range(3, 7):
+                    plane[y * 8 + x] = 384
+        elif mode != "flat":
+            raise ValueError(f"unknown 10-bit 4:2:2 chroma plane mode {mode!r}")
+        return plane
+
+    with path.open("wb") as f:
+        for frame_idx in range(2):
+            for _ in range(16 * 16):
+                f.write(struct.pack("<H", 256))
+            if frame_idx == 0:
+                cb = [512] * (8 * 16)
+                cr = [512] * (8 * 16)
+            else:
+                cb = plane_for(cb_mode)
+                cr = plane_for(cr_mode)
+            for sample in cb:
+                f.write(struct.pack("<H", sample))
+            for sample in cr:
+                f.write(struct.pack("<H", sample))
+
 # 16x16 yuv420p, two frames.  Keep luma flat while changing both chroma
 # planes on frame 1 so the P MB stays in the CABAC P16x16 lane but carries
 # nonzero chroma AC residual snapshots into the bitstream writer.
@@ -275,6 +313,14 @@ write_422_probe(dc_422_cb_only_input_path, cb_mode="dc", cr_mode="flat")
 write_422_probe(dc_422_cr_only_input_path, cb_mode="flat", cr_mode="dc")
 write_422_probe(ac_422_cb_only_input_path, cb_mode="ac_pos", cr_mode="flat")
 write_422_probe(ac_422_cr_only_input_path, cb_mode="flat", cr_mode="ac_neg")
+
+# High-bit-depth 4:2:2 plane-isolated AC probes close the gap between the 10-bit
+# 4:2:0 chroma-only scheduler guard and the widened 8-bit 4:2:2 payload cursor.
+# Luma stays flat so the P16x16 CABAC lane must accept chroma-owned residuals
+# without a luma payload while also proving the lower 4:2:2 chroma rows.
+write_422_probe_10b(ac_10b422_input_path, cb_mode="ac_pos", cr_mode="ac_neg")
+write_422_probe_10b(ac_10b422_cb_only_input_path, cb_mode="ac_pos", cr_mode="flat")
+write_422_probe_10b(ac_10b422_cr_only_input_path, cb_mode="flat", cr_mode="ac_neg")
 
 
 def signed_scan_values_from_line(scan_line):
@@ -631,4 +677,51 @@ try:
     )
 finally:
     shutil.rmtree(workspace_422, ignore_errors=True)
+
+workspace_10b422 = stage_workspace("h264_cabac_p16x16_chroma_residual_10b422_")
+try:
+    cfg_10b422 = BuildConfig(
+        width=16,
+        height=16,
+        bit_depth=10,
+        chroma_format_idc=2,
+        jobs=max(1, int(os.environ.get("BUILD_JOBS", os.environ.get("THREADS", "1")))),
+        enable_idr_ipcm=1,
+        inter_sad_threshold=20_000,
+        enable_cabac_p16x16=1,
+        enable_cabac_p16x16_fullpel_only=1,
+    )
+    sim_bin_10b422 = build_sim(workspace_10b422, cfg_10b422, out_dir / "cabac_p16x16_chroma_residual_10b422_probe.build.log")
+    run_chroma_probe(
+        sim_bin_10b422,
+        "cabac_p16x16_chroma_residual_10b422_probe",
+        ac_10b422_input_path,
+        require_dc_only=False,
+        min_ac_blocks_per_plane=5,
+        require_luma_empty=True,
+    )
+    run_chroma_probe(
+        sim_bin_10b422,
+        "cabac_p16x16_chroma_residual_10b422_cb_only_probe",
+        ac_10b422_cb_only_input_path,
+        require_dc_only=False,
+        min_ac_blocks_per_plane=5,
+        expected_dc_planes=("cb",),
+        expected_ac_planes=("cb",),
+        expected_nonzero_dc_planes=("cb",),
+        require_luma_empty=True,
+    )
+    run_chroma_probe(
+        sim_bin_10b422,
+        "cabac_p16x16_chroma_residual_10b422_cr_only_probe",
+        ac_10b422_cr_only_input_path,
+        require_dc_only=False,
+        min_ac_blocks_per_plane=5,
+        expected_dc_planes=("cr",),
+        expected_ac_planes=("cr",),
+        expected_nonzero_dc_planes=("cr",),
+        require_luma_empty=True,
+    )
+finally:
+    shutil.rmtree(workspace_10b422, ignore_errors=True)
 PY
