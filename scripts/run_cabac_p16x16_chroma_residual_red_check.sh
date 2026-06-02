@@ -40,6 +40,7 @@ checks = {
     "top_tracks_chroma_dc_snapshot_validity": "reg [1:0]    cabac_chroma_dc_valid_mask_reg;" in top and "cabac_chroma_dc_valid_mask_reg[0] <= 1'b1;" in top and "cabac_chroma_dc_valid_mask_reg[1] <= 1'b1;" in top,
     "top_tracks_chroma_ac_snapshot_validity": "reg [15:0]   cabac_chroma_ac_valid_mask_reg;" in top and "cabac_chroma_ac_valid_mask_reg[cabac_chroma_payload_blk_idx(chr_is_cr, chr_blk)] <= 1'b1;" in top,
     "top_has_chroma_payload_readiness_guard": "cabac_chroma_residual_payload_ready_w" in top and "CABAC_CHROMA_ACTIVE_BLK_MASK" in top and "cabac_luma_residual_payload_ready_w &&" in top and "cabac_chroma_residual_payload_ready_w" in top,
+    "top_has_422_chroma_payload_masks": "(CHROMA_FORMAT_IDC == 2) ? 16'hffff" in top and "(CHROMA_FORMAT_IDC == 2) ? 16'h00ff" in top and "(CHROMA_FORMAT_IDC == 2) ? 16'hff00" in top,
     "top_tracks_chroma_cbp_dc_class": "cabac_cbp_chroma_reg <= (cabac_cbp_chroma_reg == 2'd2) ? 2'd2 : 2'd1;" in top,
     "top_tracks_chroma_cbp_ac_class": "cabac_cbp_chroma_reg <= 2'd2;" in top,
     "top_feeds_chroma_cbp_to_bitstream": ".cabac_cbp_chroma(cabac_cbp_chroma_reg)" in top and "cabac_cbp_chroma_dormant_w" not in top and "cabac_cbp_chroma_reg & 2'd0" not in top,
@@ -73,6 +74,7 @@ out_dir = root / "output"
 out_dir.mkdir(exist_ok=True)
 ac_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_16x16_2f.yuv")
 dc_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_16x16_2f.yuv")
+ac_422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_16x16_2f.yuv")
 build_log = out_dir / "cabac_p16x16_chroma_residual_probe.build.log"
 
 # 16x16 yuv420p, two frames.  Keep luma flat while changing both chroma
@@ -104,8 +106,27 @@ with dc_input_path.open("wb") as f:
         f.write(bytes([cb]) * (8 * 8))
         f.write(bytes([cr]) * (8 * 8))
 
+# 16x16 yuv422p, two frames.  The chroma planes are 8x16, so the frame-1
+# deltas deliberately touch lower chroma rows that do not exist in 4:2:0.  The
+# counter checks below require more than four nonzero AC blocks per plane to
+# prove the CABAC chroma payload cursor and active masks cover the 4:2:2 rows.
+with ac_422_input_path.open("wb") as f:
+    for frame_idx in range(2):
+        f.write(bytes([64]) * (16 * 16))
+        cb = bytearray([128] * (8 * 16))
+        cr = bytearray([128] * (8 * 16))
+        if frame_idx == 1:
+            for y in range(3, 11):
+                for x in range(2, 6):
+                    cb[y * 8 + x] = 160
+            for y in range(1, 9):
+                for x in range(3, 7):
+                    cr[y * 8 + x] = 96
+        f.write(cb)
+        f.write(cr)
 
-def run_chroma_probe(sim_bin, name, input_path, require_dc_only):
+
+def run_chroma_probe(sim_bin, name, input_path, require_dc_only, min_ac_blocks_per_plane=1):
     output_path = out_dir / f"{name}.h264"
     sim_log = out_dir / f"{name}.sim.log"
     ffmpeg_log = out_dir / f"{name}.ffmpeg.log"
@@ -170,7 +191,7 @@ def run_chroma_probe(sim_bin, name, input_path, require_dc_only):
     else:
         if counters["cabac_chroma_dc_mbs"] != 0 or counters["cabac_chroma_ac_mbs"] != 1:
             raise SystemExit(f"{name} expected DC+AC chroma CBP class, got: {counter_line}")
-        if counters["cb_ac_mbs"] != 1 or counters["cr_ac_mbs"] != 1 or counters["cb_ac_blocks"] <= 0 or counters["cr_ac_blocks"] <= 0:
+        if counters["cb_ac_mbs"] != 1 or counters["cr_ac_mbs"] != 1 or counters["cb_ac_blocks"] < min_ac_blocks_per_plane or counters["cr_ac_blocks"] < min_ac_blocks_per_plane:
             raise SystemExit(f"{name} expected Cb and Cr AC payload counters, got: {counter_line}")
 
     ff = subprocess.run(
@@ -204,4 +225,28 @@ try:
     run_chroma_probe(sim_bin, "cabac_p16x16_chroma_dc_residual_probe", dc_input_path, require_dc_only=True)
 finally:
     shutil.rmtree(workspace, ignore_errors=True)
+
+workspace_422 = stage_workspace("h264_cabac_p16x16_chroma_residual_422_")
+try:
+    cfg_422 = BuildConfig(
+        width=16,
+        height=16,
+        bit_depth=8,
+        chroma_format_idc=2,
+        jobs=max(1, int(os.environ.get("BUILD_JOBS", os.environ.get("THREADS", "1")))),
+        enable_idr_ipcm=1,
+        inter_sad_threshold=20_000,
+        enable_cabac_p16x16=1,
+        enable_cabac_p16x16_fullpel_only=1,
+    )
+    sim_bin_422 = build_sim(workspace_422, cfg_422, out_dir / "cabac_p16x16_chroma_residual_422_probe.build.log")
+    run_chroma_probe(
+        sim_bin_422,
+        "cabac_p16x16_chroma_residual_422_probe",
+        ac_422_input_path,
+        require_dc_only=False,
+        min_ac_blocks_per_plane=5,
+    )
+finally:
+    shutil.rmtree(workspace_422, ignore_errors=True)
 PY
