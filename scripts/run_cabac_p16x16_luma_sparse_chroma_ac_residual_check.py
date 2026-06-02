@@ -9,7 +9,8 @@ row-adjacent directions, both column-adjacent directions, opposite-diagonal Cb+C
 and complementary two-block row/column pairs on both chroma planes, plus
 high-amplitude same-quadrant and row/column-complement subsets with luma
 residual present, same-mask row/diagonal controls, including their high-amplitude
-forms, the complementary split-row/column +/-32 sign matrix, and mirrored
+forms, the complementary split-row/column +/-32 sign matrix, reciprocal
+high-amplitude right-column/diagonal skew pairs, and mirrored
 high-amplitude three-plus-one edge complements with mixed Cb/Cr signs, including
 single-right/three-right, middle-left/middle-right, and corner-left/corner-right
 all-but-one mirrors under luma residual.
@@ -505,6 +506,102 @@ CASES = (
         expected_v_sad=512,
         cb_sample_value=160,
         cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m6_9_hi",
+        cb_mask=0x6,
+        cr_mask=0x9,
+        expected_final_slice="0000000141d008086b3af7e97df5ffd7bd7efffd",
+        expected_cavlc_suppressed_bits=308,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=160,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m6_9_hi_cbpos_crneg",
+        cb_mask=0x6,
+        cr_mask=0x9,
+        expected_final_slice="0000000141d008086b3af6e97fdaddf77d36fffd",
+        expected_cavlc_suppressed_bits=307,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=160,
+        cr_sample_value=96,
+    ),
+    Case(
+        name="cbcr_ac_m6_9_hi_cbneg_crpos",
+        cb_mask=0x6,
+        cr_mask=0x9,
+        expected_final_slice="0000000141d008086b3af7ebfdf4c7f7bd7efffd",
+        expected_cavlc_suppressed_bits=305,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=96,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m6_9_hi_cbneg_crneg",
+        cb_mask=0x6,
+        cr_mask=0x9,
+        expected_final_slice="0000000141d008086b3afeebffda47ff7d36fffd",
+        expected_cavlc_suppressed_bits=304,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=96,
+        cr_sample_value=96,
+    ),
+    Case(
+        name="cbcr_ac_m9_6_hi",
+        cb_mask=0x9,
+        cr_mask=0x6,
+        expected_final_slice="0000000141d008086b3ab6ef73d6f77f7f36ff7e",
+        expected_cavlc_suppressed_bits=308,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=160,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m9_6_hi_cbpos_crneg",
+        cb_mask=0x9,
+        cr_mask=0x6,
+        expected_final_slice="0000000141d008086b3ab6ef73d6f77f7f35ffee",
+        expected_cavlc_suppressed_bits=305,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=160,
+        cr_sample_value=96,
+    ),
+    Case(
+        name="cbcr_ac_m9_6_hi_cbneg_crpos",
+        cb_mask=0x9,
+        cr_mask=0x6,
+        expected_final_slice="0000000141d008086b3ab6fdf3d6d5f77f36ff7e",
+        expected_cavlc_suppressed_bits=307,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=96,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m9_6_hi_cbneg_crneg",
+        cb_mask=0x9,
+        cr_mask=0x6,
+        expected_final_slice="0000000141d008086b3ab6fdf3d6d5f77f35ffee",
+        expected_cavlc_suppressed_bits=304,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=512,
+        expected_v_sad=512,
+        cb_sample_value=96,
+        cr_sample_value=96,
     ),
     Case(
         name="cbcr_ac_m7_8_hi",
@@ -1331,7 +1428,7 @@ def main() -> int:
     sim = build_baseline_sim()
     for case in CASES:
         run_case(sim, case)
-    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, opposite-diagonal mixed-plane pairs, complementary two-block row/column mixed-plane pairs, default/high-amplitude same-mask row/diagonal controls, high-amplitude same-quadrant pairs, mirrored high-amplitude three-plus-one edge complements with mixed Cb/Cr signs, the single-right/three-right, middle-left/middle-right, and corner-left/corner-right all-but-one luma mirrors, and the high-amplitude complementary split-row/column +/-32 sign matrix, strict-decode with plane-local counters and per-block chroma locality")
+    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, opposite-diagonal mixed-plane pairs, complementary two-block row/column mixed-plane pairs, default/high-amplitude same-mask row/diagonal controls, high-amplitude same-quadrant pairs, reciprocal high-amplitude right-column/diagonal skew pairs, mirrored high-amplitude three-plus-one edge complements with mixed Cb/Cr signs, the single-right/three-right, middle-left/middle-right, and corner-left/corner-right all-but-one luma mirrors, and the high-amplitude complementary split-row/column +/-32 sign matrix, strict-decode with plane-local counters and per-block chroma locality")
     return 0
 
 
