@@ -1117,6 +1117,14 @@ Current verified milestone outputs:
   lane stays green.  The next source probe should compare the Cr DC
   coeff_abs_levelgt1/finalization path between `-2`, `-19`, and `-157` after the
   unity positive Cb sign bin.
+- this scheduled H.264 gate expansion added isolated Cr-negative 10-bit 4:2:2
+  DC probes for both tiny `Cr=-2` and large `Cr=-157` magnitudes.  The large
+  isolated `Cr=-157` lane promoted into the strict-decode/default framehash
+  path, while the tiny isolated `Cr=-2` lane is now pinned in the optional
+  blocker suite as an MB 0 `bytestream -6` failure with exact RTL scan evidence
+  and neutral non-strict concealment.  The next source probe should compare the
+  isolated negative-Cr CABAC tail for `-2`, `-19`, and `-157`, especially the
+  small-magnitude path that differs from the green midpoint/large cases.
 
 ## Not Done Yet
 
