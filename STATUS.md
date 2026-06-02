@@ -1060,6 +1060,10 @@ Current verified milestone outputs:
   must now reproduce their exact strict FFmpeg bytestream errors and also prove
   that non-strict FFmpeg framehash merely conceals the corrupted P MB by keeping
   the P-frame hash identical to the neutral IDR hash
+- the same focused chroma residual gate now requires the strict-decodable
+  10-bit 4:2:2 chroma-DC isolation lanes to produce a changed P-frame
+  FFmpeg framehash, so the green Cr-positive / Cr-only / Cb-negative probes
+  remain reconstruction evidence and not just syntax-survivable neutral output
 
 ## Not Done Yet
 

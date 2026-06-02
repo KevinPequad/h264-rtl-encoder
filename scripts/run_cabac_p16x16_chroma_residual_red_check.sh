@@ -437,6 +437,40 @@ def require_non_strict_framehash_stays_neutral(name, expected_fragment):
     print(f"[PASS] {name}: non-strict FFmpeg fallback keeps concealed P frame neutral ({hashes[1]})")
 
 
+def require_strict_framehash_changes(name):
+    """Guard strict-decodable chroma residual probes against neutral concealment.
+
+    A strict FFmpeg decode pass only proves syntax survivability.  For the
+    currently-green 10-bit 4:2:2 chroma-DC isolation lanes, also require the
+    decoded P frame hash to differ from the neutral IDR frame so these probes
+    remain reconstruction evidence rather than silent no-op streams.
+    """
+    output_path = out_dir / f"{name}.h264"
+    framehash_log = out_dir / f"{name}.framehash.log"
+    fh = subprocess.run(
+        ["ffmpeg", "-v", "error", "-xerror", "-i", str(output_path), "-f", "framehash", "-"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    framehash_text = (fh.stdout or "") + (fh.stderr or "")
+    framehash_log.write_text(framehash_text, encoding="utf-8")
+    if fh.returncode != 0:
+        raise SystemExit(framehash_text or f"strict framehash failed for {name} with exit {fh.returncode}")
+    frame_lines = [
+        line for line in framehash_text.splitlines()
+        if line.startswith("0,")
+    ]
+    if len(frame_lines) != 2:
+        raise SystemExit(f"{name} expected two strict framehash rows, got {len(frame_lines)}")
+    hashes = [line.rsplit(",", 1)[-1].strip() for line in frame_lines]
+    if hashes[0] == hashes[1]:
+        raise SystemExit(
+            f"{name} strict framehash stayed neutral; decoded P frame did not carry chroma residual evidence"
+        )
+    print(f"[PASS] {name}: strict framehash changes on P frame ({hashes[1]})")
+
+
 def run_chroma_probe(
     sim_bin,
     name,
@@ -448,6 +482,7 @@ def run_chroma_probe(
     expected_nonzero_dc_planes=None,
     require_luma_empty=False,
     require_nonunity_dc=True,
+    require_changed_framehash=False,
 ):
     expected_dc_planes = set(expected_dc_planes)
     expected_ac_planes = set(expected_ac_planes)
@@ -586,6 +621,8 @@ def run_chroma_probe(
     if ff.returncode != 0:
         raise SystemExit(ffmpeg_text or f"ffmpeg strict decode failed for {name} with exit {ff.returncode}")
     print(f"[PASS] {name}: strict FFmpeg decode ok ({output_path})")
+    if require_changed_framehash:
+        require_strict_framehash_changes(name)
 
 
 workspace = stage_workspace("h264_cabac_p16x16_chroma_residual_")
@@ -771,6 +808,7 @@ try:
         dc_10b422_input_path,
         require_dc_only=True,
         require_luma_empty=True,
+        require_changed_framehash=True,
     )
     run_chroma_probe(
         sim_bin_10b422,
@@ -780,6 +818,7 @@ try:
         expected_dc_planes=("cr",),
         expected_nonzero_dc_planes=("cr",),
         require_luma_empty=True,
+        require_changed_framehash=True,
     )
     run_chroma_probe(
         sim_bin_10b422,
@@ -789,6 +828,7 @@ try:
         expected_dc_planes=("cr",),
         expected_nonzero_dc_planes=("cr",),
         require_luma_empty=True,
+        require_changed_framehash=True,
     )
     run_chroma_probe(
         sim_bin_10b422,
@@ -798,6 +838,7 @@ try:
         expected_dc_planes=("cb",),
         expected_nonzero_dc_planes=("cb",),
         require_luma_empty=True,
+        require_changed_framehash=True,
     )
     if os.environ.get("CABAC_EXPECT_10B422_DC_ISOLATION_FAIL") == "1":
         xfail_cases = [
