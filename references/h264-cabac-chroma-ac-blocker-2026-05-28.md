@@ -605,3 +605,9 @@ Next useful probe:
 - Under the same staged patch, `Cb0xA/Cr0x5 +32/+32` and `-32/+32` strict-decode full `768/768` with exact `U_SAD=512 V_SAD=512` and tail `...6b7fff`, while the `Cb0x5/Cr0xA` Cr-positive rows still regress to one-frame `...6bbecf` misses.
 - This narrows the rejection: the broad selector is not uniformly bad for both complementary-checker orientations; the next source trial should isolate the exact `Cb0x5/Cr0xA` Cr-positive hazard or the Cr-negative-only promotion condition without treating the reciprocal orientation as a blocker.
 - Verification: `THREADS=1 BUILD_JOBS=1 scripts/run_cabac_p16x16_chroma_ac_checker_cbf_walk_rejection_probe.py` passes.
+
+## 2026-06-01 high-amplitude same-mask checker miss lock
+
+- Probed high-amplitude same-mask checker rows in the bounded cross-plane chroma-AC gate after the default-amplitude same-mask lattice was locked.
+- `Cb0x3/Cr0x3`, `Cb0xA/Cr0xA`, and `Cb0xC/Cr0xC` at `+32/+32` strict-decode both frames with expected plane-local SAD, but `Cb0x5/Cr0x5 +32/+32` still stops after the IDR frame with FFmpeg `bytestream -23` and final P-slice tail `0000000141d008086bfbcf`.
+- `scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py` now locks that `Cb0x5/Cr0x5` row as an expected one-frame miss rather than leaving the remaining high-amplitude same-mask checker gap implicit. The next repair target is the same CABAC arithmetic/output-byte boundary that separated the earlier complementary-checker sign cases, not another broad selector sweep.
