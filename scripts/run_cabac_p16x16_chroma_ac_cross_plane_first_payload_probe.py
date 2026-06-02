@@ -38,8 +38,8 @@ EXPECTED_HEADER_TAIL = 0x6B
 # checker/three-block cross-row complements,
 # high-amplitude skew-pair sign partitions,
 # asymmetric three-plus-one complements, three-block reciprocal complements,
-# all-but-one reciprocal complements including same-quadrant singleton mirrors,
-# same-mask Cb/Cr controls, and dense-both controls.  This is
+# all-but-one reciprocal complements including same-quadrant and adjacent
+# singleton mirrors, same-mask Cb/Cr controls, and dense-both controls.  This is
 # deliberately smaller than the full 15x15 lattice
 # so the cron gate stays
 # bounded while still covering the combinations that used to expose short-decode
@@ -137,6 +137,10 @@ TAILS = {
     (0x4, 0xB): "0000000141d008086b3acbf516134e874fdcaa2d",
     (0xD, 0x2): "0000000141d008086b3acc33249a58a9214bf7",
     (0x2, 0xD): "0000000141d008086b3acbf5cad4097c4d2ada7d",
+    (0xE, 0x2): "0000000141d008086b3acc3602d3f58ca1b3b5",
+    (0x2, 0xE): "0000000141d008086b3acbf5cad409d6890a5f",
+    (0xE, 0x4): "0000000141d008086b3acc3602d3f58ca1b3b3",
+    (0x4, 0xE): "0000000141d008086b3acbf516134f04ca14bf",
     (0xD, 0xE): "0000000141d008086b3acc36849d158a9214bf7b590000",
     (0xE, 0xD): "0000000141d008086b3acc36b8ad3f58ca1b3b4eb300000300",
     (0x7, 0xD): "0000000141d008086b3acc36849d0ec2488aacde0d0000",
