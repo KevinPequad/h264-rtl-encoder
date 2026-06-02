@@ -39,7 +39,8 @@ EXPECTED_HEADER_TAIL = 0x6B
 # high-amplitude skew-pair sign partitions,
 # asymmetric three-plus-one complements, three-block reciprocal complements,
 # all-but-one reciprocal complements including same-quadrant and adjacent
-# singleton mirrors, same-mask Cb/Cr controls, and dense-both controls.  This is
+# singleton mirrors, the complete default-amplitude same-mask Cb/Cr lattice,
+# and dense-both controls.  This is
 # deliberately smaller than the full 15x15 lattice
 # so the cron gate stays
 # bounded while still covering the combinations that used to expose short-decode
@@ -128,6 +129,7 @@ TAILS = {
     (0x7, 0x7): "0000000141d008086b3acc36849d0ec2488aacde0d0000",
     (0x7, 0x8): "0000000141d008086b3acc332499ec2488aacd",
     (0x8, 0x7): "0000000141d008086b3acbf588e2699065115d",
+    (0x8, 0x8): "0000000141d008086b3acbe70e269878",
     (0x1, 0xB): "0000000141d008086b3acbf3269a7a91944576",
     (0xB, 0x1): "0000000141d008086b3acc332499ec24af9158f0",
     (0x2, 0xB): "0000000141d008086b3acbf5cad40984ca22bb59",
@@ -147,8 +149,11 @@ TAILS = {
     (0xD, 0x7): "0000000141d008086b3acc36849d158a9214bf77060000",
     (0x7, 0xE): "0000000141d008086b3acc36849d0ec2488aace6b30000",
     (0xE, 0x7): "0000000141d008086b3acc36b8ad3f58ca1b3b4eb30000",
+    (0xB, 0xB): "0000000141d008086b3acc36849d0ec24af9158f0600000300",
     (0xB, 0xD): "0000000141d008086b3acc36849d0ec24af9158f0600000300",
+    (0xD, 0xD): "0000000141d008086b3acc36849d158a9214bf770600000300",
     (0xD, 0xB): "0000000141d008086b3acc36849d158a9214bf770600000300",
+    (0xE, 0xE): "0000000141d008086b3acc36b8ad3f58ca1b3b57060000",
 }
 
 # Cross-plane high-amplitude guards.  The mask lattice above uses value 136
@@ -486,7 +491,7 @@ def main() -> int:
         "asymmetric three-plus-one complements, three-block reciprocal complements, "
         "all-but-one reciprocal complements, "
         "same-quadrant all-but-one/singleton mirrors, "
-        "same-mask Cb/Cr controls, "
+        "the complete default-amplitude same-mask Cb/Cr lattice, "
         "and dense-both Cb+Cr AC masks "
         "plus positive, reciprocal, mixed-sign, asymmetric complement, "
         "and complete +/-32 sign matrices for the targeted all-but-one/singleton "
