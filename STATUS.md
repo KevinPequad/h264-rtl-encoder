@@ -1139,6 +1139,11 @@ Current verified milestone outputs:
   decode/recon-hash green and `Cb=+157`/`Cr=-2` remains a `bytestream -11`
   xfail.  The next source probe should compare the Cb-positive levelgt1 tail
   and following Cr-small DC CBF/coeff sequence across `+1`, `+19`, and `+157`.
+- this H.264 cron tick tightened the green 10-bit 4:2:2 isolated chroma-DC
+  default probes so they now assert exact signed scan magnitudes before strict
+  decode/recon-hash success: `Cr=-19`, `Cr=+19`, and `Cb=-2`.  This keeps the
+  remaining red lane focused on the Cb-positive / tiny negative-Cr CABAC tail
+  instead of silently drifting plane polarity or residual magnitude.
 
 ## Not Done Yet
 

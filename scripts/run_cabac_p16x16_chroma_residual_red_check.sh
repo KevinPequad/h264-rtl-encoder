@@ -861,6 +861,8 @@ try:
         expected_nonzero_dc_planes=("cr",),
         require_luma_empty=True,
         require_changed_framehash=True,
+        expected_negative_dc_planes=("cr",),
+        expected_dc_exact_values={"cr": -19},
     )
     run_chroma_probe(
         sim_bin_10b422,
@@ -884,6 +886,7 @@ try:
         require_luma_empty=True,
         require_changed_framehash=True,
         expected_positive_dc_planes=("cr",),
+        expected_dc_exact_values={"cr": 19},
     )
     run_chroma_probe(
         sim_bin_10b422,
@@ -895,6 +898,7 @@ try:
         require_luma_empty=True,
         require_changed_framehash=True,
         expected_negative_dc_planes=("cb",),
+        expected_dc_exact_values={"cb": -2},
     )
     run_chroma_probe(
         sim_bin_10b422,
