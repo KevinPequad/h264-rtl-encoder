@@ -105,7 +105,7 @@ partition/tool coverage, and the final long-run target.
 | `scripts/run_deblock_reference_check.sh` | Public-decoder and two-frame reconstructed-reference consumption check for in-loop deblocking |
 | `scripts/run_cabac_residual4x4_scan_check.sh` | Standalone Verilator check for the CABAC residual 4x4 scan-event helper |
 | `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for CABAC `P_L0_16x16` luma residual syntax; requires actual decoded luma reconstruction and serves as the checkpoint proof for the coefficient-driven residual path |
-| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | Focused CABAC `P_L0_16x16` chroma residual gate covering 4:2:0, 4:2:2, 10-bit chroma-only luma-empty residuals, plane-isolated DC/AC payloads, and strict FFmpeg decode |
+| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | Focused CABAC `P_L0_16x16` chroma residual gate covering 4:2:0, 4:2:2, plane-isolated 10-bit 4:2:0 chroma-only luma-empty residuals, plane-isolated DC/AC payloads, and strict FFmpeg decode |
 | `docker/Dockerfile` | Containerized smoke-run environment |
 | `docker/run_one_frame.sh` | One-frame Docker smoke flow |
 | `tools/parse_422.c` | Small debug/parser utility |

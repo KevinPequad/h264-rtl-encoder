@@ -88,6 +88,8 @@ dc_422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_422_
 ac_422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_cb_only_16x16_2f.yuv")
 ac_422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_cr_only_16x16_2f.yuv")
 ac_10b_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b420_16x16_2f.yuv")
+ac_10b_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b420_cb_only_16x16_2f.yuv")
+ac_10b_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b420_cr_only_16x16_2f.yuv")
 build_log = out_dir / "cabac_p16x16_chroma_residual_probe.build.log"
 
 
@@ -228,6 +230,13 @@ write_420_probe(ac_cr_only_input_path, cb_mode="flat", cr_mode="ac_neg")
 # while cabp_chroma==2. This locks the CABAC P16x16 subset guard to accept
 # chroma-owned residual payloads without requiring a luma residual payload.
 write_420_probe_10b(ac_10b_input_path, cb_mode="ac_pos", cr_mode="ac_neg")
+
+# Plane-isolated 10-bit 4:2:0 AC probes make sure the high-bit-depth chroma-only
+# CABAC lane does not hide a swapped or duplicated Cb/Cr payload behind the
+# two-plane probe above.  Luma stays flat so these still guard the luma-empty
+# P16x16 residual scheduler path.
+write_420_probe_10b(ac_10b_cb_only_input_path, cb_mode="ac_pos", cr_mode="flat")
+write_420_probe_10b(ac_10b_cr_only_input_path, cb_mode="flat", cr_mode="ac_neg")
 
 # 16x16 yuv422p, two frames.  The chroma planes are 8x16, so the frame-1
 # deltas deliberately touch lower chroma rows that do not exist in 4:2:0.  The
@@ -532,6 +541,26 @@ try:
         "cabac_p16x16_chroma_residual_10b420_probe",
         ac_10b_input_path,
         require_dc_only=False,
+        require_luma_empty=True,
+    )
+    run_chroma_probe(
+        sim_bin_10b,
+        "cabac_p16x16_chroma_residual_10b420_cb_only_probe",
+        ac_10b_cb_only_input_path,
+        require_dc_only=False,
+        expected_dc_planes=("cb",),
+        expected_ac_planes=("cb",),
+        expected_nonzero_dc_planes=("cb",),
+        require_luma_empty=True,
+    )
+    run_chroma_probe(
+        sim_bin_10b,
+        "cabac_p16x16_chroma_residual_10b420_cr_only_probe",
+        ac_10b_cr_only_input_path,
+        require_dc_only=False,
+        expected_dc_planes=("cr",),
+        expected_ac_planes=("cr",),
+        expected_nonzero_dc_planes=("cr",),
         require_luma_empty=True,
     )
 finally:
