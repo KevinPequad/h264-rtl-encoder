@@ -631,3 +631,10 @@ Next useful probe:
 - This promotes the Cb-positive `Cb0x7/Cr0x7` rows (`+32/+32` and `+32/-32`) to full strict FFmpeg decode with byte-identical IDR, exact plane-local `U_SAD=768 V_SAD=768`, and final tails `...6bfbdf77ed77bdffffbffe` / `...6bfbdf77ed77bbdfdff64e`.
 - The Cb-negative `Cb0x7/Cr0x7` rows remain isolated one-frame misses, now with exact signatures `bytestream -19` / `-13` and updated final tails under the scoped CBF walk. Other same-mask all-but-one expected misses remain locked, so this is a partial promotion rather than a broad all-but-one closure.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_same_mask_high_amp_probe.py` passes.
+
+## 2026-06-01 same-mask first-payload mutation lock
+
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_same_mask_high_amp_probe.py` so every remaining high-amplitude same-mask all-but-one miss is not only preserved as an expected one-frame FFmpeg miss, but also checked with first-residual-payload-only mutations.
+- For Cb-negative `Cb0x7/Cr0x7`, all `Cb0xB/Cr0xB`, and the unpromoted `Cb0xD/Cr0xD` / `Cb0xE/Cr0xE` sign rows, `bit7`, `0x75`, and `0x6b` first-payload mutations all strict-decode two frames with byte-identical IDR and exact plane-local `U_SAD=768 V_SAD=768`.
+- This is diagnostic only, not a source repair: it narrows the next target to CABAC arithmetic/output-byte generation for the first residual payload while avoiding a literal bytestream patch.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_same_mask_high_amp_probe.py` passes.
