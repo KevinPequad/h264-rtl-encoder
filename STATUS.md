@@ -1083,6 +1083,12 @@ Current verified milestone outputs:
   evidence before accepting the known strict FFmpeg failures.  The red lane is
   now guarded against both hidden Cb sign inversion and neutral non-strict
   concealment while the default strict-decode gate stays green.
+- a later scheduled 2026-06-02 xfail tightening made those same optional
+  Cb-positive 10-bit 4:2:2 DC repros assert exact RTL Cb DC magnitudes before
+  accepting the strict FFmpeg failures: unity `+1`, tiny `+2`, and larger
+  `+19`.  This keeps the blocker pinned to Cb-positive CABAC emission or
+  finalization after the intended coefficient is present, not to input stimulus
+  drift or hidden quantizer magnitude changes.
 
 ## Not Done Yet
 

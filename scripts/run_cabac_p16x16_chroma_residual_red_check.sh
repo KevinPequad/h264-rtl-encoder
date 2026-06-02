@@ -485,6 +485,7 @@ def run_chroma_probe(
     require_changed_framehash=False,
     expected_positive_dc_planes=(),
     expected_negative_dc_planes=(),
+    expected_dc_exact_values=None,
 ):
     expected_dc_planes = set(expected_dc_planes)
     expected_ac_planes = set(expected_ac_planes)
@@ -493,6 +494,7 @@ def run_chroma_probe(
     )
     expected_positive_dc_planes = set(expected_positive_dc_planes)
     expected_negative_dc_planes = set(expected_negative_dc_planes)
+    expected_dc_exact_values = expected_dc_exact_values or {}
     output_path = out_dir / f"{name}.h264"
     sim_log = out_dir / f"{name}.sim.log"
     ffmpeg_log = out_dir / f"{name}.ffmpeg.log"
@@ -542,6 +544,11 @@ def run_chroma_probe(
             if plane in expected_negative_dc_planes and not any(v < 0 for v in values):
                 raise SystemExit(
                     f"{name} expected negative {plane.upper()} chroma DC coefficient evidence, got: {values[:16]}"
+                )
+            if plane in expected_dc_exact_values and expected_dc_exact_values[plane] not in values:
+                raise SystemExit(
+                    f"{name} expected exact {plane.upper()} chroma DC coefficient "
+                    f"{expected_dc_exact_values[plane]}, got: {values[:16]}"
                 )
 
     if require_dc_only:
@@ -866,6 +873,7 @@ try:
                 "bytestream -9",
                 False,
                 ("cb",),
+                {"cb": 1},
             ),
             (
                 "cabac_p16x16_chroma_dc_residual_10b422_cb_pos_tiny_probe",
@@ -874,6 +882,7 @@ try:
                 "bytestream -8",
                 True,
                 ("cb",),
+                {"cb": 2},
             ),
             (
                 "cabac_p16x16_chroma_dc_residual_10b422_cb_only_probe",
@@ -882,6 +891,7 @@ try:
                 "bytestream -22",
                 True,
                 ("cb",),
+                {"cb": 19},
             ),
         ]
         for (
@@ -891,6 +901,7 @@ try:
             expected_fragment,
             require_nonunity_dc,
             expected_positive_dc_planes,
+            expected_dc_exact_values,
         ) in xfail_cases:
             try:
                 run_chroma_probe(
@@ -903,6 +914,7 @@ try:
                     require_luma_empty=True,
                     require_nonunity_dc=require_nonunity_dc,
                     expected_positive_dc_planes=expected_positive_dc_planes,
+                    expected_dc_exact_values=expected_dc_exact_values,
                 )
             except SystemExit as exc:
                 msg = str(exc)
