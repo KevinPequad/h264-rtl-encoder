@@ -34,7 +34,8 @@ EXPECTED_HEADER_TAIL = 0x6B
 # sparse-Cb plus dense-Cr / dense-Cb plus sparse-Cr right-column and bottom-row
 # controls, dense-Cr, dense-Cb, same-diagonal dense, complementary checker,
 # asymmetric three-block, its reciprocal mirror, extra two-/three-block skew pairs,
-# two-block off-diagonal, diagonal-skew, and edge-adjacent reciprocal pairs,
+# two-block off-diagonal, diagonal-skew, edge-adjacent reciprocal pairs, and
+# checker/three-block cross-row complements,
 # high-amplitude skew-pair sign partitions,
 # asymmetric three-plus-one complements, three-block reciprocal complements,
 # all-but-one reciprocal complements including same-quadrant singleton mirrors,
@@ -88,8 +89,12 @@ TAILS = {
     (0x3, 0x9): "0000000141d008086b3acc614d087fa8761255e62b00",
     (0xA, 0x6): "0000000141d008086b3acc707b65036a06ac2577ea00",
     (0xA, 0x9): "0000000141d008086b3acc707b52136a06ac25611500",
+    (0xA, 0xB): "0000000141d008086b3acc70754bb5035612b08a9c0000",
     (0xB, 0xC): "0000000141d008086b3acc381659f43b092be455f100",
+    (0xB, 0xA): "0000000141d008086b3acc38800753f7d92be4564d0000",
     (0xC, 0xC): "0000000141d008086b3acc626e3a52133cb094a23a",
+    (0xC, 0xA): "0000000141d008086b3acc62701352133cb095dfab",
+    (0xA, 0xC): "0000000141d008086b3acc707a7806d40d584a511d",
     (0xC, 0xB): "0000000141d008086b3acc6268ea84cf2c256115390000",
     (0xA, 0xA): "0000000141d008086b3acc707c6a06d40d584aefd500",
     (0x5, 0xA): "0000000141d008086b3acc6f8c66df5158a92c722b",
@@ -134,6 +139,8 @@ TAILS = {
     (0x2, 0xD): "0000000141d008086b3acbf5cad4097c4d2ada7d",
     (0xD, 0xE): "0000000141d008086b3acc36849d158a9214bf7b590000",
     (0xE, 0xD): "0000000141d008086b3acc36b8ad3f58ca1b3b4eb300000300",
+    (0x7, 0xD): "0000000141d008086b3acc36849d0ec2488aacde0d0000",
+    (0xD, 0x7): "0000000141d008086b3acc36849d158a9214bf77060000",
     (0x7, 0xE): "0000000141d008086b3acc36849d0ec2488aace6b30000",
     (0xE, 0x7): "0000000141d008086b3acc36b8ad3f58ca1b3b4eb30000",
     (0xB, 0xD): "0000000141d008086b3acc36849d0ec24af9158f0600000300",
@@ -469,7 +476,8 @@ def main() -> int:
         "sparse+dense right-column/bottom-row, same-diagonal dense, "
         "complementary checker, "
         "asymmetric three-block plus reciprocal mirror, extra two-/three-block skew pairs, "
-        "two-block off-diagonal, diagonal-skew, and edge-adjacent reciprocal pairs, dense-Cb, dense-Cr, "
+        "two-block off-diagonal, diagonal-skew, edge-adjacent reciprocal pairs, "
+        "checker/three-block cross-row complements, dense-Cb, dense-Cr, "
         "high-amplitude skew-pair sign partitions, "
         "asymmetric three-plus-one complements, three-block reciprocal complements, "
         "all-but-one reciprocal complements, "
