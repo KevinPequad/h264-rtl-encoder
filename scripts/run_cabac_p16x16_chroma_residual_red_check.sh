@@ -75,6 +75,7 @@ out_dir.mkdir(exist_ok=True)
 ac_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_16x16_2f.yuv")
 dc_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_16x16_2f.yuv")
 ac_422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_16x16_2f.yuv")
+dc_422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_422_16x16_2f.yuv")
 build_log = out_dir / "cabac_p16x16_chroma_residual_probe.build.log"
 
 # 16x16 yuv420p, two frames.  Keep luma flat while changing both chroma
@@ -124,6 +125,16 @@ with ac_422_input_path.open("wb") as f:
                     cr[y * 8 + x] = 96
         f.write(cb)
         f.write(cr)
+
+# Uniform 4:2:2 chroma deltas should exercise the widened eight-coefficient
+# chroma DC payload without entering the 4:2:2 chroma AC cursor lane.
+with dc_422_input_path.open("wb") as f:
+    for frame_idx in range(2):
+        f.write(bytes([64]) * (16 * 16))
+        cb = 160 if frame_idx == 1 else 128
+        cr = 96 if frame_idx == 1 else 128
+        f.write(bytes([cb]) * (8 * 16))
+        f.write(bytes([cr]) * (8 * 16))
 
 
 def run_chroma_probe(sim_bin, name, input_path, require_dc_only, min_ac_blocks_per_plane=1):
@@ -246,6 +257,12 @@ try:
         ac_422_input_path,
         require_dc_only=False,
         min_ac_blocks_per_plane=5,
+    )
+    run_chroma_probe(
+        sim_bin_422,
+        "cabac_p16x16_chroma_dc_residual_422_probe",
+        dc_422_input_path,
+        require_dc_only=True,
     )
 finally:
     shutil.rmtree(workspace_422, ignore_errors=True)
