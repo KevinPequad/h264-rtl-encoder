@@ -854,9 +854,6 @@ module h264_encoder_top #(
         ((cabac_chroma_ac_valid_mask_reg & CABAC_CHROMA_ACTIVE_BLK_MASK) == CABAC_CHROMA_ACTIVE_BLK_MASK);
     wire        cabac_chroma_residual_payload_ready_w =
         cabac_chroma_dc_payload_ready_w && cabac_chroma_ac_payload_ready_w;
-    // Track the eventual CABAC chroma CBP value now, but keep the writer input
-    // hard-dormant until the matching DC/AC payload scheduler is connected.
-    wire [1:0]  cabac_cbp_chroma_dormant_w = cabac_cbp_chroma_reg & 2'd0;
     wire        cabac_non_skip_subset_ok_w =
         cabac_p16x16_supported_w &&
         !is_skip_mb_reg &&
@@ -2444,11 +2441,9 @@ pred_buf = {(256*BD){1'b0}};
         .cabac_cbp_luma_ctx1_sel(cabac_cbp_luma_ctx1_sel_w),
         .cabac_cbp_luma_ctx2_sel(cabac_cbp_luma_ctx2_sel_w),
         .cabac_cbp_luma(cabac_cbp_luma_reg),
-        // Chroma residual CABAC payload is still guarded at the top level;
-        // keep the bitstream chroma-CBP bins dormant until the DC/AC payload
-        // scheduler is connected, even though stable DC/AC classification and
-        // AC snapshots are now captured alongside the luma payload.
-        .cabac_cbp_chroma(cabac_cbp_chroma_dormant_w),
+        // Feed the captured chroma CBP into the CABAC writer now that the
+        // residual payload scheduler can consume matching DC/AC snapshots.
+        .cabac_cbp_chroma(cabac_cbp_chroma_reg),
         .cabac_chroma_dc_scan_flat(cabac_chroma_dc_scan_flat_reg),
         .cabac_chroma_scan_flat(cabac_chroma_scan_flat_reg),
         .cabac_chroma_nz_mask(cabac_chroma_nz_mask_reg),

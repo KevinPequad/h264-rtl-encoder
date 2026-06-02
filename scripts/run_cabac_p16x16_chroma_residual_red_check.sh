@@ -39,7 +39,7 @@ checks = {
     "top_has_chroma_payload_readiness_guard": "cabac_chroma_residual_payload_ready_w" in top and "CABAC_CHROMA_ACTIVE_BLK_MASK" in top and "cabac_luma_residual_payload_ready_w &&" in top and "cabac_chroma_residual_payload_ready_w" in top,
     "top_tracks_chroma_cbp_dc_class": "cabac_cbp_chroma_reg <= (cabac_cbp_chroma_reg == 2'd2) ? 2'd2 : 2'd1;" in top,
     "top_tracks_chroma_cbp_ac_class": "cabac_cbp_chroma_reg <= 2'd2;" in top,
-    "top_keeps_chroma_cbp_dormant_until_payload_scheduler": ".cabac_cbp_chroma(cabac_cbp_chroma_dormant_w)" in top and "cabac_cbp_chroma_reg & 2'd0" in top,
+    "top_feeds_chroma_cbp_to_bitstream": ".cabac_cbp_chroma(cabac_cbp_chroma_reg)" in top and "cabac_cbp_chroma_dormant_w" not in top and "cabac_cbp_chroma_reg & 2'd0" not in top,
     "rtl_runner_honors_build_jobs_env": "os.environ.get(\"BUILD_JOBS\")" in runner,
 }
 failed = [name for name, ok in checks.items() if not ok]
@@ -51,3 +51,80 @@ PY
 
 THREADS="${THREADS:-1}" BUILD_JOBS="${BUILD_JOBS:-1}" \
   python3 scripts/regress_smoke_matrix.py --case smoke_8b_420_cabac_p16x16
+
+THREADS="${THREADS:-1}" BUILD_JOBS="${BUILD_JOBS:-1}" \
+  python3 - <<'PY'
+from pathlib import Path
+import os
+import shutil
+import subprocess
+import sys
+
+root = Path.cwd()
+sys.path.insert(0, str(root / "scripts"))
+from rtl_runner import BuildConfig, build_sim, run_sim, stage_workspace
+
+out_dir = root / "output"
+out_dir.mkdir(exist_ok=True)
+input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_16x16_2f.yuv")
+output_path = out_dir / "cabac_p16x16_chroma_residual_probe.h264"
+build_log = out_dir / "cabac_p16x16_chroma_residual_probe.build.log"
+sim_log = out_dir / "cabac_p16x16_chroma_residual_probe.sim.log"
+ffmpeg_log = out_dir / "cabac_p16x16_chroma_residual_probe.ffmpeg.log"
+
+# 16x16 yuv420p, two frames.  Keep luma flat while changing both chroma
+# planes on frame 1 so the P MB stays in the CABAC P16x16 lane but carries
+# nonzero chroma residual snapshots into the bitstream writer.
+with input_path.open("wb") as f:
+    for frame_idx in range(2):
+        f.write(bytes([64]) * (16 * 16))
+        cb = bytearray([128] * (8 * 8))
+        cr = bytearray([128] * (8 * 8))
+        if frame_idx == 1:
+            for y in range(2, 6):
+                for x in range(2, 6):
+                    cb[y * 8 + x] = 160
+            for y in range(1, 5):
+                for x in range(3, 7):
+                    cr[y * 8 + x] = 96
+        f.write(cb)
+        f.write(cr)
+
+workspace = stage_workspace("h264_cabac_p16x16_chroma_residual_")
+try:
+    cfg = BuildConfig(
+        width=16,
+        height=16,
+        bit_depth=8,
+        chroma_format_idc=1,
+        jobs=max(1, int(os.environ.get("BUILD_JOBS", os.environ.get("THREADS", "1")))),
+        enable_idr_ipcm=1,
+        inter_sad_threshold=20_000,
+        enable_cabac_p16x16=1,
+        enable_cabac_p16x16_fullpel_only=1,
+    )
+    sim_bin = build_sim(workspace, cfg, build_log)
+    proc = run_sim(sim_bin, 2, 20_000_000, input_path, output_path, capture=True)
+    sim_text = (proc.stdout or "") + (proc.stderr or "")
+    sim_log.write_text(sim_text, encoding="utf-8")
+    if "[TB] 2 frames encoded" not in sim_text:
+        raise SystemExit("missing two-frame encode summary in chroma residual probe")
+    if "cabac_p16x16_mbs=1" not in sim_text:
+        raise SystemExit("chroma residual probe did not exercise a CABAC P16x16 MB")
+    if "isCb=1" not in sim_text or "isCr=1" not in sim_text or "chAC=1" not in sim_text:
+        raise SystemExit("chroma residual probe did not produce Cb/Cr AC residual scan evidence")
+
+    ff = subprocess.run(
+        ["ffmpeg", "-y", "-v", "error", "-xerror", "-i", str(output_path), "-f", "null", "-"],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    ffmpeg_text = (ff.stdout or "") + (ff.stderr or "")
+    ffmpeg_log.write_text(ffmpeg_text, encoding="utf-8")
+    if ff.returncode != 0:
+        raise SystemExit(ffmpeg_text or f"ffmpeg strict decode failed with exit {ff.returncode}")
+    print(f"[PASS] cabac_p16x16_chroma_residual_probe: strict FFmpeg decode ok ({output_path})")
+finally:
+    shutil.rmtree(workspace, ignore_errors=True)
+PY
