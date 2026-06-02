@@ -90,6 +90,7 @@ ac_422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_cr_
 ac_10b422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b422_16x16_2f.yuv")
 dc_10b422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_16x16_2f.yuv")
 dc_10b422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_only_16x16_2f.yuv")
+dc_10b422_cb_neg_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_neg_only_16x16_2f.yuv")
 dc_10b422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cr_only_16x16_2f.yuv")
 ac_10b422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b422_cb_only_16x16_2f.yuv")
 ac_10b422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b422_cr_only_16x16_2f.yuv")
@@ -202,6 +203,8 @@ def write_422_probe_10b(path, *, cb_mode, cr_mode):
             plane = [384] * (8 * 16)
         elif mode == "dc_neg_small":
             plane = [496] * (8 * 16)
+        elif mode == "dc_neg_tiny":
+            plane = [510] * (8 * 16)
         elif mode == "ac_pos":
             # Mirror the 8-bit 4:2:2 AC probe into the high-bit-depth lane and
             # keep the lower-row coverage that proves the widened AC cursor.
@@ -331,6 +334,7 @@ write_422_probe(ac_422_cr_only_input_path, cb_mode="flat", cr_mode="ac_neg")
 # without a luma payload while also proving the lower 4:2:2 chroma rows.
 write_422_probe_10b(dc_10b422_input_path, cb_mode="dc", cr_mode="dc_neg")
 write_422_probe_10b(dc_10b422_cb_only_input_path, cb_mode="dc_small", cr_mode="flat")
+write_422_probe_10b(dc_10b422_cb_neg_only_input_path, cb_mode="dc_neg_tiny", cr_mode="flat")
 write_422_probe_10b(dc_10b422_cr_only_input_path, cb_mode="flat", cr_mode="dc_neg_small")
 write_422_probe_10b(ac_10b422_input_path, cb_mode="ac_pos", cr_mode="ac_neg")
 write_422_probe_10b(ac_10b422_cb_only_input_path, cb_mode="ac_pos", cr_mode="flat")
@@ -720,6 +724,15 @@ try:
         require_dc_only=True,
         expected_dc_planes=("cr",),
         expected_nonzero_dc_planes=("cr",),
+        require_luma_empty=True,
+    )
+    run_chroma_probe(
+        sim_bin_10b422,
+        "cabac_p16x16_chroma_dc_residual_10b422_cb_neg_only_probe",
+        dc_10b422_cb_neg_only_input_path,
+        require_dc_only=True,
+        expected_dc_planes=("cb",),
+        expected_nonzero_dc_planes=("cb",),
         require_luma_empty=True,
     )
     if os.environ.get("CABAC_EXPECT_10B422_DC_ISOLATION_FAIL") == "1":
