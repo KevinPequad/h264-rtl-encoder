@@ -402,9 +402,9 @@ module h264_bitstream #(
     localparam [4:0] CABAC_CTX_LUMA_LEVEL1 = 5'd16;
     localparam [4:0] CABAC_CTX_LUMA_LEVELGT1 = 5'd17;
 
-    localparam [3:0] CABAC_CHROMA_PAYLOAD_DC_CB = 4'd0;
-    localparam [3:0] CABAC_CHROMA_PAYLOAD_DC_CR = 4'd1;
-    localparam [3:0] CABAC_CHROMA_PAYLOAD_AC_FIRST = 4'd2;
+    localparam [4:0] CABAC_CHROMA_PAYLOAD_DC_CB = 5'd0;
+    localparam [4:0] CABAC_CHROMA_PAYLOAD_DC_CR = 5'd1;
+    localparam [4:0] CABAC_CHROMA_PAYLOAD_AC_FIRST = 5'd2;
 
     function automatic [6:0] cabac_init_state;
         input integer m;
@@ -697,25 +697,31 @@ module h264_bitstream #(
     endfunction
 
     function automatic cabac_chroma_payload_cursor_is_dc;
-        input [3:0] payload_idx_i;
+        input [4:0] payload_idx_i;
         begin
             cabac_chroma_payload_cursor_is_dc = (payload_idx_i <= CABAC_CHROMA_PAYLOAD_DC_CR);
         end
     endfunction
 
     function automatic cabac_chroma_payload_cursor_plane_is_cr;
-        input [3:0] payload_idx_i;
+        input [4:0] payload_idx_i;
         begin
             cabac_chroma_payload_cursor_plane_is_cr = (payload_idx_i == CABAC_CHROMA_PAYLOAD_DC_CR) ||
-                (payload_idx_i >= (CABAC_CHROMA_PAYLOAD_AC_FIRST + ((CHROMA_FORMAT_IDC == 2) ? 4'd8 : 4'd4)));
+                (payload_idx_i >= (CABAC_CHROMA_PAYLOAD_AC_FIRST + ((CHROMA_FORMAT_IDC == 2) ? 5'd8 : 5'd4)));
         end
     endfunction
 
     function automatic [3:0] cabac_chroma_payload_cursor_blk_idx;
-        input [3:0] payload_idx_i;
+        input [4:0] payload_idx_i;
         begin
             cabac_chroma_payload_cursor_blk_idx = (payload_idx_i < CABAC_CHROMA_PAYLOAD_AC_FIRST) ? 4'd0 :
                 (payload_idx_i - CABAC_CHROMA_PAYLOAD_AC_FIRST);
+        end
+    endfunction
+
+    function automatic [4:0] cabac_chroma_payload_total;
+        begin
+            cabac_chroma_payload_total = (CHROMA_FORMAT_IDC == 2) ? 5'd18 : 5'd10;
         end
     endfunction
 
