@@ -10,8 +10,8 @@ and complementary two-block row/column pairs on both chroma planes, plus
 high-amplitude same-quadrant and row/column-complement subsets with luma
 residual present, same-mask row/diagonal controls, including their high-amplitude
 forms, default all-but-one same-mask mirrors, the high-amplitude top-row
-same-mask all-but-one +/-32 sign matrix, the complementary split-row/column
-+/-32 sign matrix, reciprocal high-amplitude right-column/diagonal skew pairs,
+same-mask all-but-one +/-32 sign matrix, the complementary split-row/column +/-32 sign matrix,
+reciprocal high-amplitude right-column/diagonal skew pairs,
 and mirrored
 high-amplitude three-plus-one edge complements with mixed Cb/Cr signs, including
 same-mask all-but-one mirrors plus single-right/three-right,

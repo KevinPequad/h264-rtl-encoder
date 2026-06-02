@@ -237,12 +237,14 @@ AMPLITUDE_TAILS = {
 }
 
 # Split-row Cb0x3/Cr0xC and adjacent skew-pair high-amplitude polarity coverage
-# are promoted by the scoped plane-local CBF walk in h264_bitstream.v.  Keep this
-# mapping for expected-miss families rather than deleting the negative harness.
-# The current bounded skew-pair set has no remaining expected misses, but the
-# high-amplitude same-mask checker still has a one-frame Cb+Cr failure that must
-# stay explicit until a source repair promotes it.
-EXPECTED_MISSES = {
+# are promoted by the scoped plane-local CBF walk in h264_bitstream.v.  Keep the
+# skew-pair expected-miss harness present but empty so the audit can distinguish
+# those closed directions from unrelated bounded negative controls.
+EXPECTED_MISSES = {}
+
+# The high-amplitude same-mask checker still has a one-frame Cb+Cr failure that
+# must stay explicit until a source repair promotes it.
+SAME_MASK_EXPECTED_MISSES = {
     (0x5, 0x5, 160, 160): (384, "bytestream -23", "0000000141d008086bfbcf"),
 }
 
@@ -479,6 +481,8 @@ def main() -> int:
     for (cb_mask, cr_mask, cb_value, cr_value), tail in AMPLITUDE_TAILS.items():
         check_case(sim, cb_mask, cr_mask, tail, cb_value, cr_value)
     for (cb_mask, cr_mask, cb_value, cr_value), (expected_bytes, expected_signature, tail) in EXPECTED_MISSES.items():
+        check_expected_miss(sim, cb_mask, cr_mask, cb_value, cr_value, expected_bytes, expected_signature, tail)
+    for (cb_mask, cr_mask, cb_value, cr_value), (expected_bytes, expected_signature, tail) in SAME_MASK_EXPECTED_MISSES.items():
         check_expected_miss(sim, cb_mask, cr_mask, cb_value, cr_value, expected_bytes, expected_signature, tail)
     print(
         "[PASS] CABAC P16x16 cross-plane chroma-AC gate promoted: representative "
