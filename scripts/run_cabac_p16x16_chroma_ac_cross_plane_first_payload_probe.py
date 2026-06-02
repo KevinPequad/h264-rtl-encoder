@@ -195,6 +195,7 @@ AMPLITUDE_TAILS = {
     (0x9, 0x6, 96, 96): "0000000141d008086b3fdd7e",
     (0x9, 0x6, 160, 160): "0000000141d008086b7bef7e",
     (0x9, 0x6, 96, 160): "0000000141d008086b7bef7e",
+    (0x5, 0x5, 160, 160): "0000000141d008086b3add",
     (0xC, 0x3, 96, 160): "0000000141d008086bbaff",
     (0xC, 0x3, 160, 160): "0000000141d008086bbaff",
     (0x3, 0xC, 160, 160): "0000000141d008086b3ffe",
@@ -242,11 +243,10 @@ AMPLITUDE_TAILS = {
 # those closed directions from unrelated bounded negative controls.
 EXPECTED_MISSES = {}
 
-# The high-amplitude same-mask checker still has a one-frame Cb+Cr failure that
-# must stay explicit until a source repair promotes it.
-SAME_MASK_EXPECTED_MISSES = {
-    (0x5, 0x5, 160, 160): (384, "bytestream -23", "0000000141d008086bfbcf"),
-}
+# High-amplitude same-mask checker coverage used to short-decode after only the
+# IDR frame; keep the promoted tail in AMPLITUDE_TAILS so it cannot drift back
+# to the old one-frame bytestream -23 miss.
+SAME_MASK_EXPECTED_MISSES = {}
 
 
 def checker_chroma(mask: int, value: int = 136) -> bytes:
@@ -507,8 +507,8 @@ def main() -> int:
         "including the full Cb0x3/Cr0xC split-row sign matrix "
         "high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
         "checked-in -7 CABAC queue initializer, with no remaining skew-pair "
-        "high-amplitude expected-miss directions and with the current high-amplitude "
-        "same-mask checker miss explicitly locked in this bounded gate"
+        "high-amplitude expected-miss directions and with the high-amplitude "
+        "same-mask checker promoted in this bounded gate"
     )
     return 0
 
