@@ -322,6 +322,7 @@ def run_chroma_probe(
     expected_dc_planes=("cb", "cr"),
     expected_ac_planes=("cb", "cr"),
     expected_nonzero_dc_planes=None,
+    require_luma_empty=False,
 ):
     expected_dc_planes = set(expected_dc_planes)
     expected_ac_planes = set(expected_ac_planes)
@@ -338,6 +339,17 @@ def run_chroma_probe(
         raise SystemExit(f"missing two-frame encode summary in {name}")
     if "cabac_p16x16_mbs=1" not in sim_text:
         raise SystemExit(f"{name} did not exercise a CABAC P16x16 MB")
+    nonzero_luma_lines = [
+        line for line in sim_text.splitlines()
+        if "[ZZD]" in line
+        and "isL=1" in line
+        and re.search(r"TC=([1-9][0-9]*)", line)
+    ]
+    if require_luma_empty and nonzero_luma_lines:
+        raise SystemExit(
+            f"{name} expected chroma-only residuals with empty luma payloads, "
+            f"got: {nonzero_luma_lines[:2]}"
+        )
     if expected_dc_planes and "chDC=1" not in sim_text:
         raise SystemExit(f"{name} did not produce chroma DC residual scan evidence")
     cb_dc_values = collect_nonzero_chroma_scan_values(sim_text, marker="chDC=1", plane_marker="isCb=1")
@@ -520,6 +532,7 @@ try:
         "cabac_p16x16_chroma_residual_10b420_probe",
         ac_10b_input_path,
         require_dc_only=False,
+        require_luma_empty=True,
     )
 finally:
     shutil.rmtree(workspace_10b, ignore_errors=True)
