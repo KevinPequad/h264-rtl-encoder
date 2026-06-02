@@ -1095,6 +1095,13 @@ Current verified milestone outputs:
   so the remaining blocker is not limited to the Cr-empty CBF path; compare the
   green large two-plane `Cb=+157`/`Cr=-157` case against this tiny pair when
   debugging CABAC coefficient/sign/finalization sequencing.
+- this H.264 cron tick extended that optional two-plane differential with mixed
+  10-bit 4:2:2 DC magnitudes: `Cb=+157`/`Cr=-2` fails at MB 0 (`bytestream -11`)
+  and `Cb=+2`/`Cr=-157` fails at MB 0 (`bytestream -15`), while the default
+  large `Cb=+157`/`Cr=-157` strict-decode/recon-hash lane remains green.  That
+  narrows the current Cb-positive blocker to the CABAC coefficient/sign/final
+  arithmetic sequence for small/mixed chroma-DC magnitudes, not simply to an
+  absent Cr payload or a hidden plane/sign inversion.
 
 ## Not Done Yet
 
