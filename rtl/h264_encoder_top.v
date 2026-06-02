@@ -516,6 +516,7 @@ module h264_encoder_top #(
     reg [3:0]    cabac_cbp_luma_reg;
     reg [4095:0] cabac_luma_scan_flat_reg;
     reg [15:0]   cabac_luma_nz_mask_reg;
+    reg [1:0]    cabac_cbp_chroma_reg;
     reg [4095:0] cabac_chroma_scan_flat_reg;
     reg [15:0]   cabac_chroma_nz_mask_reg;
 
@@ -838,6 +839,9 @@ module h264_encoder_top #(
     wire        cabac_luma_residual_payload_ready_w =
         (cabac_cbp_luma_reg != 4'd0) &&
         (cabac_luma_nz_mask_reg != 16'd0);
+    // Track the eventual CABAC chroma CBP value now, but keep the writer input
+    // hard-dormant until the matching DC/AC payload scheduler is connected.
+    wire [1:0]  cabac_cbp_chroma_dormant_w = cabac_cbp_chroma_reg & 2'd0;
     wire        cabac_non_skip_subset_ok_w =
         cabac_p16x16_supported_w &&
         !is_skip_mb_reg &&
@@ -2426,9 +2430,9 @@ pred_buf = {(256*BD){1'b0}};
         .cabac_cbp_luma(cabac_cbp_luma_reg),
         // Chroma residual CABAC payload is still guarded at the top level;
         // keep the bitstream chroma-CBP bins dormant until the DC/AC payload
-        // scheduler is connected, even though stable AC snapshots are now
-        // captured alongside the luma payload.
-        .cabac_cbp_chroma(2'd0),
+        // scheduler is connected, even though stable DC/AC classification and
+        // AC snapshots are now captured alongside the luma payload.
+        .cabac_cbp_chroma(cabac_cbp_chroma_dormant_w),
         .cabac_chroma_scan_flat(cabac_chroma_scan_flat_reg),
         .cabac_chroma_nz_mask(cabac_chroma_nz_mask_reg),
         .cabac_luma_scan_flat(cabac_luma_scan_flat_reg),
@@ -2468,6 +2472,7 @@ pred_buf = {(256*BD){1'b0}};
             cabac_cbp_luma_reg <= 4'd0;
             cabac_luma_scan_flat_reg <= 4096'd0;
             cabac_luma_nz_mask_reg <= 16'd0;
+            cabac_cbp_chroma_reg <= 2'd0;
             cabac_chroma_scan_flat_reg <= 4096'd0;
             cabac_chroma_nz_mask_reg <= 16'd0;
             me_best_mvx <= 8'sd0; me_best_mvy <= 8'sd0; me_best_mvx_l0 <= 8'sd0; me_best_mvy_l0 <= 8'sd0; me_best_mvx_l1 <= 8'sd0; me_best_mvy_l1 <= 8'sd0; me_best_sad <= 18'd0; me_fullpel_best_sad <= 18'd0;
@@ -3792,6 +3797,7 @@ pred_buf = {(256*BD){1'b0}};
                     cabac_cbp_luma_reg <= 4'd0;
                     cabac_luma_scan_flat_reg <= 4096'd0;
                     cabac_luma_nz_mask_reg <= 16'd0;
+                    cabac_cbp_chroma_reg <= 2'd0;
                     cabac_chroma_scan_flat_reg <= 4096'd0;
                     cabac_chroma_nz_mask_reg <= 16'd0;
                     if (use_ipcm_mb_reg) begin
@@ -5510,8 +5516,11 @@ pred_buf = {(256*BD){1'b0}};
                                     blk_state <= BS_ZIGZAG;
                                 end
                                 BS_ZIGZAG: if (zz_done) begin
-                                    if (total_coeffs != 5'd0)
+                                    if (total_coeffs != 5'd0) begin
                                         i16_chroma_dc_nonzero <= 1'b1;
+                                        if (CHROMA_FORMAT_IDC != 3)
+                                            cabac_cbp_chroma_reg <= (cabac_cbp_chroma_reg == 2'd2) ? 2'd2 : 2'd1;
+                                    end
                                     if (!bs_busy) begin
                                         cavlc_start <= 1'b1;
                                         blk_state <= BS_CAVLC;
@@ -5552,8 +5561,11 @@ pred_buf = {(256*BD){1'b0}};
                                     blk_state <= BS_ZIGZAG;
                                 end
                                 BS_ZIGZAG: if (zz_done) begin
-                                    if (total_coeffs != 5'd0)
+                                    if (total_coeffs != 5'd0) begin
                                         i16_chroma_dc_nonzero <= 1'b1;
+                                        if (CHROMA_FORMAT_IDC != 3)
+                                            cabac_cbp_chroma_reg <= (cabac_cbp_chroma_reg == 2'd2) ? 2'd2 : 2'd1;
+                                    end
                                     if (!bs_busy) begin
                                         cavlc_start <= 1'b1;
                                         blk_state <= BS_CAVLC;
@@ -5599,8 +5611,11 @@ pred_buf = {(256*BD){1'b0}};
                                     cabac_chroma_scan_flat_reg[cabac_chroma_payload_blk_idx(chr_is_cr, chr_blk) * 256 +: 256] <= scan_flat;
                                     cabac_chroma_nz_mask_reg[cabac_chroma_payload_blk_idx(chr_is_cr, chr_blk)] <= (total_coeffs != 5'd0);
                                     nz_coeff[chroma_sub_blk_from_idx(chr_is_cr, chr_blk)] <= total_coeffs;
-                                    if (total_coeffs != 5'd0)
+                                    if (total_coeffs != 5'd0) begin
                                         i16_chroma_ac_nonzero <= 1'b1;
+                                        if (CHROMA_FORMAT_IDC != 3)
+                                            cabac_cbp_chroma_reg <= 2'd2;
+                                    end
                                     if (!bs_busy) begin
                                         cavlc_start <= 1'b1;
                                         blk_state <= BS_CAVLC;

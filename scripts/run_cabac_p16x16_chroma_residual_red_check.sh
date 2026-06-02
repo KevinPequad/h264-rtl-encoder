@@ -19,7 +19,9 @@ checks = {
     "bitstream_emits_chroma_cbp_ac_bin": "cabac_bin_value <= (cabac_cbp_chroma == 2'd2);" in bitstream,
     "top_captures_chroma_ac_payload_snapshot": "cabac_chroma_scan_flat_reg[cabac_chroma_payload_blk_idx(chr_is_cr, chr_blk) * 256 +: 256] <= scan_flat;" in top,
     "top_tracks_chroma_ac_nz_mask": "cabac_chroma_nz_mask_reg[cabac_chroma_payload_blk_idx(chr_is_cr, chr_blk)] <= (total_coeffs != 5'd0);" in top,
-    "top_keeps_chroma_cbp_dormant_until_payload_scheduler": ".cabac_cbp_chroma(2'd0)" in top,
+    "top_tracks_chroma_cbp_dc_class": "cabac_cbp_chroma_reg <= (cabac_cbp_chroma_reg == 2'd2) ? 2'd2 : 2'd1;" in top,
+    "top_tracks_chroma_cbp_ac_class": "cabac_cbp_chroma_reg <= 2'd2;" in top,
+    "top_keeps_chroma_cbp_dormant_until_payload_scheduler": ".cabac_cbp_chroma(cabac_cbp_chroma_dormant_w)" in top and "cabac_cbp_chroma_reg & 2'd0" in top,
     "rtl_runner_honors_build_jobs_env": "os.environ.get(\"BUILD_JOBS\")" in runner,
 }
 failed = [name for name, ok in checks.items() if not ok]
