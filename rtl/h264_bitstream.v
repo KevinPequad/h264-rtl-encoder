@@ -560,6 +560,20 @@ module h264_bitstream #(
         end
     endfunction
 
+    function automatic cabac_chroma_dc_cbf_at;
+        input plane_is_cr_i;
+        integer coeff_i;
+        reg signed [15:0] coeff_val;
+        begin
+            cabac_chroma_dc_cbf_at = 1'b0;
+            for (coeff_i = 0; coeff_i < CABAC_CHROMA_DC_COEFFS; coeff_i = coeff_i + 1) begin
+                coeff_val = cabac_chroma_dc_coeff_at(plane_is_cr_i, coeff_i[3:0]);
+                if (coeff_val != 16'sd0)
+                    cabac_chroma_dc_cbf_at = 1'b1;
+            end
+        end
+    endfunction
+
     function automatic cabac_chroma_dc_coeff_sign_at;
         input plane_is_cr_i;
         input [3:0] coeff_idx_i;
