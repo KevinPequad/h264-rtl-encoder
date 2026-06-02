@@ -1992,7 +1992,7 @@ module h264_bitstream #(
                                 if (cabac_slice_active) begin
                                     if (!is_skip_mb &&
                                         !(is_inter_mb && !is_b_slice &&
-                                          (!mb_has_residual || (cabac_cbp_luma != 4'd0)) &&
+                                          (!mb_has_residual || ((cabac_cbp_luma != 4'd0) || (cabac_cbp_chroma != 2'd0))) &&
                                           (slice_num_ref_idx_l0_active_minus1 == 2'd0) &&
                                           (mb_ref_idx_l0 == 2'd0) &&
                                           (mvd_x_l0 == 9'sd0) && (mvd_y_l0 == 9'sd0))) begin

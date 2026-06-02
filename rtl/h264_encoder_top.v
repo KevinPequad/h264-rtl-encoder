@@ -906,11 +906,15 @@ module h264_encoder_top #(
         ((cabac_chroma_ac_valid_mask_reg & CABAC_CHROMA_ACTIVE_BLK_MASK) == CABAC_CHROMA_ACTIVE_BLK_MASK);
     wire        cabac_chroma_residual_payload_ready_w =
         cabac_chroma_dc_payload_ready_w && cabac_chroma_ac_payload_ready_w;
+    wire        cabac_luma_payload_ready_or_empty_w =
+        (cabac_cbp_luma_reg == 4'd0) || cabac_luma_residual_payload_ready_w;
+    wire        cabac_chroma_payload_ready_or_empty_w =
+        (cabac_cbp_chroma_reg == 2'd0) || cabac_chroma_residual_payload_ready_w;
     wire        cabac_non_skip_subset_ok_w =
         cabac_p16x16_supported_w &&
         !is_skip_mb_reg &&
-        (!mb_has_residual || (cabac_luma_residual_payload_ready_w &&
-                              cabac_chroma_residual_payload_ready_w));
+        (!mb_has_residual || (cabac_luma_payload_ready_or_empty_w &&
+                              cabac_chroma_payload_ready_or_empty_w));
 
     function [BD-1:0] apply_luma_bi_weight;
         input [BD-1:0] sample0_in;

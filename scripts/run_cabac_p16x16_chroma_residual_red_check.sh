@@ -39,7 +39,9 @@ checks = {
     "top_tracks_chroma_ac_nz_mask": "cabac_chroma_nz_mask_reg[cabac_chroma_payload_blk_idx(chr_is_cr, chr_blk)] <= (total_coeffs != 5'd0);" in top,
     "top_tracks_chroma_dc_snapshot_validity": "reg [1:0]    cabac_chroma_dc_valid_mask_reg;" in top and "cabac_chroma_dc_valid_mask_reg[0] <= 1'b1;" in top and "cabac_chroma_dc_valid_mask_reg[1] <= 1'b1;" in top,
     "top_tracks_chroma_ac_snapshot_validity": "reg [15:0]   cabac_chroma_ac_valid_mask_reg;" in top and "cabac_chroma_ac_valid_mask_reg[cabac_chroma_payload_blk_idx(chr_is_cr, chr_blk)] <= 1'b1;" in top,
-    "top_has_chroma_payload_readiness_guard": "cabac_chroma_residual_payload_ready_w" in top and "CABAC_CHROMA_ACTIVE_BLK_MASK" in top and "cabac_luma_residual_payload_ready_w &&" in top and "cabac_chroma_residual_payload_ready_w" in top,
+    "top_has_chroma_payload_readiness_guard": "cabac_chroma_residual_payload_ready_w" in top and "CABAC_CHROMA_ACTIVE_BLK_MASK" in top and "cabac_luma_payload_ready_or_empty_w &&" in top and "cabac_chroma_payload_ready_or_empty_w" in top,
+    "top_allows_chroma_only_cabac_residual_guard": "cabac_luma_payload_ready_or_empty_w" in top and "cabac_chroma_payload_ready_or_empty_w" in top and "(cabac_cbp_luma_reg == 4'd0) || cabac_luma_residual_payload_ready_w" in top,
+    "bitstream_allows_chroma_only_cabac_mb_header": "((cabac_cbp_luma != 4'd0) || (cabac_cbp_chroma != 2'd0))" in bitstream,
     "top_has_422_chroma_payload_masks": "(CHROMA_FORMAT_IDC == 2) ? 16'hffff" in top and "(CHROMA_FORMAT_IDC == 2) ? 16'h00ff" in top and "(CHROMA_FORMAT_IDC == 2) ? 16'hff00" in top,
     "top_tracks_chroma_cbp_dc_class": "cabac_cbp_chroma_reg <= (cabac_cbp_chroma_reg == 2'd2) ? 2'd2 : 2'd1;" in top,
     "top_tracks_chroma_cbp_ac_class": "cabac_cbp_chroma_reg <= 2'd2;" in top,
@@ -63,6 +65,7 @@ from pathlib import Path
 import os
 import re
 import shutil
+import struct
 import subprocess
 import sys
 
@@ -80,6 +83,7 @@ ac_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_cb_only_16x
 ac_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_cr_only_16x16_2f.yuv")
 ac_422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_16x16_2f.yuv")
 dc_422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_422_16x16_2f.yuv")
+ac_10b_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b420_16x16_2f.yuv")
 build_log = out_dir / "cabac_p16x16_chroma_residual_probe.build.log"
 
 
@@ -109,6 +113,39 @@ def write_420_probe(path, *, cb_mode, cr_mode):
             else:
                 f.write(plane_for(cb_mode))
                 f.write(plane_for(cr_mode))
+
+
+def write_420_probe_10b(path, *, cb_mode, cr_mode):
+    def plane_for(mode):
+        plane = [512] * (8 * 8)
+        if mode == "dc":
+            plane = [640] * (8 * 8)
+        elif mode == "ac_pos":
+            for y in range(2, 6):
+                for x in range(2, 6):
+                    plane[y * 8 + x] = 640
+        elif mode == "ac_neg":
+            for y in range(1, 5):
+                for x in range(3, 7):
+                    plane[y * 8 + x] = 384
+        elif mode != "flat":
+            raise ValueError(f"unknown 10-bit chroma plane mode {mode!r}")
+        return plane
+
+    with path.open("wb") as f:
+        for frame_idx in range(2):
+            for _ in range(16 * 16):
+                f.write(struct.pack("<H", 256))
+            if frame_idx == 0:
+                cb = [512] * (8 * 8)
+                cr = [512] * (8 * 8)
+            else:
+                cb = plane_for(cb_mode)
+                cr = plane_for(cr_mode)
+            for sample in cb:
+                f.write(struct.pack("<H", sample))
+            for sample in cr:
+                f.write(struct.pack("<H", sample))
 
 # 16x16 yuv420p, two frames.  Keep luma flat while changing both chroma
 # planes on frame 1 so the P MB stays in the CABAC P16x16 lane but carries
@@ -151,6 +188,11 @@ write_420_probe(dc_cr_only_input_path, cb_mode="flat", cr_mode="dc")
 # time.
 write_420_probe(ac_cb_only_input_path, cb_mode="ac_pos", cr_mode="flat")
 write_420_probe(ac_cr_only_input_path, cb_mode="flat", cr_mode="ac_neg")
+
+# 10-bit 4:2:0 chroma-only AC residual keeps luma unchanged so cabp_luma==0
+# while cabp_chroma==2. This locks the CABAC P16x16 subset guard to accept
+# chroma-owned residual payloads without requiring a luma residual payload.
+write_420_probe_10b(ac_10b_input_path, cb_mode="ac_pos", cr_mode="ac_neg")
 
 # 16x16 yuv422p, two frames.  The chroma planes are 8x16, so the frame-1
 # deltas deliberately touch lower chroma rows that do not exist in 4:2:0.  The
@@ -414,6 +456,29 @@ try:
     )
 finally:
     shutil.rmtree(workspace, ignore_errors=True)
+
+workspace_10b = stage_workspace("h264_cabac_p16x16_chroma_residual_10b420_")
+try:
+    cfg_10b = BuildConfig(
+        width=16,
+        height=16,
+        bit_depth=10,
+        chroma_format_idc=1,
+        jobs=max(1, int(os.environ.get("BUILD_JOBS", os.environ.get("THREADS", "1")))),
+        enable_idr_ipcm=1,
+        inter_sad_threshold=20_000,
+        enable_cabac_p16x16=1,
+        enable_cabac_p16x16_fullpel_only=1,
+    )
+    sim_bin_10b = build_sim(workspace_10b, cfg_10b, out_dir / "cabac_p16x16_chroma_residual_10b420_probe.build.log")
+    run_chroma_probe(
+        sim_bin_10b,
+        "cabac_p16x16_chroma_residual_10b420_probe",
+        ac_10b_input_path,
+        require_dc_only=False,
+    )
+finally:
+    shutil.rmtree(workspace_10b, ignore_errors=True)
 
 workspace_422 = stage_workspace("h264_cabac_p16x16_chroma_residual_422_")
 try:
