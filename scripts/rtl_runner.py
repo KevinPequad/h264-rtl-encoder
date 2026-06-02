@@ -5,12 +5,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import os
 import shutil
 import subprocess
 import tempfile
 
 
-DEFAULT_JOBS = 24
+def _default_jobs() -> int:
+    raw = os.environ.get("BUILD_JOBS") or os.environ.get("THREADS") or "24"
+    try:
+        jobs = int(raw)
+    except ValueError:
+        jobs = 24
+    return max(1, jobs)
+
+
+DEFAULT_JOBS = _default_jobs()
 
 
 @dataclass(frozen=True)

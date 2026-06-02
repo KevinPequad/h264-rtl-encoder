@@ -2412,6 +2412,10 @@ pred_buf = {(256*BD){1'b0}};
         .cabac_cbp_luma_ctx1_sel(cabac_cbp_luma_ctx1_sel_w),
         .cabac_cbp_luma_ctx2_sel(cabac_cbp_luma_ctx2_sel_w),
         .cabac_cbp_luma(cabac_cbp_luma_reg),
+        // Chroma residual CABAC payload is still guarded at the top level;
+        // keep the new bitstream chroma-CBP bins dormant until that scheduler
+        // provides stable DC/AC payload inputs.
+        .cabac_cbp_chroma(2'd0),
         .cabac_luma_scan_flat(cabac_luma_scan_flat_reg),
         .cabac_luma_nz_mask(cabac_luma_nz_mask_reg),
         .slice_num_ref_idx_l0_active_minus1(slice_num_ref_idx_l0_active_minus1),

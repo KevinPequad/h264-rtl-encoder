@@ -53,6 +53,11 @@ static std::array<std::vector<pixel_t>, 5> ref_cr_bank;
 static volatile bool got_sigint = false;
 static void sigint_handler(int) { got_sigint = true; }
 
+// Newer Verilator releases emit references to sc_time_stamp() even for this
+// non-SystemC harness; provide the standard weak simulation-time hook so the
+// single-threaded smoke gates link cleanly.
+double sc_time_stamp() { return 0.0; }
+
 int main(int argc, char** argv) {
     std::signal(SIGINT, sigint_handler);
     Verilated::commandArgs(argc, argv);
