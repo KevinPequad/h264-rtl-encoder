@@ -726,6 +726,29 @@ module h264_bitstream #(
         end
     endfunction
 
+    function automatic [4:0] cabac_chroma_payload_active_total;
+        input [1:0] cbp_chroma_i;
+        begin
+            case (cbp_chroma_i)
+                2'd0: cabac_chroma_payload_active_total = 5'd0;
+                2'd1: cabac_chroma_payload_active_total = 5'd2;
+                default: cabac_chroma_payload_active_total = cabac_chroma_payload_total();
+            endcase
+        end
+    endfunction
+
+    wire [4:0] cabac_res_chroma_next_payload_idx_w = cabac_res_chroma_payload_idx + 5'd1;
+    wire       cabac_res_chroma_has_next_payload_w =
+        (cabac_res_chroma_next_payload_idx_w < cabac_chroma_payload_active_total(cabac_cbp_chroma));
+    wire       cabac_res_next_chroma_payload_is_dc_w =
+        cabac_chroma_payload_cursor_is_dc(cabac_res_chroma_next_payload_idx_w);
+    wire       cabac_res_next_chroma_plane_is_cr_w =
+        cabac_chroma_payload_cursor_plane_is_cr(cabac_res_chroma_next_payload_idx_w);
+    wire [3:0] cabac_res_next_chroma_blk_idx_w =
+        cabac_chroma_payload_cursor_blk_idx(cabac_res_chroma_next_payload_idx_w);
+    wire [3:0] cabac_res_next_chroma_coeff_limit_w =
+        cabac_chroma_payload_coeff_limit(cabac_res_next_chroma_payload_is_dc_w);
+
     // UE(v) encoder — general-purpose unsigned Exp-Golomb
     // Used by SPS and other parameter sets
     reg [9:0] ue_input;   // codeNum (unsigned, max ~1023)
@@ -2279,7 +2302,7 @@ module h264_bitstream #(
                                     state <= S_EMIT;
                                     return_state <= S_MB_HDR;
                                 end
-                                if (mb_has_residual && (cabac_cbp_luma != 4'd0)) begin
+                                if (mb_has_residual && ((cabac_cbp_luma != 4'd0) || (cabac_cbp_chroma != 2'd0))) begin
                                     cabac_res_chroma_payload_idx <= CABAC_CHROMA_PAYLOAD_DC_CB;
                                     cabac_res_chroma_payload_is_dc <= cabac_chroma_payload_cursor_is_dc(CABAC_CHROMA_PAYLOAD_DC_CB);
                                     cabac_res_chroma_plane_is_cr <= cabac_chroma_payload_cursor_plane_is_cr(CABAC_CHROMA_PAYLOAD_DC_CB);
@@ -2318,15 +2341,33 @@ module h264_bitstream #(
                                     state <= S_EMIT;
                                     return_state <= S_MB_HDR;
                                 end
-                                cabac_res_blk_idx <= 4'd0;
-                                cabac_pending_cbf_ctx_sel <= cabac_luma_cbf_ctx_sel(4'd0, cabac_mb_counter);
-                                cabac_ctx_state_in <= cabac_luma_cbf_ctx_state(cabac_luma_cbf_ctx_sel(4'd0, cabac_mb_counter));
-                                cabac_pending_ctx_kind <= CABAC_CTX_LUMA_CBF;
-                                cabac_bin_valid <= 1'b1;
-                                cabac_bin_value <= cabac_luma_nz_mask[0];
-                                cabac_bin_bypass <= 1'b0;
-                                cabac_bin_terminate <= 1'b0;
-                                sub <= 6'd48;
+                                if (cabac_cbp_luma != 4'd0) begin
+                                    cabac_res_blk_idx <= 4'd0;
+                                    cabac_pending_cbf_ctx_sel <= cabac_luma_cbf_ctx_sel(4'd0, cabac_mb_counter);
+                                    cabac_ctx_state_in <= cabac_luma_cbf_ctx_state(cabac_luma_cbf_ctx_sel(4'd0, cabac_mb_counter));
+                                    cabac_pending_ctx_kind <= CABAC_CTX_LUMA_CBF;
+                                    cabac_bin_valid <= 1'b1;
+                                    cabac_bin_value <= cabac_luma_nz_mask[0];
+                                    cabac_bin_bypass <= 1'b0;
+                                    cabac_bin_terminate <= 1'b0;
+                                    sub <= 6'd48;
+                                end else if (cabac_cbp_chroma != 2'd0) begin
+                                    cabac_res_payload_is_chroma <= 1'b1;
+                                    cabac_pending_cbf_ctx_sel <= 4'd0;
+                                    cabac_ctx_state_in <= cabac_luma_cbf_ctx_state_93;
+                                    cabac_pending_ctx_kind <= CABAC_CTX_LUMA_CBF;
+                                    cabac_bin_valid <= 1'b1;
+                                    cabac_bin_value <= cabac_chroma_payload_cbf_at(
+                                        cabac_res_chroma_payload_is_dc,
+                                        cabac_res_chroma_plane_is_cr,
+                                        cabac_res_chroma_blk_idx);
+                                    cabac_bin_bypass <= 1'b0;
+                                    cabac_bin_terminate <= 1'b0;
+                                    sub <= 6'd55;
+                                end else begin
+                                    cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                    sub <= 6'd46;
+                                end
                             end
                             6'd48: begin
                                 if (cabac_bits_overflow) begin
@@ -2349,8 +2390,23 @@ module h264_bitstream #(
                                     cabac_bin_terminate <= 1'b0;
                                     sub <= 6'd49;
                                 end else if (cabac_res_blk_idx == 4'd15) begin
-                                    cabac_mb_counter <= cabac_mb_counter + 12'd1;
-                                    sub <= 6'd46;
+                                    if (cabac_cbp_chroma != 2'd0) begin
+                                        cabac_res_payload_is_chroma <= 1'b1;
+                                        cabac_pending_cbf_ctx_sel <= 4'd0;
+                                        cabac_ctx_state_in <= cabac_luma_cbf_ctx_state_93;
+                                        cabac_pending_ctx_kind <= CABAC_CTX_LUMA_CBF;
+                                        cabac_bin_valid <= 1'b1;
+                                        cabac_bin_value <= cabac_chroma_payload_cbf_at(
+                                            cabac_res_chroma_payload_is_dc,
+                                            cabac_res_chroma_plane_is_cr,
+                                            cabac_res_chroma_blk_idx);
+                                        cabac_bin_bypass <= 1'b0;
+                                        cabac_bin_terminate <= 1'b0;
+                                        sub <= 6'd55;
+                                    end else begin
+                                        cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                        sub <= 6'd46;
+                                    end
                                 end else begin
                                     cabac_res_blk_idx <= cabac_res_blk_idx + 4'd1;
                                     cabac_pending_cbf_ctx_sel <= cabac_luma_cbf_ctx_sel(cabac_res_blk_idx + 4'd1, cabac_mb_counter);
@@ -2475,8 +2531,23 @@ module h264_bitstream #(
                                     return_state <= S_MB_HDR;
                                 end
                                 if (cabac_res_blk_idx == 4'd15) begin
-                                    cabac_mb_counter <= cabac_mb_counter + 12'd1;
-                                    sub <= 6'd46;
+                                    if (cabac_cbp_chroma != 2'd0) begin
+                                        cabac_res_payload_is_chroma <= 1'b1;
+                                        cabac_pending_cbf_ctx_sel <= 4'd0;
+                                        cabac_ctx_state_in <= cabac_luma_cbf_ctx_state_93;
+                                        cabac_pending_ctx_kind <= CABAC_CTX_LUMA_CBF;
+                                        cabac_bin_valid <= 1'b1;
+                                        cabac_bin_value <= cabac_chroma_payload_cbf_at(
+                                            cabac_res_chroma_payload_is_dc,
+                                            cabac_res_chroma_plane_is_cr,
+                                            cabac_res_chroma_blk_idx);
+                                        cabac_bin_bypass <= 1'b0;
+                                        cabac_bin_terminate <= 1'b0;
+                                        sub <= 6'd55;
+                                    end else begin
+                                        cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                        sub <= 6'd46;
+                                    end
                                 end else begin
                                     cabac_res_blk_idx <= cabac_res_blk_idx + 4'd1;
                                     cabac_pending_cbf_ctx_sel <= cabac_luma_cbf_ctx_sel(cabac_res_blk_idx + 4'd1, cabac_mb_counter);
@@ -2488,6 +2559,202 @@ module h264_bitstream #(
                                     cabac_bin_bypass <= 1'b0;
                                     cabac_bin_terminate <= 1'b0;
                                     sub <= 6'd48;
+                                end
+                            end
+                            6'd55: begin
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC chroma coded_block_flag overflow");
+                                    `endif
+                                    end
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                if (cabac_chroma_payload_cbf_at(
+                                        cabac_res_chroma_payload_is_dc,
+                                        cabac_res_chroma_plane_is_cr,
+                                        cabac_res_chroma_blk_idx)) begin
+                                    cabac_ctx_state_in <= cabac_luma_sig0_ctx_state_105;
+                                    cabac_pending_ctx_kind <= CABAC_CTX_LUMA_SIG0;
+                                    cabac_pending_ctx_sel <= 2'd0;
+                                    cabac_bin_valid <= 1'b1;
+                                    cabac_bin_value <= 1'b1;
+                                    cabac_bin_bypass <= 1'b0;
+                                    cabac_bin_terminate <= 1'b0;
+                                    sub <= 6'd56;
+                                end else if (cabac_res_chroma_has_next_payload_w) begin
+                                    cabac_res_chroma_payload_idx <= cabac_res_chroma_next_payload_idx_w;
+                                    cabac_res_chroma_payload_is_dc <= cabac_res_next_chroma_payload_is_dc_w;
+                                    cabac_res_chroma_plane_is_cr <= cabac_res_next_chroma_plane_is_cr_w;
+                                    cabac_res_chroma_blk_idx <= cabac_res_next_chroma_blk_idx_w;
+                                    cabac_res_payload_coeff_limit <= cabac_res_next_chroma_coeff_limit_w;
+                                    cabac_pending_cbf_ctx_sel <= 4'd0;
+                                    cabac_ctx_state_in <= cabac_luma_cbf_ctx_state_93;
+                                    cabac_pending_ctx_kind <= CABAC_CTX_LUMA_CBF;
+                                    cabac_pending_ctx_sel <= 2'd0;
+                                    cabac_bin_valid <= 1'b1;
+                                    cabac_bin_value <= cabac_chroma_payload_cbf_at(
+                                        cabac_res_next_chroma_payload_is_dc_w,
+                                        cabac_res_next_chroma_plane_is_cr_w,
+                                        cabac_res_next_chroma_blk_idx_w);
+                                    cabac_bin_bypass <= 1'b0;
+                                    cabac_bin_terminate <= 1'b0;
+                                    sub <= 6'd55;
+                                end else begin
+                                    cabac_res_payload_is_chroma <= 1'b0;
+                                    cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                    sub <= 6'd46;
+                                end
+                            end
+                            6'd56: begin
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC chroma significant_coeff_flag overflow");
+                                    `endif
+                                    end
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                cabac_ctx_state_in <= cabac_luma_last0_ctx_state_166;
+                                cabac_pending_ctx_kind <= CABAC_CTX_LUMA_LAST0;
+                                cabac_pending_ctx_sel <= 2'd0;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= 1'b1;
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                cabac_res_coeff_idx <= cabac_chroma_payload_last_nonzero_coeff_idx(
+                                    cabac_res_chroma_payload_is_dc,
+                                    cabac_res_chroma_plane_is_cr,
+                                    cabac_res_chroma_blk_idx);
+                                cabac_res_coeff_abs <= cabac_chroma_payload_coeff_abs_at(
+                                    cabac_res_chroma_payload_is_dc,
+                                    cabac_res_chroma_plane_is_cr,
+                                    cabac_res_chroma_blk_idx,
+                                    cabac_chroma_payload_last_nonzero_coeff_idx(
+                                        cabac_res_chroma_payload_is_dc,
+                                        cabac_res_chroma_plane_is_cr,
+                                        cabac_res_chroma_blk_idx));
+                                cabac_res_level_step <= 4'd0;
+                                sub <= 6'd57;
+                            end
+                            6'd57: begin
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC chroma coeff_abs_level1 overflow");
+                                    `endif
+                                    end
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                cabac_ctx_state_in <= cabac_luma_level1_ctx_state_248;
+                                cabac_pending_ctx_kind <= CABAC_CTX_LUMA_LEVEL1;
+                                cabac_pending_ctx_sel <= 2'd0;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= (cabac_res_coeff_abs > 16'd1);
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                if (cabac_res_coeff_abs > 16'd1) begin
+                                    cabac_res_level_step <= (cabac_res_coeff_abs < 16'd15)
+                                                            ? (cabac_res_coeff_abs[3:0] - 4'd2)
+                                                            : 4'd13;
+                                    sub <= 6'd58;
+                                end else begin
+                                    sub <= 6'd59;
+                                end
+                            end
+                            6'd58: begin
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC chroma coeff_abs_levelgt1 overflow");
+                                    `endif
+                                    end
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                cabac_ctx_state_in <= cabac_luma_levelgt1_ctx_state_252;
+                                cabac_pending_ctx_kind <= CABAC_CTX_LUMA_LEVELGT1;
+                                cabac_pending_ctx_sel <= 2'd0;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= (cabac_res_level_step != 4'd0);
+                                cabac_bin_bypass <= 1'b0;
+                                cabac_bin_terminate <= 1'b0;
+                                if (cabac_res_level_step != 4'd0) begin
+                                    cabac_res_level_step <= cabac_res_level_step - 4'd1;
+                                    sub <= 6'd58;
+                                end else begin
+                                    sub <= 6'd59;
+                                end
+                            end
+                            6'd59: begin
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC chroma coeff_sign overflow");
+                                    `endif
+                                    end
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                cabac_pending_ctx_kind <= CABAC_CTX_NONE;
+                                cabac_pending_ctx_sel <= 2'd0;
+                                cabac_bin_valid <= 1'b1;
+                                cabac_bin_value <= cabac_chroma_payload_coeff_sign_at(
+                                    cabac_res_chroma_payload_is_dc,
+                                    cabac_res_chroma_plane_is_cr,
+                                    cabac_res_chroma_blk_idx,
+                                    cabac_res_coeff_idx);
+                                cabac_bin_bypass <= 1'b1;
+                                cabac_bin_terminate <= 1'b0;
+                                sub <= 6'd60;
+                            end
+                            6'd60: begin
+                                if (cabac_bits_overflow) begin
+                                    `ifndef SYNTHESIS
+                                    $fatal(1, "[CABAC_PSUBSET] CABAC chroma coeff_sign overflow");
+                                    `endif
+                                    end
+                                if (cabac_bits_valid) begin
+                                    bit_buf <= bit_buf | ((cabac_bits_out[127:32]) >> bit_cnt[6:0]);
+                                    bit_cnt <= bit_cnt + {1'b0, cabac_bits_count[6:0]};
+                                    state <= S_EMIT;
+                                    return_state <= S_MB_HDR;
+                                end
+                                if (cabac_res_chroma_has_next_payload_w) begin
+                                    cabac_res_chroma_payload_idx <= cabac_res_chroma_next_payload_idx_w;
+                                    cabac_res_chroma_payload_is_dc <= cabac_res_next_chroma_payload_is_dc_w;
+                                    cabac_res_chroma_plane_is_cr <= cabac_res_next_chroma_plane_is_cr_w;
+                                    cabac_res_chroma_blk_idx <= cabac_res_next_chroma_blk_idx_w;
+                                    cabac_res_payload_coeff_limit <= cabac_res_next_chroma_coeff_limit_w;
+                                    cabac_pending_cbf_ctx_sel <= 4'd0;
+                                    cabac_ctx_state_in <= cabac_luma_cbf_ctx_state_93;
+                                    cabac_pending_ctx_kind <= CABAC_CTX_LUMA_CBF;
+                                    cabac_pending_ctx_sel <= 2'd0;
+                                    cabac_bin_valid <= 1'b1;
+                                    cabac_bin_value <= cabac_chroma_payload_cbf_at(
+                                        cabac_res_next_chroma_payload_is_dc_w,
+                                        cabac_res_next_chroma_plane_is_cr_w,
+                                        cabac_res_next_chroma_blk_idx_w);
+                                    cabac_bin_bypass <= 1'b0;
+                                    cabac_bin_terminate <= 1'b0;
+                                    sub <= 6'd55;
+                                end else begin
+                                    cabac_res_payload_is_chroma <= 1'b0;
+                                    cabac_mb_counter <= cabac_mb_counter + 12'd1;
+                                    sub <= 6'd46;
                                 end
                             end
                             6'd20: begin
