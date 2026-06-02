@@ -13,8 +13,9 @@ forms, default all-but-one same-mask mirrors, the complementary split-row/column
 +/-32 sign matrix, reciprocal high-amplitude right-column/diagonal skew pairs,
 and mirrored
 high-amplitude three-plus-one edge complements with mixed Cb/Cr signs, including
-single-right/three-right, middle-left/middle-right, and corner-left/corner-right
-all-but-one mirrors under luma residual.
+same-mask all-but-one mirrors plus single-right/three-right,
+middle-left/middle-right, and corner-left/corner-right all-but-one mirrors under
+luma residual.
 It locks strict FFmpeg decode, plane-local CABAC counters, CAVLC suppression
 counts, final P-slice bytes, current decoded-plane metrics, and per-4x4
 chroma-block locality so sparse residuals cannot silently land in the wrong
@@ -520,6 +521,42 @@ CASES = (
         cr_mask=0x7,
         expected_final_slice="0000000141d008086b3ab7",
         expected_cavlc_suppressed_bits=360,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=768,
+        expected_v_sad=768,
+        cb_sample_value=160,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m11_hi_same",
+        cb_mask=0xB,
+        cr_mask=0xB,
+        expected_final_slice="0000000141d008086b3af6fd",
+        expected_cavlc_suppressed_bits=358,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=768,
+        expected_v_sad=768,
+        cb_sample_value=160,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m13_hi_same",
+        cb_mask=0xD,
+        cr_mask=0xD,
+        expected_final_slice="0000000141d008086b3abe",
+        expected_cavlc_suppressed_bits=358,
+        expected_y_sad=EXPECTED_Y_SAD,
+        expected_u_sad=768,
+        expected_v_sad=768,
+        cb_sample_value=160,
+        cr_sample_value=160,
+    ),
+    Case(
+        name="cbcr_ac_m14_hi_same",
+        cb_mask=0xE,
+        cr_mask=0xE,
+        expected_final_slice="0000000141d008086b3aff",
+        expected_cavlc_suppressed_bits=362,
         expected_y_sad=EXPECTED_Y_SAD,
         expected_u_sad=768,
         expected_v_sad=768,
@@ -1459,7 +1496,7 @@ def main() -> int:
     sim = build_baseline_sim()
     for case in CASES:
         run_case(sim, case)
-    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, opposite-diagonal mixed-plane pairs, complementary two-block row/column mixed-plane pairs, default/high-amplitude same-mask row/diagonal controls, default all-but-one same-mask mirrors, high-amplitude same-quadrant pairs, reciprocal high-amplitude right-column/diagonal skew pairs, mirrored high-amplitude three-plus-one edge complements with mixed Cb/Cr signs, the single-right/three-right, middle-left/middle-right, and corner-left/corner-right all-but-one luma mirrors, and the high-amplitude complementary split-row/column +/-32 sign matrix, strict-decode with plane-local counters and per-block chroma locality")
+    print("[PASS] CABAC P16x16 luma plus sparse Cb/Cr chroma-AC residual smoke cases, including all single-plane quadrants, same-plane row/column pairs, same-quadrant, row-adjacent both directions, column-adjacent both directions, opposite-diagonal mixed-plane pairs, complementary two-block row/column mixed-plane pairs, default/high-amplitude same-mask row/diagonal controls, default and high-amplitude all-but-one same-mask mirrors, high-amplitude same-quadrant pairs, reciprocal high-amplitude right-column/diagonal skew pairs, mirrored high-amplitude three-plus-one edge complements with mixed Cb/Cr signs, the single-right/three-right, middle-left/middle-right, and corner-left/corner-right all-but-one luma mirrors, and the high-amplitude complementary split-row/column +/-32 sign matrix, strict-decode with plane-local counters and per-block chroma locality")
     return 0
 
 
