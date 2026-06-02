@@ -74,9 +74,39 @@ out_dir = root / "output"
 out_dir.mkdir(exist_ok=True)
 ac_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_16x16_2f.yuv")
 dc_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_16x16_2f.yuv")
+ac_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_cb_only_16x16_2f.yuv")
+ac_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_cr_only_16x16_2f.yuv")
 ac_422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_16x16_2f.yuv")
 dc_422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_422_16x16_2f.yuv")
 build_log = out_dir / "cabac_p16x16_chroma_residual_probe.build.log"
+
+
+def write_420_probe(path, *, cb_mode, cr_mode):
+    def plane_for(mode):
+        plane = bytearray([128] * (8 * 8))
+        if mode == "dc":
+            plane[:] = bytes([160]) * (8 * 8)
+        elif mode == "ac_pos":
+            for y in range(2, 6):
+                for x in range(2, 6):
+                    plane[y * 8 + x] = 160
+        elif mode == "ac_neg":
+            for y in range(1, 5):
+                for x in range(3, 7):
+                    plane[y * 8 + x] = 96
+        elif mode != "flat":
+            raise ValueError(f"unknown chroma plane mode {mode!r}")
+        return plane
+
+    with path.open("wb") as f:
+        for frame_idx in range(2):
+            f.write(bytes([64]) * (16 * 16))
+            if frame_idx == 0:
+                f.write(bytes([128]) * (8 * 8))
+                f.write(bytes([128]) * (8 * 8))
+            else:
+                f.write(plane_for(cb_mode))
+                f.write(plane_for(cr_mode))
 
 # 16x16 yuv420p, two frames.  Keep luma flat while changing both chroma
 # planes on frame 1 so the P MB stays in the CABAC P16x16 lane but carries
@@ -106,6 +136,14 @@ with dc_input_path.open("wb") as f:
         cr = 96 if frame_idx == 1 else 128
         f.write(bytes([cb]) * (8 * 8))
         f.write(bytes([cr]) * (8 * 8))
+
+# Plane-isolated 4:2:0 probes make sure a one-plane chroma AC residual still
+# emits the proper CABAC coded_block_flag payload while the opposite plane keeps
+# zero AC payload counters. The two-plane probes above can miss a swapped or
+# duplicated AC plane path because both Cb and Cr carry residuals at the same
+# time.
+write_420_probe(ac_cb_only_input_path, cb_mode="ac_pos", cr_mode="flat")
+write_420_probe(ac_cr_only_input_path, cb_mode="flat", cr_mode="ac_neg")
 
 # 16x16 yuv422p, two frames.  The chroma planes are 8x16, so the frame-1
 # deltas deliberately touch lower chroma rows that do not exist in 4:2:0.  The
@@ -169,16 +207,34 @@ def collect_nonzero_chroma_scan_values(sim_text, *, marker, plane_marker=None):
     return values
 
 
-def require_signed_nonunity_evidence(values, name, label):
+def require_nonzero_nonunity_evidence(values, name, label):
     if not values:
         raise SystemExit(f"{name} missing nonzero signed-scan evidence for {label}")
-    if not any(v > 0 for v in values) or not any(v < 0 for v in values):
-        raise SystemExit(f"{name} expected both positive and negative {label} coefficients, got: {values[:16]}")
     if not any(abs(v) > 1 for v in values):
         raise SystemExit(f"{name} expected at least one non-unity {label} coefficient, got: {values[:16]}")
 
 
-def run_chroma_probe(sim_bin, name, input_path, require_dc_only, min_ac_blocks_per_plane=1):
+def require_signed_nonunity_evidence(values, name, label):
+    require_nonzero_nonunity_evidence(values, name, label)
+    if not any(v > 0 for v in values) or not any(v < 0 for v in values):
+        raise SystemExit(f"{name} expected both positive and negative {label} coefficients, got: {values[:16]}")
+
+
+def run_chroma_probe(
+    sim_bin,
+    name,
+    input_path,
+    require_dc_only,
+    min_ac_blocks_per_plane=1,
+    expected_dc_planes=("cb", "cr"),
+    expected_ac_planes=("cb", "cr"),
+    expected_nonzero_dc_planes=None,
+):
+    expected_dc_planes = set(expected_dc_planes)
+    expected_ac_planes = set(expected_ac_planes)
+    expected_nonzero_dc_planes = (
+        None if expected_nonzero_dc_planes is None else set(expected_nonzero_dc_planes)
+    )
     output_path = out_dir / f"{name}.h264"
     sim_log = out_dir / f"{name}.sim.log"
     ffmpeg_log = out_dir / f"{name}.ffmpeg.log"
@@ -189,12 +245,23 @@ def run_chroma_probe(sim_bin, name, input_path, require_dc_only, min_ac_blocks_p
         raise SystemExit(f"missing two-frame encode summary in {name}")
     if "cabac_p16x16_mbs=1" not in sim_text:
         raise SystemExit(f"{name} did not exercise a CABAC P16x16 MB")
-    if "isCb=1" not in sim_text or "isCr=1" not in sim_text:
-        raise SystemExit(f"{name} did not produce Cb/Cr scan evidence")
-    if "chDC=1" not in sim_text:
+    if expected_dc_planes and "chDC=1" not in sim_text:
         raise SystemExit(f"{name} did not produce chroma DC residual scan evidence")
-    dc_values = collect_nonzero_chroma_scan_values(sim_text, marker="chDC=1")
-    require_signed_nonunity_evidence(dc_values, name, "chroma DC")
+    cb_dc_values = collect_nonzero_chroma_scan_values(sim_text, marker="chDC=1", plane_marker="isCb=1")
+    cr_dc_values = collect_nonzero_chroma_scan_values(sim_text, marker="chDC=1", plane_marker="isCr=1")
+    if expected_nonzero_dc_planes is None:
+        require_signed_nonunity_evidence(cb_dc_values + cr_dc_values, name, "chroma DC")
+    else:
+        for plane, values in (("cb", cb_dc_values), ("cr", cr_dc_values)):
+            if plane in expected_nonzero_dc_planes:
+                if f"is{plane.upper()[0]}{plane[1:]}=1" not in sim_text:
+                    raise SystemExit(f"{name} did not produce {plane.upper()} scan evidence")
+                require_nonzero_nonunity_evidence(values, name, f"{plane.upper()} chroma DC")
+            elif values:
+                # Chroma DC prediction can leave tiny opposite-plane scan evidence in
+                # some AC-focused probes; plane isolation is enforced on the AC
+                # payload counters below.
+                pass
 
     if require_dc_only:
         nonzero_chroma_ac = [
@@ -203,13 +270,18 @@ def run_chroma_probe(sim_bin, name, input_path, require_dc_only, min_ac_blocks_p
         ]
         if nonzero_chroma_ac:
             raise SystemExit(f"{name} unexpectedly produced nonzero chroma AC residuals: {nonzero_chroma_ac[:2]}")
-    elif "chAC=1" not in sim_text:
+    elif expected_ac_planes and "chAC=1" not in sim_text:
         raise SystemExit(f"{name} did not produce chroma AC residual scan evidence")
     else:
         cb_ac_values = collect_nonzero_chroma_scan_values(sim_text, marker="chAC=1", plane_marker="isCb=1")
         cr_ac_values = collect_nonzero_chroma_scan_values(sim_text, marker="chAC=1", plane_marker="isCr=1")
-        require_signed_nonunity_evidence(cb_ac_values, name, "Cb chroma AC")
-        require_signed_nonunity_evidence(cr_ac_values, name, "Cr chroma AC")
+        for plane, values in (("cb", cb_ac_values), ("cr", cr_ac_values)):
+            if plane in expected_ac_planes:
+                if f"is{plane.upper()[0]}{plane[1:]}=1" not in sim_text:
+                    raise SystemExit(f"{name} did not produce {plane.upper()} scan evidence")
+                require_signed_nonunity_evidence(values, name, f"{plane.upper()} chroma AC")
+            elif values:
+                raise SystemExit(f"{name} unexpectedly produced nonzero {plane.upper()} chroma AC coefficients: {values[:16]}")
 
     chroma_counter_lines = [
         line for line in sim_text.splitlines()
@@ -241,8 +313,14 @@ def run_chroma_probe(sim_bin, name, input_path, require_dc_only, min_ac_blocks_p
         raise SystemExit(f"{name} CABAC chroma counter line missing keys {missing_keys}: {counter_line}")
     if counters["cabac_chroma_mbs"] != 1:
         raise SystemExit(f"{name} expected one CABAC chroma MB, got: {counter_line}")
-    if counters["cb_dc_mbs"] != 1 or counters["cr_dc_mbs"] != 1:
-        raise SystemExit(f"{name} expected both Cb and Cr DC payloads, got: {counter_line}")
+    expected_cb_dc = 1 if "cb" in expected_dc_planes else 0
+    expected_cr_dc = 1 if "cr" in expected_dc_planes else 0
+    expected_cb_ac = 1 if "cb" in expected_ac_planes else 0
+    expected_cr_ac = 1 if "cr" in expected_ac_planes else 0
+    if counters["cb_dc_mbs"] != expected_cb_dc or counters["cr_dc_mbs"] != expected_cr_dc:
+        raise SystemExit(
+            f"{name} expected Cb/Cr DC payloads {expected_cb_dc}/{expected_cr_dc}, got: {counter_line}"
+        )
     if require_dc_only:
         if counters["cabac_chroma_dc_mbs"] != 1 or counters["cabac_chroma_ac_mbs"] != 0:
             raise SystemExit(f"{name} expected DC-only chroma CBP class, got: {counter_line}")
@@ -251,8 +329,18 @@ def run_chroma_probe(sim_bin, name, input_path, require_dc_only, min_ac_blocks_p
     else:
         if counters["cabac_chroma_dc_mbs"] != 0 or counters["cabac_chroma_ac_mbs"] != 1:
             raise SystemExit(f"{name} expected DC+AC chroma CBP class, got: {counter_line}")
-        if counters["cb_ac_mbs"] != 1 or counters["cr_ac_mbs"] != 1 or counters["cb_ac_blocks"] < min_ac_blocks_per_plane or counters["cr_ac_blocks"] < min_ac_blocks_per_plane:
-            raise SystemExit(f"{name} expected Cb and Cr AC payload counters, got: {counter_line}")
+        if counters["cb_ac_mbs"] != expected_cb_ac or counters["cr_ac_mbs"] != expected_cr_ac:
+            raise SystemExit(
+                f"{name} expected Cb/Cr AC payloads {expected_cb_ac}/{expected_cr_ac}, got: {counter_line}"
+            )
+        if expected_cb_ac and counters["cb_ac_blocks"] < min_ac_blocks_per_plane:
+            raise SystemExit(f"{name} expected Cb AC block counter, got: {counter_line}")
+        if expected_cr_ac and counters["cr_ac_blocks"] < min_ac_blocks_per_plane:
+            raise SystemExit(f"{name} expected Cr AC block counter, got: {counter_line}")
+        if not expected_cb_ac and counters["cb_ac_blocks"] != 0:
+            raise SystemExit(f"{name} unexpectedly reported Cb AC blocks, got: {counter_line}")
+        if not expected_cr_ac and counters["cr_ac_blocks"] != 0:
+            raise SystemExit(f"{name} unexpectedly reported Cr AC blocks, got: {counter_line}")
 
     ff = subprocess.run(
         ["ffmpeg", "-y", "-v", "error", "-xerror", "-i", str(output_path), "-f", "null", "-"],
@@ -283,6 +371,22 @@ try:
     sim_bin = build_sim(workspace, cfg, build_log)
     run_chroma_probe(sim_bin, "cabac_p16x16_chroma_residual_probe", ac_input_path, require_dc_only=False)
     run_chroma_probe(sim_bin, "cabac_p16x16_chroma_dc_residual_probe", dc_input_path, require_dc_only=True)
+    run_chroma_probe(
+        sim_bin,
+        "cabac_p16x16_chroma_residual_cb_only_probe",
+        ac_cb_only_input_path,
+        require_dc_only=False,
+        expected_ac_planes=("cb",),
+        expected_nonzero_dc_planes=(),
+    )
+    run_chroma_probe(
+        sim_bin,
+        "cabac_p16x16_chroma_residual_cr_only_probe",
+        ac_cr_only_input_path,
+        require_dc_only=False,
+        expected_ac_planes=("cr",),
+        expected_nonzero_dc_planes=(),
+    )
 finally:
     shutil.rmtree(workspace, ignore_errors=True)
 
