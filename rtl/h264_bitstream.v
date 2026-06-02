@@ -951,12 +951,14 @@ module h264_bitstream #(
                   ((cabac_chroma_ac_cb_plane_nz_mask() == 4'h9) &&
                    (cabac_chroma_ac_cr_plane_nz_mask() == 4'h6)) ||
                   ((cabac_chroma_ac_cb_plane_nz_mask() == 4'h5) &&
-                   (cabac_chroma_ac_cr_plane_nz_mask() == 4'h5))))) begin
+                   (cabac_chroma_ac_cr_plane_nz_mask() == 4'h5)) ||
+                  ((cabac_chroma_ac_cb_plane_nz_mask() == 4'h7) &&
+                   (cabac_chroma_ac_cr_plane_nz_mask() == 4'h7))))) begin
                 // The high-amplitude reciprocal Cb-all-but-one / Cr-singleton
                 // complement, the Cb-top-row / Cr-bottom-row split-row complement,
-                // the high-amplitude same-checker Cb/Cr pair, and a bounded set
-                // of skew-pair high-amplitude lanes need the literal plane-local
-                // CBF neighbour walk.
+                // the high-amplitude same-checker Cb/Cr pair, the high-amplitude
+                // same-mask 0x7 rows, and a bounded set of skew-pair lanes need
+                // the literal plane-local CBF neighbour walk.
                 // Keep this narrower than the sparse Cb-only path below, whose
                 // top-row masks still depend on the synthetic edge-coded walk.
                 left_coded_i = plane_block_i[0] ? cabac_chroma_ac_block_nz_for(block_i - 4'd1) : 1'b0;

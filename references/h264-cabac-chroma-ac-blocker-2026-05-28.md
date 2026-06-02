@@ -624,3 +624,10 @@ Next useful probe:
 - The new probe locks the promoted `Cb0x5/Cr0x5` +/-32 sign matrix, strict all-but-one rows `Cb0xD/Cr0xD +32/+32` / `+32/-32`, and `Cb0xE/Cr0xE -32/+32` as full two-frame FFmpeg decodes with exact plane-local SAD and final P-slice tails.
 - It also preserves exact one-frame FFmpeg miss signatures for `Cb0x7/Cr0x7`, `Cb0xB/Cr0xB`, and the remaining `Cb0xD/Cr0xD` / `Cb0xE/Cr0xE` sign rows, so future repair attempts can show actual strict-decode promotion without overclaiming the whole all-but-one same-mask family.
 - Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_same_mask_high_amp_probe.py` passes.
+
+## 2026-06-01 same-mask 0x7 CBF-walk promotion
+
+- Scoped the literal plane-local chroma-AC CBF walk to the high-amplitude same-mask `Cb0x7/Cr0x7` family, alongside the already-promoted same-checker and skew/complement lanes.
+- This promotes the Cb-positive `Cb0x7/Cr0x7` rows (`+32/+32` and `+32/-32`) to full strict FFmpeg decode with byte-identical IDR, exact plane-local `U_SAD=768 V_SAD=768`, and final tails `...6bfbdf77ed77bdffffbffe` / `...6bfbdf77ed77bbdfdff64e`.
+- The Cb-negative `Cb0x7/Cr0x7` rows remain isolated one-frame misses, now with exact signatures `bytestream -19` / `-13` and updated final tails under the scoped CBF walk. Other same-mask all-but-one expected misses remain locked, so this is a partial promotion rather than a broad all-but-one closure.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 scripts/run_cabac_p16x16_chroma_ac_same_mask_high_amp_probe.py` passes.

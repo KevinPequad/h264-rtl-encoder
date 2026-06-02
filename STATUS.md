@@ -47,10 +47,11 @@ Current state:
   default-amplitude same-mask Cb/Cr lattice (`0x1` through `0xF`, including the
   newly locked `Cb0x8/Cr0x8`, `Cb0xB/Cr0xB`, `Cb0xD/Cr0xD`, and `Cb0xE/Cr0xE`),
   and the focused high-amplitude same-mask probe now keeps the promoted
-  `Cb0x5/Cr0x5` sign matrix plus strict `Cb0xD/Cr0xD` and `Cb0xE/Cr0xE` rows
-  separate from the remaining one-frame all-but-one same-mask misses
-  (`Cb0x7/Cr0x7`, `Cb0xB/Cr0xB`, and the unpromoted `Cb0xD/Cr0xD`/`Cb0xE/Cr0xE`
-  sign rows) with exact FFmpeg signatures and final P-slice tails.
+  `Cb0x5/Cr0x5` sign matrix, the newly strict `Cb0x7/Cr0x7` Cb-positive rows,
+  plus strict `Cb0xD/Cr0xD` and `Cb0xE/Cr0xE` rows separate from the remaining
+  one-frame all-but-one same-mask misses (`Cb0x7/Cr0x7` Cb-negative rows,
+  `Cb0xB/Cr0xB`, and the unpromoted `Cb0xD/Cr0xD`/`Cb0xE/Cr0xE` sign rows)
+  with exact FFmpeg signatures and final P-slice tails.
 - the repository is still not complete as a full H.264 standard encoder
 
 Completion is still blocked by major missing features including full CABAC

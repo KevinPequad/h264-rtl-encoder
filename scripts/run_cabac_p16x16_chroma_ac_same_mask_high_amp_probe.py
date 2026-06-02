@@ -34,16 +34,16 @@ STRICT_TAILS = {
     (0x5, 0x5, 96, 160): "0000000141d008086b3add",
     (0x5, 0x5, 160, 96): "0000000141d008086b7bfd",
     (0x5, 0x5, 96, 96): "0000000141d008086b7bfd",
+    (0x7, 0x7, 160, 160): "0000000141d008086bfbdf77ed77bdffffbffe",
+    (0x7, 0x7, 160, 96): "0000000141d008086bfbdf77ed77bbdfdff64e",
     (0xD, 0xD, 160, 160): "0000000141d008086bfadf7d7ede79ffedb7d7",
     (0xD, 0xD, 160, 96): "0000000141d008086bfadf7d7ed69fa7cfbbd7",
     (0xE, 0xE, 96, 160): "0000000141d008086bfbce75777d9feffbf7ba",
 }
 
 EXPECTED_MISSES = {
-    (0x7, 0x7, 160, 160): (FRAME_SIZE, "bytestream -18", "0000000141d008086bbffcf5ff7739fff37b"),
-    (0x7, 0x7, 160, 96): (FRAME_SIZE, "bytestream -16", "0000000141d008086bbffcf5ff7e39ffe53b"),
-    (0x7, 0x7, 96, 160): (FRAME_SIZE, "bytestream -10", "0000000141d008086bbadff57f7739fff37b"),
-    (0x7, 0x7, 96, 96): (FRAME_SIZE, "bytestream -8", "0000000141d008086bbadff57f5f39ffe53b"),
+    (0x7, 0x7, 96, 160): (FRAME_SIZE, "bytestream -19", "0000000141d008086bfbed7d7f57bdffffbffe"),
+    (0x7, 0x7, 96, 96): (FRAME_SIZE, "bytestream -13", "0000000141d008086bfbed7d7f57bbdfdff64e"),
     (0xB, 0xB, 160, 160): (FRAME_SIZE, "bytestream -15", "0000000141d008086bbbee77fff89cbff9dfd7"),
     (0xB, 0xB, 160, 96): (FRAME_SIZE, "bytestream -13", "0000000141d008086bbbee77fffd1abefd3fd7"),
     (0xB, 0xB, 96, 160): (FRAME_SIZE, "bytestream -19", "0000000141d008086bbbce77bdfd9cbff9dfd7"),
@@ -125,8 +125,8 @@ def main() -> int:
         check_expected_miss(sim, cb_mask, cr_mask, cb_value, cr_value, expected_bytes, expected_signature, tail)
     print(
         "[PASS] CABAC P16x16 high-amplitude same-mask Cb+Cr chroma-AC probe "
-        "locks the promoted Cb0x5/Cr0x5 sign matrix plus strict Cb0xd/Cr0xd "
-        "and Cb0xe/Cr0xe rows, while preserving exact one-frame miss signatures "
+        "locks the promoted Cb0x5/Cr0x5 sign matrix, Cb-positive Cb0x7/Cr0x7 "
+        "rows, plus strict Cb0xd/Cr0xd and Cb0xe/Cr0xe rows, while preserving exact one-frame miss signatures "
         "for the remaining all-but-one same-mask rows"
     )
     return 0
