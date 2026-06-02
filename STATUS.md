@@ -1132,6 +1132,13 @@ Current verified milestone outputs:
   remains strict-decode/recon-hash green.  That narrows the remaining red lane
   away from input magnitude capture and toward Cb-positive CABAC finalization or
   the following zero/Cr CBF context sequence.
+- this scheduled H.264 gate expansion added the midpoint/tiny two-plane DC
+  blocker `Cb=+19`/`Cr=-2`.  It reproduces an MB 0 `bytestream -7` strict
+  FFmpeg failure with exact RTL signed-scan evidence and neutral non-strict
+  concealment, while the adjacent `Cb=+1`/`Cr=-2` default lane stays strict
+  decode/recon-hash green and `Cb=+157`/`Cr=-2` remains a `bytestream -11`
+  xfail.  The next source probe should compare the Cb-positive levelgt1 tail
+  and following Cr-small DC CBF/coeff sequence across `+1`, `+19`, and `+157`.
 
 ## Not Done Yet
 
