@@ -610,4 +610,10 @@ Next useful probe:
 
 - Probed high-amplitude same-mask checker rows in the bounded cross-plane chroma-AC gate after the default-amplitude same-mask lattice was locked.
 - `Cb0x3/Cr0x3`, `Cb0xA/Cr0xA`, and `Cb0xC/Cr0xC` at `+32/+32` strict-decode both frames with expected plane-local SAD, but `Cb0x5/Cr0x5 +32/+32` still stops after the IDR frame with FFmpeg `bytestream -23` and final P-slice tail `0000000141d008086bfbcf`.
-- `scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py` now locks that `Cb0x5/Cr0x5` row as an expected one-frame miss rather than leaving the remaining high-amplitude same-mask checker gap implicit. The next repair target is the same CABAC arithmetic/output-byte boundary that separated the earlier complementary-checker sign cases, not another broad selector sweep.
+- At that checkpoint, `scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py` locked that `Cb0x5/Cr0x5` row as an expected one-frame miss rather than leaving the remaining high-amplitude same-mask checker gap implicit. The next repair target was the same CABAC arithmetic/output-byte boundary that separated the earlier complementary-checker sign cases, not another broad selector sweep.
+
+## 2026-06-01 high-amplitude same-mask checker sign-matrix promotion
+
+- Re-probed the high-amplitude `Cb0x5/Cr0x5` same-mask checker lane after the scoped plane-local CBF-walk repair and found all four +/-32 sign combinations strict-decode both FFmpeg frames with byte-identical IDR and exact plane-local `U_SAD=512 V_SAD=512`.
+- Tightened `scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py` so the bounded cross-plane gate now locks the full sign matrix, not only the `+32/+32` row: `(+,+)` and `(-,+)` share tail `0000000141d008086b3add`, while `(+,-)` and `(-,-)` share tail `0000000141d008086b7bfd`.
+- Verification: `THREADS=1 BUILD_JOBS=1 python3 /tmp/h264_probe_same_mask_5.py` proved the four rows, and the canonical gate now guards the sign matrix in-tree. The next repair target remains broader mixed/high-amplitude chroma-AC coverage and reconstruction parity beyond strict decode.

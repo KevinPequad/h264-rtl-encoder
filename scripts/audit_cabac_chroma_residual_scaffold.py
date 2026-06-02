@@ -253,7 +253,7 @@ CHECKS: tuple[tuple[str, str, str], ...] = (
     (
         "probe_promotes_cross_plane_high_amp_same_mask_checker",
         "scripts/run_cabac_p16x16_chroma_ac_cross_plane_first_payload_probe.py",
-        r"AMPLITUDE_TAILS\s*=\s*\{.*?\(0x5,\s*0x5,\s*160,\s*160\):\s*\"0000000141d008086b3add\".*?SAME_MASK_EXPECTED_MISSES\s*=\s*\{\}.*?same-mask checker promoted",
+        r"AMPLITUDE_TAILS\s*=\s*\{.*?\(0x5,\s*0x5,\s*160,\s*160\):\s*\"0000000141d008086b3add\".*?\(0x5,\s*0x5,\s*96,\s*160\):\s*\"0000000141d008086b3add\".*?\(0x5,\s*0x5,\s*160,\s*96\):\s*\"0000000141d008086b7bfd\".*?\(0x5,\s*0x5,\s*96,\s*96\):\s*\"0000000141d008086b7bfd\".*?SAME_MASK_EXPECTED_MISSES\s*=\s*\{\}.*?same-mask checker promoted",
     ),
     (
         "probe_locks_split_row_cbf_walk_repair_boundary",

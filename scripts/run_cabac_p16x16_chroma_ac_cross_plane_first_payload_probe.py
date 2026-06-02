@@ -196,6 +196,9 @@ AMPLITUDE_TAILS = {
     (0x9, 0x6, 160, 160): "0000000141d008086b7bef7e",
     (0x9, 0x6, 96, 160): "0000000141d008086b7bef7e",
     (0x5, 0x5, 160, 160): "0000000141d008086b3add",
+    (0x5, 0x5, 96, 160): "0000000141d008086b3add",
+    (0x5, 0x5, 160, 96): "0000000141d008086b7bfd",
+    (0x5, 0x5, 96, 96): "0000000141d008086b7bfd",
     (0xC, 0x3, 96, 160): "0000000141d008086bbaff",
     (0xC, 0x3, 160, 160): "0000000141d008086bbaff",
     (0x3, 0xC, 160, 160): "0000000141d008086b3ffe",
@@ -244,8 +247,8 @@ AMPLITUDE_TAILS = {
 EXPECTED_MISSES = {}
 
 # High-amplitude same-mask checker coverage used to short-decode after only the
-# IDR frame; keep the promoted tail in AMPLITUDE_TAILS so it cannot drift back
-# to the old one-frame bytestream -23 miss.
+# IDR frame; keep the promoted +/-32 sign matrix in AMPLITUDE_TAILS so it cannot
+# drift back to the old one-frame bytestream -23 miss.
 SAME_MASK_EXPECTED_MISSES = {}
 
 
@@ -502,8 +505,8 @@ def main() -> int:
         "the complete default-amplitude same-mask Cb/Cr lattice, "
         "and dense-both Cb+Cr AC masks "
         "plus positive, reciprocal, mixed-sign, asymmetric complement, "
-        "and complete +/-32 sign matrices for the targeted all-but-one/singleton "
-        "complement mirror families "
+        "complete +/-32 sign matrices for the targeted all-but-one/singleton "
+        "complement mirror families and the high-amplitude same-mask checker "
         "including the full Cb0x3/Cr0xC split-row sign matrix "
         "high-amplitude Cb/Cr guards strict-decode two frames with exact plane-local SAD under the "
         "checked-in -7 CABAC queue initializer, with no remaining skew-pair "
