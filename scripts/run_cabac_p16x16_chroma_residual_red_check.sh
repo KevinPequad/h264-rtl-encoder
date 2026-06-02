@@ -92,6 +92,8 @@ dc_10b422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_16
 dc_10b422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_only_16x16_2f.yuv")
 dc_10b422_cb_pos_unity_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_16x16_2f.yuv")
 dc_10b422_cb_pos_tiny_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_tiny_16x16_2f.yuv")
+dc_10b422_cb_pos_unity_cr_neg_tiny_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_cr_neg_tiny_16x16_2f.yuv")
+dc_10b422_cb_pos_unity_cr_neg_large_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_cr_neg_large_16x16_2f.yuv")
 dc_10b422_cb_pos_tiny_cr_neg_tiny_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_tiny_cr_neg_tiny_16x16_2f.yuv")
 dc_10b422_cb_pos_large_cr_neg_tiny_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_large_cr_neg_tiny_16x16_2f.yuv")
 dc_10b422_cb_pos_tiny_cr_neg_large_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_tiny_cr_neg_large_16x16_2f.yuv")
@@ -346,6 +348,8 @@ write_422_probe_10b(dc_10b422_input_path, cb_mode="dc", cr_mode="dc_neg")
 write_422_probe_10b(dc_10b422_cb_only_input_path, cb_mode="dc_small", cr_mode="flat")
 write_422_probe_10b(dc_10b422_cb_pos_unity_input_path, cb_mode="dc_pos_unity", cr_mode="flat")
 write_422_probe_10b(dc_10b422_cb_pos_tiny_input_path, cb_mode="dc_pos_tiny", cr_mode="flat")
+write_422_probe_10b(dc_10b422_cb_pos_unity_cr_neg_tiny_input_path, cb_mode="dc_pos_unity", cr_mode="dc_neg_tiny")
+write_422_probe_10b(dc_10b422_cb_pos_unity_cr_neg_large_input_path, cb_mode="dc_pos_unity", cr_mode="dc_neg")
 write_422_probe_10b(dc_10b422_cb_pos_tiny_cr_neg_tiny_input_path, cb_mode="dc_pos_tiny", cr_mode="dc_neg_tiny")
 write_422_probe_10b(dc_10b422_cb_pos_large_cr_neg_tiny_input_path, cb_mode="dc", cr_mode="dc_neg_tiny")
 write_422_probe_10b(dc_10b422_cb_pos_tiny_cr_neg_large_input_path, cb_mode="dc_pos_tiny", cr_mode="dc_neg")
@@ -870,6 +874,20 @@ try:
         require_changed_framehash=True,
         expected_negative_dc_planes=("cb",),
     )
+    run_chroma_probe(
+        sim_bin_10b422,
+        "cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_cr_neg_tiny_probe",
+        dc_10b422_cb_pos_unity_cr_neg_tiny_input_path,
+        require_dc_only=True,
+        expected_dc_planes=("cb", "cr"),
+        expected_nonzero_dc_planes=("cb", "cr"),
+        require_luma_empty=True,
+        require_nonunity_dc=False,
+        require_changed_framehash=True,
+        expected_positive_dc_planes=("cb",),
+        expected_negative_dc_planes=("cr",),
+        expected_dc_exact_values={"cb": 1, "cr": -2},
+    )
     if os.environ.get("CABAC_EXPECT_10B422_DC_ISOLATION_FAIL") == "1":
         xfail_cases = [
             (
@@ -891,6 +909,16 @@ try:
                 ("cb",),
                 (),
                 {"cb": 2},
+            ),
+            (
+                "cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_cr_neg_large_probe",
+                dc_10b422_cb_pos_unity_cr_neg_large_input_path,
+                ("cb", "cr"),
+                "bytestream -9",
+                False,
+                ("cb",),
+                ("cr",),
+                {"cb": 1, "cr": -157},
             ),
             (
                 "cabac_p16x16_chroma_dc_residual_10b422_cb_pos_tiny_cr_neg_tiny_probe",

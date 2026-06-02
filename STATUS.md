@@ -105,7 +105,7 @@ partition/tool coverage, and the final long-run target.
 | `scripts/run_deblock_reference_check.sh` | Public-decoder and two-frame reconstructed-reference consumption check for in-loop deblocking |
 | `scripts/run_cabac_residual4x4_scan_check.sh` | Standalone Verilator check for the CABAC residual 4x4 scan-event helper |
 | `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for CABAC `P_L0_16x16` luma residual syntax; requires actual decoded luma reconstruction and serves as the checkpoint proof for the coefficient-driven residual path |
-| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | Focused CABAC `P_L0_16x16` chroma residual gate covering 4:2:0, 4:2:2, plane-isolated 10-bit 4:2:0 chroma-only luma-empty residuals, plane-isolated DC/AC payloads including 10-bit 4:2:2 Cr-only DC, optional Cb-positive unity/tiny/small DC blocker repro, and strict FFmpeg decode |
+| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | Focused CABAC `P_L0_16x16` chroma residual gate covering 4:2:0, 4:2:2, plane-isolated 10-bit 4:2:0 chroma-only luma-empty residuals, plane-isolated DC/AC payloads including 10-bit 4:2:2 Cr-only DC, a promoted strict-decode Cb=+1/Cr=-2 DC differential, optional Cb-positive unity/tiny/small/mixed DC blocker repro, and strict FFmpeg decode |
 | `docker/Dockerfile` | Containerized smoke-run environment |
 | `docker/run_one_frame.sh` | One-frame Docker smoke flow |
 | `tools/parse_422.c` | Small debug/parser utility |
@@ -1102,6 +1102,14 @@ Current verified milestone outputs:
   narrows the current Cb-positive blocker to the CABAC coefficient/sign/final
   arithmetic sequence for small/mixed chroma-DC magnitudes, not simply to an
   absent Cr payload or a hidden plane/sign inversion.
+- this scheduled H.264 check split the unity Cb-positive two-plane case: the
+  default gate now promotes strict FFmpeg decode and changed-framehash evidence
+  for `Cb=+1`/`Cr=-2`, while the optional blocker suite pins
+  `Cb=+1`/`Cr=-157` as a remaining MB 0 `bytestream -9` failure with neutral
+  non-strict concealment.  The next fix should compare the arithmetic tail after
+  the unity Cb sign bin against the following Cr DC level path; the blocker is
+  not all unity-Cb-positive two-plane emission, only the larger following Cr
+  negative payload variant and the existing Cb-only/tiny/mixed lanes.
 
 ## Not Done Yet
 
