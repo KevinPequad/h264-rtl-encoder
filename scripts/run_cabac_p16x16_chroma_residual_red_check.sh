@@ -90,6 +90,7 @@ ac_422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_422_cr_
 ac_10b422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b422_16x16_2f.yuv")
 dc_10b422_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_16x16_2f.yuv")
 dc_10b422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_only_16x16_2f.yuv")
+dc_10b422_cb_pos_unity_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_16x16_2f.yuv")
 dc_10b422_cb_pos_tiny_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_pos_tiny_16x16_2f.yuv")
 dc_10b422_cb_neg_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cb_neg_only_16x16_2f.yuv")
 dc_10b422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cr_only_16x16_2f.yuv")
@@ -207,6 +208,8 @@ def write_422_probe_10b(path, *, cb_mode, cr_mode):
             plane = [496] * (8 * 16)
         elif mode == "dc_neg_tiny":
             plane = [510] * (8 * 16)
+        elif mode == "dc_pos_unity":
+            plane = [513] * (8 * 16)
         elif mode == "dc_pos_tiny":
             plane = [514] * (8 * 16)
         elif mode == "ac_pos":
@@ -338,6 +341,7 @@ write_422_probe(ac_422_cr_only_input_path, cb_mode="flat", cr_mode="ac_neg")
 # without a luma payload while also proving the lower 4:2:2 chroma rows.
 write_422_probe_10b(dc_10b422_input_path, cb_mode="dc", cr_mode="dc_neg")
 write_422_probe_10b(dc_10b422_cb_only_input_path, cb_mode="dc_small", cr_mode="flat")
+write_422_probe_10b(dc_10b422_cb_pos_unity_input_path, cb_mode="dc_pos_unity", cr_mode="flat")
 write_422_probe_10b(dc_10b422_cb_pos_tiny_input_path, cb_mode="dc_pos_tiny", cr_mode="flat")
 write_422_probe_10b(dc_10b422_cb_neg_only_input_path, cb_mode="dc_neg_tiny", cr_mode="flat")
 write_422_probe_10b(dc_10b422_cr_only_input_path, cb_mode="flat", cr_mode="dc_neg_small")
@@ -402,6 +406,7 @@ def run_chroma_probe(
     expected_ac_planes=("cb", "cr"),
     expected_nonzero_dc_planes=None,
     require_luma_empty=False,
+    require_nonunity_dc=True,
 ):
     expected_dc_planes = set(expected_dc_planes)
     expected_ac_planes = set(expected_ac_planes)
@@ -440,7 +445,10 @@ def run_chroma_probe(
             if plane in expected_nonzero_dc_planes:
                 if f"is{plane.upper()[0]}{plane[1:]}=1" not in sim_text:
                     raise SystemExit(f"{name} did not produce {plane.upper()} scan evidence")
-                require_nonzero_nonunity_evidence(values, name, f"{plane.upper()} chroma DC")
+                if require_nonunity_dc:
+                    require_nonzero_nonunity_evidence(values, name, f"{plane.upper()} chroma DC")
+                elif not values:
+                    raise SystemExit(f"{name} missing nonzero signed-scan evidence for {plane.upper()} chroma DC")
             elif values:
                 # Chroma DC prediction can leave tiny opposite-plane scan evidence in
                 # some AC-focused probes; plane isolation is enforced on the AC
@@ -753,19 +761,28 @@ try:
     if os.environ.get("CABAC_EXPECT_10B422_DC_ISOLATION_FAIL") == "1":
         xfail_cases = [
             (
+                "cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_probe",
+                dc_10b422_cb_pos_unity_input_path,
+                ("cb",),
+                "bytestream -9",
+                False,
+            ),
+            (
                 "cabac_p16x16_chroma_dc_residual_10b422_cb_pos_tiny_probe",
                 dc_10b422_cb_pos_tiny_input_path,
                 ("cb",),
                 "bytestream -8",
+                True,
             ),
             (
                 "cabac_p16x16_chroma_dc_residual_10b422_cb_only_probe",
                 dc_10b422_cb_only_input_path,
                 ("cb",),
                 "bytestream -22",
+                True,
             ),
         ]
-        for xfail_name, xfail_path, xfail_plane, expected_fragment in xfail_cases:
+        for xfail_name, xfail_path, xfail_plane, expected_fragment, require_nonunity_dc in xfail_cases:
             try:
                 run_chroma_probe(
                     sim_bin_10b422,
@@ -775,6 +792,7 @@ try:
                     expected_dc_planes=xfail_plane,
                     expected_nonzero_dc_planes=xfail_plane,
                     require_luma_empty=True,
+                    require_nonunity_dc=require_nonunity_dc,
                 )
             except SystemExit as exc:
                 msg = str(exc)
