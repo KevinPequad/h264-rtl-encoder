@@ -105,7 +105,7 @@ partition/tool coverage, and the final long-run target.
 | `scripts/run_deblock_reference_check.sh` | Public-decoder and two-frame reconstructed-reference consumption check for in-loop deblocking |
 | `scripts/run_cabac_residual4x4_scan_check.sh` | Standalone Verilator check for the CABAC residual 4x4 scan-event helper |
 | `scripts/run_cabac_p16x16_residual_quality_check.sh` | Focused validation gate for CABAC `P_L0_16x16` luma residual syntax; requires actual decoded luma reconstruction and serves as the checkpoint proof for the coefficient-driven residual path |
-| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | Focused CABAC `P_L0_16x16` chroma residual gate covering 4:2:0, 4:2:2, plane-isolated 10-bit 4:2:0 chroma-only luma-empty residuals, plane-isolated DC/AC payloads including 10-bit 4:2:2 Cr-only DC, a promoted strict-decode Cb=+1/Cr=-2 DC differential, optional Cb-positive unity/tiny/small/mixed DC blocker repro, and strict FFmpeg decode |
+| `scripts/run_cabac_p16x16_chroma_residual_red_check.sh` | Focused CABAC `P_L0_16x16` chroma residual gate covering 4:2:0, 4:2:2, plane-isolated 10-bit 4:2:0 chroma-only luma-empty residuals, plane-isolated DC/AC payloads including 10-bit 4:2:2 Cr-only DC, a promoted strict-decode Cb=+1/Cr=-2 DC differential, optional Cb-positive/negative DC blocker repros, and strict FFmpeg decode |
 | `docker/Dockerfile` | Containerized smoke-run environment |
 | `docker/run_one_frame.sh` | One-frame Docker smoke flow |
 | `tools/parse_422.c` | Small debug/parser utility |
@@ -1151,6 +1151,13 @@ Current verified milestone outputs:
   green.  The remaining source fix is therefore not just positive-sign handling;
   compare the isolated Cb DC coefficient tail/finalization for magnitudes `2`,
   `19`, and `157` before changing chroma CBF context selection.
+- this H.264 cron tick filled in the missing midpoint isolated negative-Cb
+  `10-bit 4:2:2` DC probe.  `Cb=-19` with flat Cr now reproduces an MB 0
+  `bytestream -14` strict FFmpeg failure with exact RTL signed-scan evidence
+  and neutral non-strict concealment, while tiny `Cb=-2` stays green and large
+  `Cb=-157` remains the `bytestream -18` blocker.  The next source probe should
+  compare the Cb-negative coefficient_abs_levelgt1/finalization path across
+  `-2`, `-19`, and `-157` before touching chroma DC CBF context selection.
 
 ## Not Done Yet
 
