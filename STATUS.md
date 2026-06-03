@@ -1144,6 +1144,13 @@ Current verified milestone outputs:
   decode/recon-hash success: `Cr=-19`, `Cr=+19`, and `Cb=-2`.  This keeps the
   remaining red lane focused on the Cb-positive / tiny negative-Cr CABAC tail
   instead of silently drifting plane polarity or residual magnitude.
+- this scheduled H.264 probe added an isolated large negative-Cb `10-bit 4:2:2`
+  DC blocker case.  `Cb=-157` with flat Cr reproduces an MB 0 `bytestream -18`
+  strict FFmpeg failure with exact RTL signed-scan evidence and neutral
+  non-strict concealment, while tiny `Cb=-2` remains strict-decode/recon-hash
+  green.  The remaining source fix is therefore not just positive-sign handling;
+  compare the isolated Cb DC coefficient tail/finalization for magnitudes `2`,
+  `19`, and `157` before changing chroma CBF context selection.
 
 ## Not Done Yet
 
