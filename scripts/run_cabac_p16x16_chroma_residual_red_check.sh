@@ -107,7 +107,10 @@ dc_10b422_cb_neg_large_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_
 dc_10b422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cr_only_16x16_2f.yuv")
 dc_10b422_cr_neg_tiny_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cr_neg_tiny_only_16x16_2f.yuv")
 dc_10b422_cr_neg_large_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cr_neg_large_only_16x16_2f.yuv")
+dc_10b422_cr_pos_unity_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cr_pos_unity_only_16x16_2f.yuv")
+dc_10b422_cr_pos_tiny_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cr_pos_tiny_only_16x16_2f.yuv")
 dc_10b422_cr_pos_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cr_pos_only_16x16_2f.yuv")
+dc_10b422_cr_pos_large_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_dc_residual_10b422_cr_pos_large_only_16x16_2f.yuv")
 ac_10b422_cb_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b422_cb_only_16x16_2f.yuv")
 ac_10b422_cr_only_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b422_cr_only_16x16_2f.yuv")
 ac_10b_input_path = Path("/tmp/h264_cabac_p16x16_chroma_residual_10b420_16x16_2f.yuv")
@@ -371,7 +374,10 @@ write_422_probe_10b(dc_10b422_cb_neg_large_only_input_path, cb_mode="dc_neg", cr
 write_422_probe_10b(dc_10b422_cr_only_input_path, cb_mode="flat", cr_mode="dc_neg_small")
 write_422_probe_10b(dc_10b422_cr_neg_tiny_only_input_path, cb_mode="flat", cr_mode="dc_neg_tiny")
 write_422_probe_10b(dc_10b422_cr_neg_large_only_input_path, cb_mode="flat", cr_mode="dc_neg")
+write_422_probe_10b(dc_10b422_cr_pos_unity_only_input_path, cb_mode="flat", cr_mode="dc_pos_unity")
+write_422_probe_10b(dc_10b422_cr_pos_tiny_only_input_path, cb_mode="flat", cr_mode="dc_pos_tiny")
 write_422_probe_10b(dc_10b422_cr_pos_only_input_path, cb_mode="flat", cr_mode="dc_small")
+write_422_probe_10b(dc_10b422_cr_pos_large_only_input_path, cb_mode="flat", cr_mode="dc")
 write_422_probe_10b(ac_10b422_input_path, cb_mode="ac_pos", cr_mode="ac_neg")
 write_422_probe_10b(ac_10b422_cb_only_input_path, cb_mode="ac_pos", cr_mode="flat")
 write_422_probe_10b(ac_10b422_cr_only_input_path, cb_mode="flat", cr_mode="ac_neg")
@@ -893,6 +899,43 @@ try:
         require_changed_framehash=True,
         expected_positive_dc_planes=("cr",),
         expected_dc_exact_values={"cr": 19},
+    )
+    run_chroma_probe(
+        sim_bin_10b422,
+        "cabac_p16x16_chroma_dc_residual_10b422_cr_pos_unity_only_probe",
+        dc_10b422_cr_pos_unity_only_input_path,
+        require_dc_only=True,
+        expected_dc_planes=("cr",),
+        expected_nonzero_dc_planes=("cr",),
+        require_luma_empty=True,
+        require_nonunity_dc=False,
+        require_changed_framehash=True,
+        expected_positive_dc_planes=("cr",),
+        expected_dc_exact_values={"cr": 1},
+    )
+    run_chroma_probe(
+        sim_bin_10b422,
+        "cabac_p16x16_chroma_dc_residual_10b422_cr_pos_tiny_only_probe",
+        dc_10b422_cr_pos_tiny_only_input_path,
+        require_dc_only=True,
+        expected_dc_planes=("cr",),
+        expected_nonzero_dc_planes=("cr",),
+        require_luma_empty=True,
+        require_changed_framehash=True,
+        expected_positive_dc_planes=("cr",),
+        expected_dc_exact_values={"cr": 2},
+    )
+    run_chroma_probe(
+        sim_bin_10b422,
+        "cabac_p16x16_chroma_dc_residual_10b422_cr_pos_large_only_probe",
+        dc_10b422_cr_pos_large_only_input_path,
+        require_dc_only=True,
+        expected_dc_planes=("cr",),
+        expected_nonzero_dc_planes=("cr",),
+        require_luma_empty=True,
+        require_changed_framehash=True,
+        expected_positive_dc_planes=("cr",),
+        expected_dc_exact_values={"cr": 157},
     )
     run_chroma_probe(
         sim_bin_10b422,
