@@ -1158,6 +1158,16 @@ Current verified milestone outputs:
   `Cb=-157` remains the `bytestream -18` blocker.  The next source probe should
   compare the Cb-negative coefficient_abs_levelgt1/finalization path across
   `-2`, `-19`, and `-157` before touching chroma DC CBF context selection.
+- this scheduled run tested and rejected a narrow source-only large-level CABAC
+  tail fix: adding x264-style bypass UE(`abs_coeff - 15`) after the current
+  thirteen `coeff_abs_levelgt1` context bins, without first implementing the
+  full residual sigmap / all-nonzero-coefficient loop and level-state transition,
+  broke the default large two-plane `10-bit 4:2:2` chroma-DC proof at MB 0
+  (`bytestream -11`) on `cabac_p16x16_chroma_dc_residual_10b422_probe`.  The
+  source tree was reverted and the full optional chroma residual gate still
+  passes; the next safe RTL change should implement the complete H.264/x264
+  residual level state machine for chroma DC rather than a tail-only bypass
+  patch.
 
 ## Not Done Yet
 
