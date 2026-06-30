@@ -705,7 +705,14 @@ def run_chroma_probe(
     )
     ffmpeg_text = (ff.stdout or "") + (ff.stderr or "")
     ffmpeg_log.write_text(ffmpeg_text, encoding="utf-8")
-    if ff.returncode != 0:
+    decode_error_lines = [
+        line for line in ffmpeg_text.splitlines()
+        if "error while decoding" in line
+        or "corrupt decoded frame" in line
+        or "Error processing packet in decoder" in line
+        or "Decoder thread returned error" in line
+    ]
+    if ff.returncode != 0 or decode_error_lines:
         raise SystemExit(ffmpeg_text or f"ffmpeg strict decode failed for {name} with exit {ff.returncode}")
     print(f"[PASS] {name}: strict FFmpeg decode ok ({output_path})")
     if require_changed_framehash:
@@ -999,36 +1006,27 @@ try:
         expected_dc_exact_values={"cb": 1, "cr": -2},
     )
     if os.environ.get("CABAC_EXPECT_10B422_DC_ISOLATION_FAIL") == "1":
-        run_chroma_probe(
-            sim_bin_10b422,
-            "cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_probe",
-            dc_10b422_cb_pos_unity_input_path,
-            require_dc_only=True,
-            expected_dc_planes=("cb",),
-            expected_nonzero_dc_planes=("cb",),
-            require_luma_empty=True,
-            require_nonunity_dc=False,
-            expected_positive_dc_planes=("cb",),
-            expected_dc_exact_values={"cb": 1},
-        )
-        require_strict_framehash_not_reconstruction_proof(
-            "cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_probe"
-        )
-        run_chroma_probe(
-            sim_bin_10b422,
-            "cabac_p16x16_chroma_dc_residual_10b422_cb_neg_small_cr_neg_tiny_probe",
-            dc_10b422_cb_neg_small_cr_neg_tiny_input_path,
-            require_dc_only=True,
-            expected_dc_planes=("cb", "cr"),
-            expected_nonzero_dc_planes=("cb", "cr"),
-            require_luma_empty=True,
-            expected_negative_dc_planes=("cb", "cr"),
-            expected_dc_exact_values={"cb": -19, "cr": -2},
-        )
-        require_strict_framehash_not_reconstruction_proof(
-            "cabac_p16x16_chroma_dc_residual_10b422_cb_neg_small_cr_neg_tiny_probe"
-        )
         xfail_cases = [
+            (
+                "cabac_p16x16_chroma_dc_residual_10b422_cb_pos_unity_probe",
+                dc_10b422_cb_pos_unity_input_path,
+                ("cb",),
+                "bytestream -9",
+                False,
+                ("cb",),
+                (),
+                {"cb": 1},
+            ),
+            (
+                "cabac_p16x16_chroma_dc_residual_10b422_cb_neg_small_cr_neg_tiny_probe",
+                dc_10b422_cb_neg_small_cr_neg_tiny_input_path,
+                ("cb", "cr"),
+                "bytestream -5",
+                True,
+                (),
+                ("cb", "cr"),
+                {"cb": -19, "cr": -2},
+            ),
             (
                 "cabac_p16x16_chroma_dc_residual_10b422_cb_pos_tiny_probe",
                 dc_10b422_cb_pos_tiny_input_path,
