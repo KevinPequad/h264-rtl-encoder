@@ -1168,6 +1168,16 @@ Current verified milestone outputs:
   passes; the next safe RTL change should implement the complete H.264/x264
   residual level state machine for chroma DC rather than a tail-only bypass
   patch.
+- this H.264 cron tick tightened the optional `10-bit 4:2:2` chroma-DC
+  diagnostic lane so strict-null FFmpeg success is no longer mistaken for a
+  green reconstruction proof: former Cb-only and mixed Cb/Cr blocker probes now
+  must either keep reproducing the old strict-decode error or strict-decode with
+  no changed P-frame row.  It also added a mixed negative `Cb=-19`/`Cr=-2`
+  probe with exact RTL signed-scan evidence; in the current environment it
+  strict-decodes but still yields only one strict framehash row, so it remains a
+  diagnostic blocker rather than default-gate evidence.  The next source fix
+  should make these Cb-first DC probes produce a decoded, non-neutral P frame
+  before promoting them.
 
 ## Not Done Yet
 
